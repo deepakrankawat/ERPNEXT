@@ -1,0 +1,119 @@
+{
+ "actions": [],
+ "autoname": "autoincrement",
+ "creation": "2026-08-12 20:41:52.240484",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "sop_run_id",
+  "sop_version",
+  "job_id",
+  "status",
+  "started_at",
+  "started_by",
+  "completed_at",
+  "resolved_steps_json",
+  "completed_steps_json",
+  "evidence_manifest_json"
+  ,"exceptions_json"
+  ,"exception_status"
+ ],
+ "fields": [
+  {
+   "fieldname": "sop_run_id",
+   "fieldtype": "Data",
+   "label": "SOP Run ID"
+  },
+  {
+   "fieldname": "sop_version",
+   "fieldtype": "Link",
+   "label": "SOP Version",
+   "options": "LPO SOP Version"
+  },
+  {
+   "fieldname": "job_id",
+   "fieldtype": "Link",
+   "label": "Job",
+   "options": "LPO Job"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Status"
+  },
+  {
+   "fieldname": "evidence_manifest_json",
+   "fieldtype": "Code",
+   "label": "Evidence Manifest"
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At"
+  },
+  {
+   "fieldname": "started_by",
+   "fieldtype": "Link",
+   "label": "Started By",
+   "options": "User"
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At"
+  },
+  {
+   "fieldname": "resolved_steps_json",
+   "fieldtype": "Code",
+   "label": "Resolved Steps",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "completed_steps_json",
+   "fieldtype": "Code",
+   "label": "Completed Steps",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "exceptions_json",
+   "fieldtype": "Code",
+   "label": "Approved Exceptions",
+   "options": "JSON"
+  },
+  {
+   "default": "None",
+   "fieldname": "exception_status",
+   "fieldtype": "Select",
+   "label": "Exception Status",
+   "options": "None\nPending\nApproved\nRejected"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-12 20:41:52.240484",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO SOP Run",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

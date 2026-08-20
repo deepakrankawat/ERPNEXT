@@ -1,0 +1,202 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"system_administration_workspace_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>System Administration Workspace</b></span><p class=\\\"text-muted\\\">Users, roles, permissions, integrations, email, automation, health, and logs.</p>\",\"col\":12}},{\"id\":\"metric_0_system_errors___24_hours\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"System Errors - 24 Hours\",\"col\":3}},{\"id\":\"metric_1_chat_messages_today\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Chat Messages Today\",\"col\":3}},{\"id\":\"decision_center_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Decision Center</b></span>\",\"col\":12}},{\"id\":\"shortcut_0_users\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Users\",\"col\":3}},{\"id\":\"shortcut_1_roles\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Roles\",\"col\":3}},{\"id\":\"shortcut_2_permissions\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Permissions\",\"col\":3}},{\"id\":\"shortcut_3_integrations\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Integrations\",\"col\":3}},{\"id\":\"shortcut_4_api_access\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"API Access\",\"col\":3}},{\"id\":\"shortcut_5_email\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Email\",\"col\":3}},{\"id\":\"shortcut_6_automation\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Automation\",\"col\":3}},{\"id\":\"shortcut_7_system_health\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"System Health\",\"col\":3}},{\"id\":\"shortcut_8_logs\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Logs\",\"col\":3}},{\"id\":\"workspace_links_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Workspace Tools</b></span>\",\"col\":12}},{\"id\":\"workspace_links_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Decision Center\",\"col\":12}}]",
+ "creation": "2026-08-11 17:39:11.964084",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "setting-gear",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "System Administration Workspace",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Decision Center",
+   "link_count": 9,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Users",
+   "link_count": 0,
+   "link_to": "User",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Roles",
+   "link_count": 0,
+   "link_to": "Role",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Permissions",
+   "link_count": 0,
+   "link_to": "DocPerm",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Integrations",
+   "link_count": 0,
+   "link_to": "Integration Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "API Access",
+   "link_count": 0,
+   "link_to": "User",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Email",
+   "link_count": 0,
+   "link_to": "Email Account",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Automation",
+   "link_count": 0,
+   "link_to": "Server Script",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "System Health",
+   "link_count": 0,
+   "link_to": "System Health Report",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Logs",
+   "link_count": 0,
+   "link_to": "Error Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-08-18 17:20:46.937864",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "System Administration Workspace",
+ "number_cards": [
+  {
+   "label": "System Errors - 24 Hours",
+   "number_card_name": "System Errors - 24 Hours"
+  },
+  {
+   "label": "Chat Messages Today",
+   "number_card_name": "Chat Messages Today"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "CEO"
+  },
+  {
+   "role": "LPO_Admin"
+  }
+ ],
+ "sequence_id": 11.0,
+ "shortcuts": [
+  {
+   "doc_view": "List",
+   "label": "Users",
+   "link_to": "User",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Roles",
+   "link_to": "Role",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Permissions",
+   "link_to": "DocPerm",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Integrations",
+   "link_to": "Integration Request",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "API Access",
+   "link_to": "User",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Email",
+   "link_to": "Email Account",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Automation",
+   "link_to": "Server Script",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "System Health",
+   "link_to": "System Health Report",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Logs",
+   "link_to": "Error Log",
+   "type": "DocType"
+  }
+ ],
+ "title": "System Administration Workspace"
+}

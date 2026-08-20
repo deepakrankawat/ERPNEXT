@@ -1,0 +1,200 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"business_workspace_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Business Workspace</b></span><p class=\\\"text-muted\\\">CRM, opportunities, campaigns, customers, contracts, subscriptions, and revenue.</p>\",\"col\":12}},{\"id\":\"metric_0_open_leads\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Open Leads\",\"col\":3}},{\"id\":\"metric_1_total_clients\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Clients\",\"col\":3}},{\"id\":\"metric_2_monthly_revenue\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Monthly Revenue\",\"col\":3}},{\"id\":\"decision_center_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Decision Center</b></span>\",\"col\":12}},{\"id\":\"shortcut_0_leads\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Leads\",\"col\":3}},{\"id\":\"shortcut_1_opportunities\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Opportunities\",\"col\":3}},{\"id\":\"shortcut_2_campaigns\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Campaigns\",\"col\":3}},{\"id\":\"shortcut_3_customers\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customers\",\"col\":3}},{\"id\":\"shortcut_4_contracts\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Contracts\",\"col\":3}},{\"id\":\"shortcut_5_lexpack_sales\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"LexPack Sales\",\"col\":3}},{\"id\":\"shortcut_6_revenue\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Revenue\",\"col\":3}},{\"id\":\"shortcut_7_communication\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Communication\",\"col\":3}},{\"id\":\"workspace_links_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Workspace Tools</b></span>\",\"col\":12}},{\"id\":\"workspace_links_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Decision Center\",\"col\":12}}]",
+ "creation": "2026-08-11 17:39:11.674007",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "crm",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Business Workspace",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Decision Center",
+   "link_count": 8,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Leads",
+   "link_count": 0,
+   "link_to": "Lead",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Opportunities",
+   "link_count": 0,
+   "link_to": "Opportunity",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Campaigns",
+   "link_count": 0,
+   "link_to": "Campaign",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Customers",
+   "link_count": 0,
+   "link_to": "Customer",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Contracts",
+   "link_count": 0,
+   "link_to": "Contract",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LexPack Sales",
+   "link_count": 0,
+   "link_to": "Subscription",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Revenue",
+   "link_count": 0,
+   "link_to": "Sales Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Communication",
+   "link_count": 0,
+   "link_to": "lexocrates-chat",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-08-18 17:20:46.628198",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Business Workspace",
+ "number_cards": [
+  {
+   "label": "Open Leads",
+   "number_card_name": "Open Leads"
+  },
+  {
+   "label": "Total Clients",
+   "number_card_name": "Total Clients"
+  },
+  {
+   "label": "Monthly Revenue",
+   "number_card_name": "Monthly Revenue"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Lexocrates Sales & Marketing"
+  },
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "Lexocrates Director"
+  },
+  {
+   "role": "CEO"
+  },
+  {
+   "role": "LPO_Admin"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 7.0,
+ "shortcuts": [
+  {
+   "doc_view": "List",
+   "label": "Leads",
+   "link_to": "Lead",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Opportunities",
+   "link_to": "Opportunity",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Campaigns",
+   "link_to": "Campaign",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Customers",
+   "link_to": "Customer",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Contracts",
+   "link_to": "Contract",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "LexPack Sales",
+   "link_to": "Subscription",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Revenue",
+   "link_to": "Sales Invoice",
+   "type": "DocType"
+  },
+  {
+   "color": "#2490ef",
+   "doc_view": "",
+   "label": "Communication",
+   "link_to": "lexocrates-chat",
+   "type": "Page"
+  }
+ ],
+ "title": "Business Workspace"
+}

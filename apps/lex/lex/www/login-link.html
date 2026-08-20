@@ -1,0 +1,19 @@
+{% extends "templates/web.html" %}
+{% block title %}Email Login Verification{% endblock %}
+{% block page_content %}
+<link rel="stylesheet" href="/assets/lex/css/lexocrates_auth_pages.css?v=20260818-1">
+<div class="lex-login-wrapper" style="min-height: 70vh; display: flex; align-items: center; justify-content: center; padding: 40px 20px;">
+	<div class="lex-login-card" style="max-width: 480px; text-align: center; padding: 40px;">
+		{% if error %}
+			<div class="lex-modal-icon-wrap danger" style="margin: 0 auto 16px; background: #fee2e2; color: #dc2626; width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px;">✕</div>
+			<h3 style="color: #991b1b; margin-bottom: 8px;">Login Link Expired</h3>
+			<p class="text-muted" style="font-size: 14px; margin-bottom: 24px;">{{ error }}</p>
+			<a href="/login" class="btn btn-primary" style="width: 100%;">Return to Login Page</a>
+		{% else %}
+			<div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+			<h4>Verifying Login Link...</h4>
+			<p class="text-muted small">Authenticating your secure session...</p>
+		{% endif %}
+	</div>
+</div>
+{% endblock %}

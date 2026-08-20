@@ -1,0 +1,224 @@
+/* Canonical Lexocrates branding shared by Desk and Website surfaces. */
+
+/* Desk brand color pass: overrides Frappe's own semantic color variables
+   (frappe/public/scss/common/css_variables.scss + desk/dark.scss) so
+   buttons, links, the active sidebar item and borders pick up the same
+   navy/teal palette as the client portal, in both themes. Desk's own
+   structure/markup is untouched — this is a color-only reskin. */
+:root,
+[data-theme="light"] {
+	--primary: #1e293b !important;
+	--primary-color: #1e293b !important;
+	--brand-color: #1e293b !important;
+	--btn-primary: #1e293b !important;
+	--border-primary: #1e293b !important;
+	--sidebar-select-color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] {
+	--primary: #7fa8d9 !important;
+	--primary-color: #7fa8d9 !important;
+	--brand-color: #7fa8d9 !important;
+	--btn-primary: #7fa8d9 !important;
+	--border-primary: #7fa8d9 !important;
+	--sidebar-select-color: #1c2a3f !important;
+}
+
+/* Ensure high-contrast text on light-blue primary buttons in dark mode */
+html[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .btn-primary {
+	color: #0a0f1a !important;
+	font-weight: 700 !important;
+}
+
+.navbar,
+.web-header,
+.navbar-header {
+	min-height: 70px !important;
+}
+
+.navbar-brand,
+.navbar-header .navbar-brand {
+	height: auto !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	padding: 4px 0 !important;
+}
+
+.navbar-brand img,
+.navbar-brand .app-logo,
+.web-header .app-logo,
+.navbar .app-logo,
+.navbar-home .app-logo {
+	height: 58px !important;
+	max-height: 66px !important;
+	width: auto !important;
+	object-fit: contain;
+}
+
+.lexocrates-brand-wordmark {
+	display: inline-flex;
+	align-items: center;
+	height: 40px;
+}
+
+.lexocrates-brand-wordmark img {
+	width: auto;
+	height: 38px;
+	max-height: 44px;
+	object-fit: contain;
+}
+
+.lexocrates-logo-light {
+	display: none !important;
+}
+
+.lexocrates-logo-dark {
+	display: inline-block !important;
+}
+
+html[data-theme="dark"] .lexocrates-logo-dark,
+[data-theme="dark"] .lexocrates-logo-dark {
+	display: none !important;
+}
+
+html[data-theme="dark"] .lexocrates-logo-light,
+[data-theme="dark"] .lexocrates-logo-light {
+	display: inline-block !important;
+}
+
+/* Robust single-img logo & mark swaps for Dark Mode */
+html[data-theme="dark"] img[src*="lexocrates-logo-dark.svg"],
+[data-theme="dark"] img[src*="lexocrates-logo-dark.svg"],
+html[data-theme="dark"] .app-logo[src*="lexocrates-logo-dark.svg"],
+[data-theme="dark"] .app-logo[src*="lexocrates-logo-dark.svg"],
+html[data-theme="dark"] .navbar-home .app-logo[src*="lexocrates-logo-dark.svg"],
+html[data-theme="dark"] .login-content .app-logo[src*="lexocrates-logo-dark.svg"],
+html[data-theme="dark"] .page-card-head .app-logo[src*="lexocrates-logo-dark.svg"],
+html[data-theme="dark"] .splash img[src*="lexocrates-logo-dark.svg"],
+html[data-theme="dark"] .footer-logo[src*="lexocrates-logo-dark.svg"] {
+	content: url("/assets/lex/images/lexocrates-logo-light.svg") !important;
+}
+
+html[data-theme="dark"] img[src*="lexocrates-mark-dark.png"],
+[data-theme="dark"] img[src*="lexocrates-mark-dark.png"],
+html[data-theme="dark"] .app-logo[src*="lexocrates-mark-dark.png"],
+[data-theme="dark"] .app-logo[src*="lexocrates-mark-dark.png"] {
+	content: url("/assets/lex/images/lexocrates-mark-light.png") !important;
+}
+
+/* The apps screen supplies company marks inside Frappe's fixed square tiles. */
+.app-logo img[src*="lexocrates-mark-dark.png"],
+.app-logo[app-name="erpnext"] img {
+	width: 100%;
+	height: 100%;
+	padding: 5px;
+	object-fit: contain;
+}
+
+.app-logo[app-name="erpnext"] img {
+	content: url("/assets/lex/images/lexocrates-mark-dark.png");
+}
+
+html[data-theme="dark"] .app-logo img[src*="lexocrates-mark-dark.png"],
+html[data-theme="dark"] .app-logo[app-name="erpnext"] img {
+	content: url("/assets/lex/images/lexocrates-mark-light.png") !important;
+}
+
+/* Persistent native Desk shortcut to Lexocrates Chat. */
+.lexocrates-chat-navbar .lexocrates-chat-navbar-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 34px;
+	margin: 0 4px;
+	padding: 6px 10px !important;
+	border-radius: var(--border-radius-md, 8px);
+	color: var(--text-color) !important;
+	font-size: var(--text-sm);
+	font-weight: 600;
+	text-decoration: none !important;
+}
+
+.lexocrates-chat-navbar .lexocrates-chat-navbar-link:hover,
+.lexocrates-chat-navbar .lexocrates-chat-navbar-link:focus-visible,
+.lexocrates-chat-navbar .lexocrates-chat-navbar-link.active {
+	background: var(--control-bg);
+	color: var(--primary) !important;
+}
+
+.lexocrates-chat-navbar .lexocrates-chat-navbar-link .es-icon {
+	width: 18px;
+	height: 18px;
+}
+
+@media (max-width: 991px) {
+	.lexocrates-chat-navbar .lexocrates-chat-navbar-label {
+		display: none;
+	}
+}
+
+.footer-logo[src*="lexocrates-logo-dark.svg"] {
+	width: auto;
+	max-width: 180px;
+	height: 42px;
+	object-fit: contain;
+}
+
+/* Web Header Navbar Login Button UI */
+.navbar-nav a[href*="login"],
+.navbar a[href*="login"],
+.web-header a[href*="login"],
+.nav-item a[href*="login"],
+a.btn-login,
+a.btn-login-area,
+.btn-login-area,
+a[href*="/login"],
+a[href="/login"] {
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	height: 36px !important;
+	padding: 6px 18px !important;
+	font-size: 13px !important;
+	font-weight: 600 !important;
+	color: #ffffff !important;
+	background: #1e293b !important;
+	border: 1px solid #1e293b !important;
+	border-radius: 8px !important;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+	text-decoration: none !important;
+	transition: all 0.15s ease !important;
+}
+
+.navbar-nav a[href*="login"]:hover,
+.navbar a[href*="login"]:hover,
+.web-header a[href*="login"]:hover,
+.nav-item a[href*="login"]:hover,
+a.btn-login:hover,
+a.btn-login-area:hover,
+.btn-login-area:hover,
+a[href*="/login"]:hover,
+a[href="/login"]:hover {
+	background: #0f172a !important;
+	color: #ffffff !important;
+	border-color: #0f172a !important;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15) !important;
+	text-decoration: none !important;
+}
+
+/* Remove top web header navbar only on Website Login page (/login) without touching Desk */
+body.for-login .web-header,
+body[data-path="login"] .web-header,
+body:not([data-route]) .web-header-container,
+.lex-custom-login .web-header {
+	display: none !important;
+	visibility: hidden !important;
+	height: 0 !important;
+	min-height: 0 !important;
+	max-height: 0 !important;
+	width: 0 !important;
+	padding: 0 !important;
+	margin: 0 !important;
+	overflow: hidden !important;
+}

@@ -1,0 +1,724 @@
+/* ==========================================================================
+   Lexocrates auth/onboarding pages — login-link, client-registration,
+   client-invitation. Self-contained (own tokens, no dependency on
+   client_portal.css, which is now dashboard-only) and everything is scoped
+   under a page-root class so nothing here leaks onto other pages that
+   happen to load this file.
+   ========================================================================== */
+
+:root {
+	--lex-bg: #f4f6f8;
+	--lex-surface: #ffffff;
+	--lex-surface-2: #eef1f4;
+	--lex-border: #e1e6ea;
+	--lex-border-strong: #ccd4db;
+	--lex-ink: #101828;
+	--lex-ink-muted: #5c6b7a;
+	--lex-ink-faint: #8a97a3;
+	--lex-on-primary: #ffffff;
+	--lex-primary: #1e293b;
+	--lex-primary-hover: #0f172a;
+	--lex-primary-soft: #e8ecf1;
+	--lex-accent: #0d9488;
+	--lex-accent-soft: #e1f5f2;
+	--lex-red: #b42318;
+	--lex-red-bg: #fde3e0;
+	--lex-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+	--lex-shadow-md: 0 10px 30px -12px rgba(16, 24, 40, 0.18);
+	--lex-radius-sm: 8px;
+	--lex-radius-md: 14px;
+	--lex-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+	html:not([data-theme="light"]) {
+		--lex-bg: #0a0f1a;
+		--lex-surface: #121a29;
+		--lex-surface-2: #182335;
+		--lex-border: #263248;
+		--lex-border-strong: #37455f;
+		--lex-ink: #eaeef4;
+		--lex-ink-muted: #9db0c6;
+		--lex-ink-faint: #71839b;
+		--lex-on-primary: #0a0f1a;
+		--lex-primary: #7fa8d9;
+		--lex-primary-hover: #9cbfe6;
+		--lex-primary-soft: #1c2a3f;
+		--lex-accent: #2dd4bf;
+		--lex-accent-soft: #10312d;
+		--lex-red: #f68f85;
+		--lex-red-bg: #3a1614;
+		color-scheme: dark;
+	}
+}
+
+html[data-theme="dark"] {
+	--lex-bg: #0a0f1a;
+	--lex-surface: #121a29;
+	--lex-surface-2: #182335;
+	--lex-border: #263248;
+	--lex-border-strong: #37455f;
+	--lex-ink: #eaeef4;
+	--lex-ink-muted: #9db0c6;
+	--lex-ink-faint: #71839b;
+	--lex-on-primary: #0a0f1a;
+	--lex-primary: #7fa8d9;
+	--lex-primary-hover: #9cbfe6;
+	--lex-primary-soft: #1c2a3f;
+	--lex-accent: #2dd4bf;
+	--lex-accent-soft: #10312d;
+	--lex-red: #f68f85;
+	--lex-red-bg: #2c1a17;
+	color-scheme: dark;
+}
+
+/* ---------- shared, but scoped under each page's own root class ---------- */
+
+.lex-frappe-page,
+.lex-auth-shell,
+.lex-login-wrapper {
+	font-family: var(--lex-font);
+	color: var(--lex-ink);
+	background: var(--lex-bg);
+}
+
+.lex-frappe-page *,
+.lex-auth-shell *,
+.lex-login-wrapper * {
+	box-sizing: border-box;
+}
+
+/* ---------- generic form control styling, scoped to these page roots ---------- */
+
+.lex-frappe-page .form-control,
+.lex-auth-shell .form-control,
+.lex-login-wrapper .form-control,
+.lex-frappe-page input:not([type="checkbox"]):not([type="radio"]),
+.lex-frappe-page select,
+.lex-frappe-page textarea {
+	width: 100%;
+	min-height: 40px;
+	padding: 9px 12px;
+	font-family: inherit;
+	font-size: 13.5px;
+	color: var(--lex-ink);
+	background: var(--lex-surface);
+	border: 1px solid var(--lex-border-strong);
+	border-radius: var(--lex-radius-sm);
+}
+
+.lex-frappe-page textarea.form-control {
+	min-height: 84px;
+	resize: vertical;
+	line-height: 1.5;
+}
+
+.lex-frappe-page .form-control:focus,
+.lex-auth-shell .form-control:focus,
+.lex-login-wrapper .form-control:focus {
+	outline: none;
+	border-color: var(--lex-primary);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--lex-primary) 18%, transparent);
+}
+
+.lex-frappe-page .control-label,
+.lex-auth-shell label,
+.lex-login-wrapper .control-label {
+	display: block;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--lex-ink-muted);
+	margin-bottom: 6px;
+}
+
+.lex-frappe-page .control-label.reqd::after {
+	content: " *";
+	color: var(--lex-red);
+}
+
+.lex-frappe-page .help-box {
+	margin-top: 6px;
+	font-size: 11.5px;
+	color: var(--lex-ink-faint);
+}
+
+/* ---------- buttons (in case Frappe's website bundle doesn't cover these) ---------- */
+
+.lex-frappe-page .btn,
+.lex-auth-shell .btn,
+.lex-auth-shell .lex-btn,
+.lex-login-wrapper .btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	height: 38px;
+	padding: 0 18px;
+	border-radius: var(--lex-radius-sm);
+	border: 1px solid transparent;
+	background: var(--lex-primary);
+	color: var(--lex-on-primary);
+	font-size: 13.5px;
+	font-weight: 600;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.lex-frappe-page .btn:hover,
+.lex-auth-shell .btn:hover,
+.lex-auth-shell .lex-btn:hover,
+.lex-login-wrapper .btn:hover {
+	background: var(--lex-primary-hover);
+	color: var(--lex-on-primary);
+}
+
+.lex-frappe-page .btn-default {
+	background: var(--lex-surface);
+	color: var(--lex-ink);
+	border-color: var(--lex-border-strong);
+}
+
+.lex-frappe-page .btn-default:hover {
+	background: var(--lex-surface-2);
+}
+
+.lex-frappe-page .btn-sm {
+	height: 34px;
+	padding: 0 14px;
+	font-size: 12.5px;
+}
+
+.lex-auth-shell .lex-btn {
+	width: 100%;
+}
+
+/* ---------- Client Registration page shell ---------- */
+
+.lex-frappe-page {
+	min-height: 100vh;
+	padding: 32px 20px 64px;
+	display: flex;
+	justify-content: center;
+}
+
+.lex-frappe-container {
+	width: 100%;
+	max-width: 860px;
+}
+
+.lex-frappe-form-card,
+.lex-frappe-page-head {
+	background: var(--lex-surface);
+	border: 1px solid var(--lex-border);
+	border-radius: var(--lex-radius-md);
+	box-shadow: var(--lex-shadow-sm);
+}
+
+.lex-frappe-page-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+	padding: 24px 26px;
+	margin-bottom: 18px;
+}
+
+.lex-form-breadcrumb {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--lex-ink-faint);
+	margin-bottom: 8px;
+}
+
+.lex-frappe-page-head h1 {
+	margin: 0 0 4px;
+	font-size: 22px;
+	font-weight: 700;
+	color: var(--lex-ink);
+}
+
+.lex-frappe-page-head p {
+	margin: 0;
+	font-size: 13.5px;
+	color: var(--lex-ink-muted);
+	max-width: 52ch;
+}
+
+/* ---------- completion tracker ---------- */
+
+.lex-completion-tracker {
+	background: var(--lex-surface);
+	border: 1px solid var(--lex-border);
+	border-radius: var(--lex-radius-md);
+	box-shadow: var(--lex-shadow-sm);
+	padding: 18px 22px;
+	margin-bottom: 18px;
+}
+
+.lex-completion-summary {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	font-size: 12.5px;
+	color: var(--lex-ink-muted);
+	margin-bottom: 10px;
+}
+
+.lex-completion-summary strong {
+	font-size: 15px;
+	color: var(--lex-ink);
+}
+
+.lex-completion-bar {
+	height: 8px;
+	border-radius: 999px;
+	background: var(--lex-surface-2);
+	overflow: hidden;
+	margin-bottom: 16px;
+}
+
+.lex-completion-bar span {
+	display: block;
+	height: 100%;
+	width: 0%;
+	background: var(--lex-accent);
+	border-radius: 999px;
+	transition: width 0.25s ease;
+}
+
+.lex-section-tracker {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 10px;
+}
+
+.lex-section-tracker button {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid var(--lex-border);
+	border-radius: var(--lex-radius-sm);
+	background: var(--lex-surface);
+	cursor: pointer;
+	text-align: left;
+}
+
+.lex-section-tracker li[data-state="optional"] button {
+	border-style: dashed;
+}
+
+.lex-tracker-number {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: var(--lex-surface-2);
+	color: var(--lex-ink-muted);
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.lex-section-tracker button strong {
+	display: block;
+	font-size: 12.5px;
+	color: var(--lex-ink);
+}
+
+.lex-section-tracker button small {
+	font-size: 11px;
+	color: var(--lex-ink-faint);
+}
+
+.lex-section-tracker li[data-tracker-complete] .lex-tracker-number {
+	background: var(--lex-accent);
+	color: #ffffff;
+}
+
+/* ---------- form sections ---------- */
+
+.lex-frappe-section {
+	padding: 22px 26px;
+	border-bottom: 1px solid var(--lex-border);
+}
+
+.lex-frappe-section:last-child {
+	border-bottom: none;
+}
+
+.lex-frappe-section-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.lex-frappe-section-head h2 {
+	margin: 0 0 4px;
+	font-size: 16px;
+	font-weight: 700;
+	color: var(--lex-ink);
+}
+
+.lex-frappe-section-head p {
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--lex-ink-muted);
+}
+
+.lex-section-status {
+	flex-shrink: 0;
+	font-size: 11px;
+	font-weight: 700;
+	padding: 4px 10px;
+	border-radius: 999px;
+	background: var(--lex-surface-2);
+	color: var(--lex-ink-muted);
+}
+
+.lex-section-status.optional {
+	background: var(--lex-accent-soft);
+	color: var(--lex-accent);
+}
+
+.lex-frappe-form-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 16px;
+}
+
+@media (min-width: 640px) {
+	.lex-frappe-form-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+	.lex-frappe-form-grid .lex-span-2 {
+		grid-column: 1 / -1;
+	}
+}
+
+/* ---------- modal dialog (verification link popup) ---------- */
+
+.lex-modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(10, 15, 26, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	z-index: 100;
+}
+
+.lex-modal-overlay[hidden] {
+	display: none;
+}
+
+.lex-modal-card {
+	width: 100%;
+	max-width: 460px;
+	background: var(--lex-surface);
+	border-radius: var(--lex-radius-md);
+	box-shadow: var(--lex-shadow-md);
+	overflow: hidden;
+}
+
+.lex-modal-header {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	padding: 22px 22px 16px;
+	position: relative;
+}
+
+.lex-modal-icon-wrap {
+	width: 44px;
+	height: 44px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 20px;
+}
+
+.lex-modal-icon-wrap.success {
+	background: var(--lex-accent-soft);
+	color: var(--lex-accent);
+}
+
+.lex-modal-icon-wrap.danger {
+	background: var(--lex-red-bg);
+	color: var(--lex-red);
+}
+
+.lex-modal-header h3 {
+	margin: 0 0 2px;
+	font-size: 16px;
+	color: var(--lex-ink);
+}
+
+.lex-modal-header p {
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--lex-ink-muted);
+}
+
+.lex-modal-close {
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	width: 28px;
+	height: 28px;
+	border: 0;
+	background: none;
+	font-size: 18px;
+	line-height: 1;
+	color: var(--lex-ink-faint);
+	cursor: pointer;
+	border-radius: 999px;
+}
+
+.lex-modal-close:hover {
+	background: var(--lex-surface-2);
+	color: var(--lex-ink);
+}
+
+.lex-modal-body {
+	padding: 0 22px 18px;
+	font-size: 13px;
+	color: var(--lex-ink-muted);
+	line-height: 1.55;
+}
+
+.lex-modal-body p {
+	margin: 0 0 10px;
+}
+
+.lex-modal-hint {
+	background: var(--lex-surface-2);
+	border-radius: var(--lex-radius-sm);
+	padding: 10px 12px;
+	font-size: 12px;
+}
+
+.lex-modal-footer {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 16px 22px 22px;
+	flex-wrap: wrap;
+}
+
+/* ---------- shared login-style card shell (used by login-link.html; login.html
+   defines its own richer variant inline) ---------- */
+
+.lex-login-wrapper {
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 40px 20px;
+}
+
+.lex-login-card {
+	width: 100%;
+	max-width: 520px;
+	background: var(--lex-surface);
+	border: 1px solid var(--lex-border);
+	border-radius: var(--lex-radius-md);
+	box-shadow: var(--lex-shadow-md);
+	padding: 36px 32px;
+}
+
+.lex-login-card h3,
+.lex-login-card h4 {
+	color: var(--lex-ink);
+}
+
+.lex-login-card .btn {
+	margin-top: 8px;
+}
+
+/* ---------- Client Invitation activation page ---------- */
+
+.lex-auth-shell {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 24px;
+	padding: 40px 20px;
+}
+
+.lex-auth-brand {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.lex-brand-mark {
+	width: 44px;
+	height: 44px;
+	border-radius: 12px;
+	background: var(--lex-primary);
+	color: var(--lex-on-primary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 800;
+	font-size: 18px;
+}
+
+.lex-auth-brand strong {
+	display: block;
+	font-size: 16px;
+	color: var(--lex-ink);
+}
+
+.lex-auth-brand span {
+	display: block;
+	font-size: 12px;
+	color: var(--lex-ink-muted);
+}
+
+.lex-auth-card {
+	width: 100%;
+	max-width: 420px;
+	background: var(--lex-surface);
+	border: 1px solid var(--lex-border);
+	border-radius: var(--lex-radius-md);
+	box-shadow: var(--lex-shadow-md);
+	padding: 28px 26px;
+}
+
+.lex-auth-card > .lex-eyebrow {
+	font-size: 11.5px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--lex-accent);
+	margin-bottom: 6px;
+}
+
+.lex-auth-card h1 {
+	margin: 0 0 8px;
+	font-size: 19px;
+	color: var(--lex-ink);
+}
+
+.lex-auth-intro {
+	margin: 0 0 20px;
+	font-size: 13px;
+	color: var(--lex-ink-muted);
+	line-height: 1.5;
+}
+
+.lex-auth-shell .lex-form {
+	display: grid;
+	gap: 16px;
+}
+
+.lex-auth-shell .lex-form label.wide {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--lex-ink-muted);
+}
+
+.lex-auth-shell .lex-form input {
+	width: 100%;
+	min-height: 40px;
+	padding: 9px 12px;
+	font-family: inherit;
+	font-size: 13.5px;
+	color: var(--lex-ink);
+	background: var(--lex-surface);
+	border: 1px solid var(--lex-border-strong);
+	border-radius: var(--lex-radius-sm);
+}
+
+.lex-auth-shell .lex-form input:focus {
+	outline: none;
+	border-color: var(--lex-primary);
+}
+
+#lex-auth-result,
+#lex-verify-result {
+	margin-top: 14px;
+	font-size: 13px;
+}
+
+#lex-auth-result:empty,
+#lex-verify-result:empty {
+	display: none;
+}
+
+/* Dark mode overrides for auth/onboarding surfaces */
+html[data-theme="dark"],
+:root[data-theme="dark"] {
+	.lex-frappe-page select option {
+		background-color: #121a29 !important;
+		color: #eaeef4 !important;
+	}
+
+	.lex-frappe-page .btn-primary,
+	.lex-auth-shell .btn-primary,
+	.lex-login-wrapper .btn-primary {
+		background-color: #7fa8d9 !important;
+		color: #0a0f1a !important;
+		border-color: #7fa8d9 !important;
+		font-weight: 700 !important;
+	}
+
+	.lex-frappe-page .btn-primary:hover,
+	.lex-auth-shell .btn-primary:hover,
+	.lex-login-wrapper .btn-primary:hover {
+		background-color: #9cbfe6 !important;
+		border-color: #9cbfe6 !important;
+	}
+
+	.lex-section-tracker button {
+		background-color: #121a29 !important;
+		border-color: #263248 !important;
+	}
+
+	.lex-tracker-number {
+		background-color: #182335 !important;
+		color: #9db0c6 !important;
+	}
+
+	.lex-section-tracker li[data-tracker-complete] .lex-tracker-number {
+		background-color: #2dd4bf !important;
+		color: #0a0f1a !important;
+	}
+
+	.lex-completion-bar {
+		background-color: #182335 !important;
+	}
+
+	.lex-modal-card {
+		background-color: #121a29 !important;
+		border: 1px solid #263248 !important;
+	}
+
+	.lex-modal-hint {
+		background-color: #182335 !important;
+		color: #9db0c6 !important;
+	}
+}
+

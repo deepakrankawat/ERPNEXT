@@ -1,0 +1,467 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "format:LPOJ-{YYYY}-{#####}",
+ "creation": "2026-08-11 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "job_overview_section",
+  "job_title",
+  "engagement",
+  "job_type",
+  "overview_column_break",
+  "job_status",
+  "priority",
+  "assigned_analyst",
+  "client_context_section",
+  "customer",
+  "customer_name",
+  "practice_area",
+  "client_context_column_break",
+  "jurisdictions",
+  "confidentiality_level",
+  "task_section",
+  "task_description",
+  "schedule_section",
+  "received_at",
+  "due_date",
+  "schedule_column_break",
+  "completed_on",
+  "actual_hours",
+  "execution_policy_section",
+  "workflow_version_snapshot",
+  "sop_version_snapshot",
+  "documents_section",
+  "source_document",
+  "source_document_checksum",
+  "source_document_version",
+  "delivery_document",
+  "delivery_document_checksum",
+  "delivery_document_version",
+  "ai_governance_section",
+  "ai_processing_allowed",
+  "ai_instructions",
+  "quality_section",
+  "qa_required",
+  "qa_reviewer",
+  "qa_score",
+  "delivery_notes",
+  "client_approval_section",
+  "client_approval_status",
+  "client_approved_by",
+  "client_approval_column_break",
+  "client_approved_on",
+  "client_approval_notes",
+  "delivery_receipt_section",
+  "delivery_receipt_status",
+  "delivery_acknowledged_by",
+  "delivery_acknowledged_on",
+  "communication_section",
+  "chat_interface_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "job_overview_section",
+   "fieldtype": "Section Break",
+   "label": "Operational Work Unit"
+  },
+  {
+   "fieldname": "job_title",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Job Title",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "engagement",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Parent Matter",
+   "options": "LPO Matter",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "job_type",
+   "fieldtype": "Select",
+   "label": "Job Type",
+   "options": "Contract Review\nLegal Research\nDocument Review\nDue Diligence\nCompliance Review\nLitigation Support\nDrafting\nSummarization\nOther",
+   "reqd": 1
+  },
+  {
+   "fieldname": "overview_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "job_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Job Status",
+   "options": "Draft\nActivated\nAssigned\nIn Progress\nOn Hold\nQA Review\nReady for Delivery\nDelivered\nCompleted\nCancelled",
+   "reqd": 1
+  },
+  {
+   "default": "Medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Priority",
+   "options": "Low\nMedium\nHigh\nUrgent",
+   "reqd": 1
+  },
+  {
+   "fieldname": "assigned_analyst",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Assigned Analyst",
+   "options": "User",
+   "search_index": 1
+  },
+  {
+   "fieldname": "client_context_section",
+   "fieldtype": "Section Break",
+   "label": "Inherited Client Context"
+  },
+  {
+   "fetch_from": "engagement.customer",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "engagement.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "engagement.practice_area",
+   "fieldname": "practice_area",
+   "fieldtype": "Data",
+   "label": "Practice Area",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_context_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "engagement.jurisdictions",
+   "fieldname": "jurisdictions",
+   "fieldtype": "Small Text",
+   "label": "Jurisdictions",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "engagement.confidentiality_level",
+   "fieldname": "confidentiality_level",
+   "fieldtype": "Data",
+   "label": "Confidentiality Level",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "task_section",
+   "fieldtype": "Section Break",
+   "label": "Task Instructions"
+  },
+  {
+   "fieldname": "task_description",
+   "fieldtype": "Text Editor",
+   "label": "Task Description",
+   "reqd": 1
+  },
+  {
+   "fieldname": "schedule_section",
+   "fieldtype": "Section Break",
+   "label": "Assignment and Deadline"
+  },
+  {
+   "default": "Now",
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "label": "Received At",
+   "reqd": 1
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Due Date",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "schedule_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "completed_on",
+   "fieldtype": "Datetime",
+   "label": "Completed / Delivered On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "actual_hours",
+   "fieldtype": "Float",
+   "label": "Actual Hours",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "execution_policy_section",
+   "fieldtype": "Section Break",
+   "label": "Immutable Execution Policy Snapshot"
+  },
+  {
+   "fieldname": "workflow_version_snapshot",
+   "fieldtype": "Link",
+   "label": "Workflow Version",
+   "options": "LPO Workflow Version"
+  },
+  {
+   "fieldname": "sop_version_snapshot",
+   "fieldtype": "Link",
+   "label": "SOP Version",
+   "options": "LPO SOP Version"
+  },
+  {
+   "fieldname": "documents_section",
+   "fieldtype": "Section Break",
+   "label": "Documents"
+  },
+  {
+   "fieldname": "source_document",
+   "fieldtype": "Attach",
+   "label": "Primary Source Document"
+  },
+  {
+   "fieldname": "source_document_checksum",
+   "fieldtype": "Data",
+   "label": "Source SHA-256",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "source_document_version",
+   "fieldtype": "Int",
+   "label": "Source Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_document",
+   "fieldtype": "Attach",
+   "label": "Final Delivery Document"
+  },
+  {
+   "fieldname": "delivery_document_checksum",
+   "fieldtype": "Data",
+   "label": "Delivery SHA-256",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "delivery_document_version",
+   "fieldtype": "Int",
+   "label": "Delivery Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_governance_section",
+   "fieldtype": "Section Break",
+   "label": "AI Processing"
+  },
+  {
+   "default": "0",
+   "description": "This is a job-level decision. Confirm contractual and confidentiality requirements before enabling it.",
+   "fieldname": "ai_processing_allowed",
+   "fieldtype": "Check",
+   "label": "AI Processing Allowed"
+  },
+  {
+   "depends_on": "eval:doc.ai_processing_allowed",
+   "fieldname": "ai_instructions",
+   "fieldtype": "Small Text",
+   "label": "AI Processing Instructions"
+  },
+  {
+   "fieldname": "quality_section",
+   "fieldtype": "Section Break",
+   "label": "Quality Assurance and Delivery"
+  },
+  {
+   "default": "1",
+   "fieldname": "qa_required",
+   "fieldtype": "Check",
+   "label": "QA Required"
+  },
+  {
+   "depends_on": "eval:doc.qa_required",
+   "fieldname": "qa_reviewer",
+   "fieldtype": "Link",
+   "label": "QA Reviewer",
+   "options": "User"
+  },
+  {
+   "depends_on": "eval:doc.qa_required",
+   "fieldname": "qa_score",
+   "fieldtype": "Percent",
+   "label": "QA Score",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_notes",
+   "fieldtype": "Text Editor",
+   "label": "QA / Delivery Notes"
+  },
+  {
+   "fieldname": "client_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Client Approval"
+  },
+  {
+   "default": "Not Requested",
+   "fieldname": "client_approval_status",
+   "fieldtype": "Select",
+   "label": "Client Approval Status",
+   "options": "Not Requested\nPending\nApproved\nChanges Requested",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_approved_by",
+   "fieldtype": "Link",
+   "label": "Decision By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_approval_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "client_approved_on",
+   "fieldtype": "Datetime",
+   "label": "Decision On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_approval_notes",
+   "fieldtype": "Small Text",
+   "label": "Client Decision Notes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_receipt_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery Receipt"
+  },
+  {
+   "default": "Not Delivered",
+   "fieldname": "delivery_receipt_status",
+   "fieldtype": "Select",
+   "label": "Receipt Status",
+   "options": "Not Delivered\nAwaiting Acknowledgement\nAcknowledged\nRejected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_acknowledged_by",
+   "fieldtype": "Link",
+   "label": "Acknowledged By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_acknowledged_on",
+   "fieldtype": "Datetime",
+   "label": "Acknowledged On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "communication_section",
+   "fieldtype": "Section Break",
+   "label": "Secure Communication"
+  },
+  {
+   "fieldname": "chat_interface_html",
+   "fieldtype": "HTML",
+   "label": "Job Conversation"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO Job",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Analyst",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Client"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "job_title,engagement,customer,customer_name,assigned_analyst",
+ "show_title_field_in_link": 1,
+ "sort_field": "due_date",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "job_title",
+ "track_changes": 1
+}

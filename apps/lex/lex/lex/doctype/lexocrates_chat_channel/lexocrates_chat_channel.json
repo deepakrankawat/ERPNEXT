@@ -1,0 +1,254 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:LCC-{#####}",
+ "creation": "2026-08-11 16:50:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "identity_section",
+  "channel_name",
+  "channel_type",
+  "status",
+  "is_direct_message",
+  "direct_message_key",
+  "identity_column_break",
+  "description",
+  "reference_section",
+  "reference_doctype",
+  "reference_name",
+  "activity_section",
+  "last_message_at",
+  "members_section",
+  "members"
+ ],
+ "fields": [
+  {
+   "fieldname": "identity_section",
+   "fieldtype": "Section Break",
+   "label": "Channel"
+  },
+  {
+   "description": "Use a concise identifier such as #legal-research.",
+   "fieldname": "channel_name",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Channel Name",
+   "reqd": 1,
+   "search_index": 1,
+   "unique": 1
+  },
+  {
+   "default": "Public",
+   "fieldname": "channel_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Channel Type",
+   "options": "Public\nPrivate\nContextual",
+   "reqd": 1
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Active\nArchived",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_direct_message",
+   "fieldtype": "Check",
+   "label": "Direct Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "direct_message_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Direct Message Key",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "identity_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Description"
+  },
+  {
+   "depends_on": "eval:doc.channel_type == 'Contextual'",
+   "fieldname": "reference_section",
+   "fieldtype": "Section Break",
+   "label": "ERP Record Context"
+  },
+  {
+   "depends_on": "eval:doc.channel_type == 'Contextual'",
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Reference DocType",
+   "mandatory_depends_on": "eval:doc.channel_type == 'Contextual'",
+   "options": "DocType",
+   "search_index": 1
+  },
+  {
+   "depends_on": "eval:doc.channel_type == 'Contextual'",
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Reference Name",
+   "mandatory_depends_on": "eval:doc.channel_type == 'Contextual'",
+   "options": "reference_doctype",
+   "search_index": 1
+  },
+  {
+   "fieldname": "activity_section",
+   "fieldtype": "Section Break",
+   "label": "Activity"
+  },
+  {
+   "fieldname": "last_message_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Message At",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "members_section",
+   "fieldtype": "Section Break",
+   "label": "Members and Channel Permissions"
+  },
+  {
+   "fieldname": "members",
+   "fieldtype": "Table",
+   "label": "Members",
+   "options": "Lexocrates Chat Member"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-11 16:50:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Lexocrates Chat Channel",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Analyst"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Client"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Junior Legal Associate"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "write": 1,
+   "role": "Senior Legal Associate"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "write": 1,
+   "role": "Lexocrates QA Manager"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "write": 1,
+   "role": "Lexocrates Operations Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates AI Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Sales & Marketing"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates HR"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "write": 1,
+   "role": "Lexocrates Compliance Officer"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Finance"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "write": 1,
+   "role": "Lexocrates Director"
+  },
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "channel_name,channel_type,reference_doctype,reference_name",
+ "show_title_field_in_link": 1,
+ "sort_field": "last_message_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "channel_name",
+ "track_changes": 1
+}

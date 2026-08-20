@@ -1,0 +1,28 @@
+{
+ "actions": [],
+ "creation": "2026-08-11 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["portal_user", "user", "can_view", "can_upload", "can_comment", "can_approve", "can_view_billing"],
+ "fields": [
+  {"fieldname": "portal_user", "fieldtype": "Link", "in_list_view": 1, "label": "Portal User", "options": "Lexocrates Portal User", "reqd": 1},
+  {"fetch_from": "portal_user.user", "fieldname": "user", "fieldtype": "Link", "label": "User", "options": "User", "read_only": 1},
+  {"default": "1", "fieldname": "can_view", "fieldtype": "Check", "in_list_view": 1, "label": "Access"},
+  {"default": "0", "fieldname": "can_upload", "fieldtype": "Check", "in_list_view": 1, "label": "Upload"},
+  {"default": "0", "fieldname": "can_comment", "fieldtype": "Check", "in_list_view": 1, "label": "Comment"},
+  {"default": "0", "fieldname": "can_approve", "fieldtype": "Check", "in_list_view": 1, "label": "Approve"},
+  {"default": "0", "fieldname": "can_view_billing", "fieldtype": "Check", "in_list_view": 1, "label": "Billing"}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-08-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Lexocrates Matter Authorization",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

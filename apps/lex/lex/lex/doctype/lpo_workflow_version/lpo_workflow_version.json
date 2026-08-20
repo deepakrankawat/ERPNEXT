@@ -1,0 +1,85 @@
+{
+ "actions": [],
+ "autoname": "autoincrement",
+ "creation": "2026-08-12 20:41:44.009225",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "workflow_id",
+  "version",
+  "graph_hash",
+  "graph_json",
+  "status",
+  "approved_by",
+  "published_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "workflow_id",
+   "fieldtype": "Link",
+   "label": "Workflow Definition",
+   "options": "LPO Workflow Definition"
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Data",
+   "label": "Version"
+  },
+  {
+   "fieldname": "graph_hash",
+   "fieldtype": "Data",
+   "label": "Graph Hash"
+  },
+  {
+   "fieldname": "graph_json",
+   "fieldtype": "Code",
+   "label": "Workflow Graph",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nTesting\nApproved\nPublished\nRetired"
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Approved By",
+   "options": "User"
+  },
+  {
+   "fieldname": "published_at",
+   "fieldtype": "Datetime",
+   "label": "Published At"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-12 20:41:44.009225",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO Workflow Version",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

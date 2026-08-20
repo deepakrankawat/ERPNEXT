@@ -1,0 +1,40 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "format:AIP-{#####}",
+ "creation": "2026-08-14 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["scope_type", "target_name", "disabled", "operational_section", "retry_limit", "retention_days", "circuit_failure_threshold", "circuit_state", "consecutive_failures", "circuit_open_until", "last_failure", "updated_by", "updated_on"],
+ "fields": [
+  {"fieldname": "scope_type", "fieldtype": "Select", "in_list_view": 1, "label": "Scope Type", "options": "Global\nProvider\nModel\nUse Case", "reqd": 1},
+  {"default": "*", "fieldname": "target_name", "fieldtype": "Data", "in_list_view": 1, "label": "Target", "reqd": 1},
+  {"default": "0", "fieldname": "disabled", "fieldtype": "Check", "in_list_view": 1, "label": "Kill Switch Enabled"},
+  {"fieldname": "operational_section", "fieldtype": "Section Break", "label": "Resilience and Retention"},
+  {"default": "2", "fieldname": "retry_limit", "fieldtype": "Int", "label": "Retry Limit", "non_negative": 1, "reqd": 1},
+  {"default": "90", "fieldname": "retention_days", "fieldtype": "Int", "label": "Execution Retention Days", "non_negative": 1, "reqd": 1},
+  {"default": "3", "fieldname": "circuit_failure_threshold", "fieldtype": "Int", "label": "Circuit Failure Threshold", "non_negative": 1, "reqd": 1},
+  {"default": "Closed", "fieldname": "circuit_state", "fieldtype": "Select", "in_list_view": 1, "label": "Circuit State", "options": "Closed\nOpen\nHalf Open", "read_only": 1, "reqd": 1},
+  {"default": "0", "fieldname": "consecutive_failures", "fieldtype": "Int", "label": "Consecutive Failures", "non_negative": 1, "read_only": 1},
+  {"fieldname": "circuit_open_until", "fieldtype": "Datetime", "label": "Circuit Open Until", "read_only": 1},
+  {"fieldname": "last_failure", "fieldtype": "Small Text", "label": "Last Failure", "read_only": 1},
+  {"fieldname": "updated_by", "fieldtype": "Link", "label": "Updated By", "options": "User", "read_only": 1},
+  {"fieldname": "updated_on", "fieldtype": "Datetime", "label": "Updated On", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-08-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO AI Governance Policy",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "write": 1},
+  {"create": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "LPO_Admin", "write": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

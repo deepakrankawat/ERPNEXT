@@ -1,0 +1,55 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"client_workspace_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Client Workspace</b></span><p class=\\\"text-muted\\\">Your matters, work requests, and secure messages.</p>\",\"col\":12}},{\"id\":\"client_getting_started\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"Lexocrates Client Getting Started\",\"col\":12}},{\"id\":\"metric_0_client_open_jobs\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Client Open Jobs\",\"col\":3}},{\"id\":\"metric_1_client_completed_this_month\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Client Completed This Month\",\"col\":3}}]",
+ "creation": "2026-08-11 17:39:10.851192",
+ "custom_blocks": [
+  {
+   "custom_block_name": "Lexocrates Client Getting Started",
+   "label": "Lexocrates Client Getting Started"
+  }
+ ],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "customer",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Client Workspace",
+ "links": [],
+ "modified": "2026-08-18 17:20:47.080001",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Client Workspace",
+ "number_cards": [
+  {
+   "label": "Client Open Jobs",
+   "number_card_name": "Client Open Jobs"
+  },
+  {
+   "label": "Client Completed This Month",
+   "number_card_name": "Client Completed This Month"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "LPO_Admin"
+  },
+  {
+   "role": "CEO"
+  },
+  {
+   "role": "Lexocrates Client"
+  }
+ ],
+ "sequence_id": 50.0,
+ "shortcuts": [],
+ "title": "Client Workspace"
+}

@@ -1,0 +1,329 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"legal_operations_workspace_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Legal Operations Workspace</b></span><p class=\\\"text-muted\\\">Production command center for queues, matters, clients, delivery, SLA, QA, and compliance.</p>\",\"col\":12}},{\"id\":\"metric_0_open_lpo_jobs\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Open LPO Jobs\",\"col\":3}},{\"id\":\"metric_1_overdue_lpo_jobs\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Overdue LPO Jobs\",\"col\":3}},{\"id\":\"metric_2_open_matters\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Open Matters\",\"col\":3}},{\"id\":\"metric_3_open_compliance_actions\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Open Compliance Actions\",\"col\":3}},{\"id\":\"decision_center_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Decision Center</b></span>\",\"col\":12}},{\"id\":\"shortcut_0_work_intakes\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Work Intakes\",\"col\":3}},{\"id\":\"shortcut_1_today's_queue\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Today's Queue\",\"col\":3}},{\"id\":\"shortcut_2_jobs\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Jobs\",\"col\":3}},{\"id\":\"shortcut_3_matters\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Matters\",\"col\":3}},{\"id\":\"shortcut_4_clients\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Clients\",\"col\":3}},{\"id\":\"shortcut_5_portal_users\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Portal Users\",\"col\":3}},{\"id\":\"shortcut_6_client_departments\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Client Departments\",\"col\":3}},{\"id\":\"shortcut_7_portal_invitations\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Portal Invitations\",\"col\":3}},{\"id\":\"shortcut_8_client_wallets\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Client Wallets\",\"col\":3}},{\"id\":\"shortcut_9_portal_audit\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Portal Audit\",\"col\":3}},{\"id\":\"shortcut_10_ai_queue\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Queue\",\"col\":3}},{\"id\":\"shortcut_11_qa_queue\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"QA Queue\",\"col\":3}},{\"id\":\"shortcut_12_delivery_queue\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Queue\",\"col\":3}},{\"id\":\"shortcut_13_sla_monitor\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"SLA Monitor\",\"col\":3}},{\"id\":\"shortcut_14_compliance\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Compliance\",\"col\":3}},{\"id\":\"shortcut_15_communication\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Communication\",\"col\":3}},{\"id\":\"workspace_links_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Workspace Tools</b></span>\",\"col\":12}},{\"id\":\"workspace_links_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Decision Center\",\"col\":12}}]",
+ "creation": "2026-08-11 17:39:11.514727",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "organization",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Legal Operations Workspace",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Decision Center",
+   "link_count": 16,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Work Intakes",
+   "link_count": 0,
+   "link_to": "Lexocrates Work Intake",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Today's Queue",
+   "link_count": 0,
+   "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Jobs",
+   "link_count": 0,
+   "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Matters",
+   "link_count": 0,
+   "link_to": "LPO Matter",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Clients",
+   "link_count": 0,
+   "link_to": "Customer",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Portal Users",
+   "link_count": 0,
+   "link_to": "Lexocrates Portal User",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Client Departments",
+   "link_count": 0,
+   "link_to": "Lexocrates Client Department",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Portal Invitations",
+   "link_count": 0,
+   "link_to": "Lexocrates Portal Invitation",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Client Wallets",
+   "link_count": 0,
+   "link_to": "Lexocrates Client Wallet",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Portal Audit",
+   "link_count": 0,
+   "link_to": "Lexocrates Portal Audit Event",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "AI Queue",
+   "link_count": 0,
+   "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "QA Queue",
+   "link_count": 0,
+   "link_to": "LPO QA Review",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Delivery Queue",
+   "link_count": 0,
+   "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SLA Monitor",
+   "link_count": 0,
+   "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Compliance",
+   "link_count": 0,
+   "link_to": "Lexocrates Portal Audit Event",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Communication",
+   "link_count": 0,
+   "link_to": "lexocrates-chat",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-08-18 17:20:46.241971",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Legal Operations Workspace",
+ "number_cards": [
+  {
+   "label": "Open LPO Jobs",
+   "number_card_name": "Open LPO Jobs"
+  },
+  {
+   "label": "Overdue LPO Jobs",
+   "number_card_name": "Overdue LPO Jobs"
+  },
+  {
+   "label": "Open Matters",
+   "number_card_name": "Open Matters"
+  },
+  {
+   "label": "Open Compliance Actions",
+   "number_card_name": "Open Compliance Actions"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Lexocrates Operations Manager"
+  },
+  {
+   "role": "LPO_Admin"
+  },
+  {
+   "role": "LPO_Manager"
+  },
+  {
+   "role": "CEO"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 2.0,
+ "shortcuts": [
+  {
+   "doc_view": "List",
+   "label": "Work Intakes",
+   "link_to": "Lexocrates Work Intake",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Today's Queue",
+   "link_to": "LPO Job",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Jobs",
+   "link_to": "LPO Job",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Matters",
+   "link_to": "LPO Matter",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Clients",
+   "link_to": "Customer",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Portal Users",
+   "link_to": "Lexocrates Portal User",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Client Departments",
+   "link_to": "Lexocrates Client Department",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Portal Invitations",
+   "link_to": "Lexocrates Portal Invitation",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Client Wallets",
+   "link_to": "Lexocrates Client Wallet",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Portal Audit",
+   "link_to": "Lexocrates Portal Audit Event",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "AI Queue",
+   "link_to": "LPO Job",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "QA Queue",
+   "link_to": "LPO QA Review",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Delivery Queue",
+   "link_to": "LPO Job",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "SLA Monitor",
+   "link_to": "LPO Job",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Compliance",
+   "link_to": "Lexocrates Portal Audit Event",
+   "type": "DocType"
+  },
+  {
+   "color": "#2490ef",
+   "doc_view": "",
+   "label": "Communication",
+   "link_to": "lexocrates-chat",
+   "type": "Page"
+  }
+ ],
+ "title": "Legal Operations Workspace"
+}

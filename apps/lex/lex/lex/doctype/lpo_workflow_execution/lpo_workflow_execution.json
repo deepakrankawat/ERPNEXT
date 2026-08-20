@@ -1,0 +1,106 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:WEX-{UUID}",
+ "creation": "2026-08-12 20:41:50.273328",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "execution_id",
+  "workflow_version",
+  "graph_hash_snapshot",
+  "subject_type",
+  "subject_id",
+  "status",
+  "started",
+  "ended",
+  "payload_json",
+  "execution_log_json"
+ ],
+ "fields": [
+  {
+   "fieldname": "execution_id",
+   "fieldtype": "Data",
+   "label": "Execution ID"
+  },
+  {
+   "fieldname": "workflow_version",
+   "fieldtype": "Link",
+   "label": "Workflow Version",
+   "options": "LPO Workflow Version"
+  },
+  {
+   "fieldname": "graph_hash_snapshot",
+   "fieldtype": "Data",
+   "label": "Graph Hash Snapshot",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subject_type",
+   "fieldtype": "Data",
+   "label": "Subject Type"
+  },
+  {
+   "fieldname": "subject_id",
+   "fieldtype": "Data",
+   "label": "Subject ID"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nRunning\nWaiting\nPaused\nCompleted\nFailed\nCancelled"
+  },
+  {
+   "fieldname": "started",
+   "fieldtype": "Datetime",
+   "label": "Started"
+  },
+  {
+   "fieldname": "ended",
+   "fieldtype": "Datetime",
+   "label": "Ended"
+  },
+  {
+   "fieldname": "payload_json",
+   "fieldtype": "Code",
+   "label": "Payload",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "execution_log_json",
+   "fieldtype": "Code",
+   "label": "Execution Log",
+   "options": "JSON"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-12 20:41:50.273328",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO Workflow Execution",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

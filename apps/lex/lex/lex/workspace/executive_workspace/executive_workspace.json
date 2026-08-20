@@ -1,0 +1,307 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"executive_workspace_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Executive Workspace</b></span><p class=\\\"text-muted\\\">Analytics-only executive cockpit with 360-degree real-time monitoring of LexPacks, Clients, Waiting Jobs & Matters, and Active Lawyer Workload.</p>\",\"col\":12}},{\"id\":\"custom_block_lexocrates_ceo_executive_monitoring_cockpit\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"Lexocrates CEO Executive Monitoring Cockpit\",\"col\":12}},{\"id\":\"metric_0_monthly_revenue\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Monthly Revenue\",\"col\":3}},{\"id\":\"metric_1_lexpack_sales\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"LexPack Sales\",\"col\":3}},{\"id\":\"metric_2_total_clients\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Clients\",\"col\":3}},{\"id\":\"metric_3_client_registrations_pending\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Client Registrations Pending\",\"col\":3}},{\"id\":\"metric_4_open_matters\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Open Matters\",\"col\":3}},{\"id\":\"metric_5_jobs_waiting_in_queue\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Jobs Waiting In Queue\",\"col\":3}},{\"id\":\"metric_6_intakes_waiting_review\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Intakes Waiting Review\",\"col\":3}},{\"id\":\"metric_7_jobs_delivered\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Jobs Delivered\",\"col\":3}},{\"id\":\"metric_8_active_lawyers_on_projects\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Active Lawyers On Projects\",\"col\":3}},{\"id\":\"metric_9_overdue_lpo_jobs\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Overdue LPO Jobs\",\"col\":3}},{\"id\":\"metric_10_average_tat_hours\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Average TAT Hours\",\"col\":3}},{\"id\":\"metric_11_sla_compliance\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"SLA Compliance\",\"col\":3}},{\"id\":\"metric_12_average_qa_score\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Average QA Score\",\"col\":3}},{\"id\":\"metric_13_active_employees\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Active Employees\",\"col\":3}},{\"id\":\"decision_center_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Decision Center</b></span>\",\"col\":12}},{\"id\":\"shortcut_0_work_intakes_waiting\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Work Intakes Waiting\",\"col\":3}},{\"id\":\"shortcut_1_jobs_waiting_queue\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Jobs Waiting Queue\",\"col\":3}},{\"id\":\"shortcut_2_delivered_jobs\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivered Jobs\",\"col\":3}},{\"id\":\"shortcut_3_open_matters\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Open Matters\",\"col\":3}},{\"id\":\"shortcut_4_lexpack_purchases\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"LexPack Purchases\",\"col\":3}},{\"id\":\"shortcut_5_customers_&_clients\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customers & Clients\",\"col\":3}},{\"id\":\"shortcut_6_client_registrations\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Client Registrations\",\"col\":3}},{\"id\":\"shortcut_7_portal_users_&_lawyers\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Portal Users & Lawyers\",\"col\":3}},{\"id\":\"shortcut_8_employees_&_staff\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employees & Staff\",\"col\":3}},{\"id\":\"shortcut_9_qa_review_queue\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"QA Review Queue\",\"col\":3}},{\"id\":\"shortcut_10_client_wallets\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Client Wallets\",\"col\":3}},{\"id\":\"shortcut_11_communication\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Communication\",\"col\":3}},{\"id\":\"workspace_links_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Workspace Tools</b></span>\",\"col\":12}},{\"id\":\"workspace_links_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Decision Center\",\"col\":12}}]",
+ "creation": "2026-08-11 17:39:11.913581",
+ "custom_blocks": [
+  {
+   "custom_block_name": "Lexocrates CEO Executive Monitoring Cockpit",
+   "label": "Lexocrates CEO Executive Monitoring Cockpit"
+  }
+ ],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "chart",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Executive Workspace",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Decision Center",
+   "link_count": 12,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Work Intakes Waiting",
+   "link_count": 0,
+   "link_to": "Lexocrates Work Intake",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Jobs Waiting Queue",
+   "link_count": 0,
+   "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Delivered Jobs",
+   "link_count": 0,
+   "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Open Matters",
+   "link_count": 0,
+   "link_to": "LPO Matter",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LexPack Purchases",
+   "link_count": 0,
+   "link_to": "LexPack Purchase",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Customers & Clients",
+   "link_count": 0,
+   "link_to": "Customer",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Client Registrations",
+   "link_count": 0,
+   "link_to": "Lexocrates Client Registration",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Portal Users & Lawyers",
+   "link_count": 0,
+   "link_to": "Lexocrates Portal User",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Employees & Staff",
+   "link_count": 0,
+   "link_to": "Employee",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "QA Review Queue",
+   "link_count": 0,
+   "link_to": "LPO QA Review",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Client Wallets",
+   "link_count": 0,
+   "link_to": "Lexocrates Client Wallet",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Communication",
+   "link_count": 0,
+   "link_to": "lexocrates-chat",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-08-18 17:20:46.033956",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Executive Workspace",
+ "number_cards": [
+  {
+   "label": "Monthly Revenue",
+   "number_card_name": "Monthly Revenue"
+  },
+  {
+   "label": "LexPack Sales",
+   "number_card_name": "LexPack Sales"
+  },
+  {
+   "label": "Total Clients",
+   "number_card_name": "Total Clients"
+  },
+  {
+   "label": "Client Registrations Pending",
+   "number_card_name": "Client Registrations Pending"
+  },
+  {
+   "label": "Open Matters",
+   "number_card_name": "Open Matters"
+  },
+  {
+   "label": "Jobs Waiting In Queue",
+   "number_card_name": "Jobs Waiting In Queue"
+  },
+  {
+   "label": "Intakes Waiting Review",
+   "number_card_name": "Intakes Waiting Review"
+  },
+  {
+   "label": "Jobs Delivered",
+   "number_card_name": "Jobs Delivered"
+  },
+  {
+   "label": "Active Lawyers On Projects",
+   "number_card_name": "Active Lawyers On Projects"
+  },
+  {
+   "label": "Overdue LPO Jobs",
+   "number_card_name": "Overdue LPO Jobs"
+  },
+  {
+   "label": "Average TAT Hours",
+   "number_card_name": "Average TAT Hours"
+  },
+  {
+   "label": "SLA Compliance",
+   "number_card_name": "SLA Compliance"
+  },
+  {
+   "label": "Average QA Score",
+   "number_card_name": "Average QA Score"
+  },
+  {
+   "label": "Active Employees",
+   "number_card_name": "Active Employees"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "CEO"
+  },
+  {
+   "role": "Lexocrates Director"
+  },
+  {
+   "role": "LPO_Admin"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {
+   "doc_view": "List",
+   "label": "Work Intakes Waiting",
+   "link_to": "Lexocrates Work Intake",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Jobs Waiting Queue",
+   "link_to": "LPO Job",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Delivered Jobs",
+   "link_to": "LPO Job",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Open Matters",
+   "link_to": "LPO Matter",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "LexPack Purchases",
+   "link_to": "LexPack Purchase",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Customers & Clients",
+   "link_to": "Customer",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Client Registrations",
+   "link_to": "Lexocrates Client Registration",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Portal Users & Lawyers",
+   "link_to": "Lexocrates Portal User",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Employees & Staff",
+   "link_to": "Employee",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "QA Review Queue",
+   "link_to": "LPO QA Review",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Client Wallets",
+   "link_to": "Lexocrates Client Wallet",
+   "type": "DocType"
+  },
+  {
+   "color": "#2490ef",
+   "doc_view": "",
+   "label": "Communication",
+   "link_to": "lexocrates-chat",
+   "type": "Page"
+  }
+ ],
+ "title": "Executive Workspace"
+}

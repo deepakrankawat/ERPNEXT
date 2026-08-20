@@ -1,0 +1,46 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Client Workspace{% endblock %}
+{% block head_include %}
+	{{ super() }}
+	<script>
+	(function () {
+		// Applied before first paint so switching themes never flashes the wrong one.
+		try {
+			var saved = localStorage.getItem("lexocrates-portal-theme");
+			if (saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
+		} catch (e) { /* localStorage unavailable */ }
+	})();
+	</script>
+{% endblock %}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block page_container %}
+<link rel="stylesheet" href="/assets/lex/css/client_portal.css?v=20260818-1">
+<main
+	id="lex-client-portal"
+	class="lex-portal-shell"
+	data-portal-access="{{ 'denied' if portal_access_denied else 'allowed' }}"
+	aria-busy="{{ 'false' if portal_access_denied else 'true' }}"
+>
+	{% if portal_access_denied %}
+	<div class="lex-state-card" role="alert">
+		<div class="lex-state-mark">!</div>
+		<h1>Client workspace unavailable</h1>
+		<p>The logged-in account (<strong>{{ frappe.session.user }}</strong>) is not linked to an active Lexocrates Client profile.</p>
+		<p class="text-muted" style="margin-top: 8px; font-size: 13px;">To access the Client Workspace, please log in with a Client Portal account (e.g. <code>client.demo@lexocrates.com</code>).</p>
+		<div style="margin-top: 16px;">
+			<button id="lex-portal-logout" class="lex-button btn btn-primary btn-sm" type="button">Log out and sign in with Client account</button>
+		</div>
+	</div>
+	{% else %}
+	<div class="lex-loading" role="status">
+		<div class="lex-loading-mark">L</div>
+		<div><strong>Opening Client Workspace</strong><span>Loading your permitted matters and services...</span></div>
+	</div>
+	{% endif %}
+</main>
+<script src="/assets/lex/js/client_portal.js?v=20260818-1"></script>
+{% endblock %}

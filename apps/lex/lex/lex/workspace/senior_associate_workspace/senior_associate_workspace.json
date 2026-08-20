@@ -1,0 +1,178 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"senior_associate_workspace_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Senior Associate Workspace</b></span><p class=\\\"text-muted\\\">Team queue, legal review, returned work, escalations, and matter discussions.</p>\",\"col\":12}},{\"id\":\"metric_0_open_lpo_jobs\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Open LPO Jobs\",\"col\":3}},{\"id\":\"metric_1_pending_qa_reviews\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Pending QA Reviews\",\"col\":3}},{\"id\":\"metric_2_failed_qa_reviews\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Failed QA Reviews\",\"col\":3}},{\"id\":\"decision_center_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Decision Center</b></span>\",\"col\":12}},{\"id\":\"shortcut_0_team_queue\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Team Queue\",\"col\":3}},{\"id\":\"shortcut_1_pending_legal_review\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Pending Legal Review\",\"col\":3}},{\"id\":\"shortcut_2_returned_jobs\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Returned Jobs\",\"col\":3}},{\"id\":\"shortcut_3_escalations\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Escalations\",\"col\":3}},{\"id\":\"shortcut_4_templates\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Templates\",\"col\":3}},{\"id\":\"shortcut_5_knowledge_base\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}},{\"id\":\"shortcut_6_communication\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Communication\",\"col\":3}},{\"id\":\"workspace_links_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Workspace Tools</b></span>\",\"col\":12}},{\"id\":\"workspace_links_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Decision Center\",\"col\":12}}]",
+ "creation": "2026-08-11 17:39:11.190733",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "team",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Senior Associate Workspace",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Decision Center",
+   "link_count": 7,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Team Queue",
+   "link_count": 0,
+   "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Pending Legal Review",
+   "link_count": 0,
+   "link_to": "LPO QA Review",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Returned Jobs",
+   "link_count": 0,
+   "link_to": "LPO QA Review",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Escalations",
+   "link_count": 0,
+   "link_to": "Lexocrates Portal Audit Event",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Templates",
+   "link_count": 0,
+   "link_to": "File",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Knowledge Base",
+   "link_count": 0,
+   "link_to": "Help Article",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Communication",
+   "link_count": 0,
+   "link_to": "lexocrates-chat",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-08-18 17:20:46.412654",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Senior Associate Workspace",
+ "number_cards": [
+  {
+   "label": "Open LPO Jobs",
+   "number_card_name": "Open LPO Jobs"
+  },
+  {
+   "label": "Pending QA Reviews",
+   "number_card_name": "Pending QA Reviews"
+  },
+  {
+   "label": "Failed QA Reviews",
+   "number_card_name": "Failed QA Reviews"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Senior Legal Associate"
+  },
+  {
+   "role": "CEO"
+  },
+  {
+   "role": "LPO_Admin"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 4.0,
+ "shortcuts": [
+  {
+   "doc_view": "List",
+   "label": "Team Queue",
+   "link_to": "LPO Job",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Pending Legal Review",
+   "link_to": "LPO QA Review",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Returned Jobs",
+   "link_to": "LPO QA Review",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Escalations",
+   "link_to": "Lexocrates Portal Audit Event",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Templates",
+   "link_to": "File",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Knowledge Base",
+   "link_to": "Help Article",
+   "type": "DocType"
+  },
+  {
+   "color": "#2490ef",
+   "doc_view": "",
+   "label": "Communication",
+   "link_to": "lexocrates-chat",
+   "type": "Page"
+  }
+ ],
+ "title": "Senior Associate Workspace"
+}

@@ -1,0 +1,84 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-12 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "channel",
+  "user",
+  "last_read_message",
+  "last_read_at",
+  "muted",
+  "notification_level"
+ ],
+ "fields": [
+  {
+   "fieldname": "channel",
+   "fieldtype": "Link",
+   "label": "Channel",
+   "options": "Lexocrates Chat Channel",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "last_read_message",
+   "fieldtype": "Link",
+   "label": "Last Read Message",
+   "options": "Lexocrates Chat Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_read_at",
+   "fieldtype": "Datetime",
+   "label": "Last Read At",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "muted",
+   "fieldtype": "Check",
+   "label": "Muted"
+  },
+  {
+   "default": "All Messages",
+   "fieldname": "notification_level",
+   "fieldtype": "Select",
+   "label": "Notification Level",
+   "options": "All Messages\nMentions Only\nMuted",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-08-12 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Lexocrates Chat User State",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Admin"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

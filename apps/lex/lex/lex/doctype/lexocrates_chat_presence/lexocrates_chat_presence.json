@@ -1,0 +1,98 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:user",
+ "creation": "2026-08-14 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "status",
+  "preferred_status",
+  "status_updated_at",
+  "last_heartbeat_at",
+  "last_activity_at",
+  "last_seen_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "search_index": 1,
+   "unique": 1
+  },
+  {
+   "default": "Offline",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Current Status",
+   "options": "Online\nAway\nBusy\nOffline",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Online",
+   "fieldname": "preferred_status",
+   "fieldtype": "Select",
+   "label": "Preferred Status",
+   "options": "Online\nAway\nBusy\nOffline",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "status_updated_at",
+   "fieldtype": "Datetime",
+   "label": "Status Updated At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_heartbeat_at",
+   "fieldtype": "Datetime",
+   "label": "Last Heartbeat At",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "last_activity_at",
+   "fieldtype": "Datetime",
+   "label": "Last Activity At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_seen_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Seen At",
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-08-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Lexocrates Chat Presence",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Admin"
+  }
+ ],
+ "sort_field": "last_seen_at",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

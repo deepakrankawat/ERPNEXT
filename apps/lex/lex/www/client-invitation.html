@@ -1,0 +1,20 @@
+{% extends "templates/web.html" %}
+{% block title %}Activate Lexocrates Portal Access{% endblock %}
+{% block page_content %}
+<link rel="stylesheet" href="/assets/lex/css/lexocrates_auth_pages.css?v=20260818-1">
+<section class="lex-auth-shell">
+	<div class="lex-auth-brand"><div class="lex-brand-mark">L</div><div><strong>Lexocrates</strong><span>Secure Portal</span></div></div>
+	<article class="lex-auth-card">
+		<p class="lex-eyebrow">Time-limited invitation</p>
+		<h1>Activate your Portal User</h1>
+		<p class="lex-auth-intro">Create your credentials. Your Client, role and Matter access were assigned by your Client Administrator.</p>
+		<form id="lex-invitation-form" class="lex-form">
+			<label class="wide">Create a strong password<input name="password" type="password" minlength="10" autocomplete="new-password" required></label>
+			<label class="wide">Confirm password<input name="confirm_password" type="password" minlength="10" autocomplete="new-password" required></label>
+			<div class="wide"><button class="lex-btn" type="submit">Activate secure access</button></div>
+		</form>
+		<div id="lex-auth-result" role="status"></div>
+	</article>
+</section>
+<script src="/assets/lex/js/client_invitation.js"></script>
+{% endblock %}

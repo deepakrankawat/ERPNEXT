@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "creation": "2026-08-11 16:50:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "channel_role",
+  "can_post_messages",
+  "can_invite_members",
+  "joined_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "default": "Member",
+   "fieldname": "channel_role",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Channel Role",
+   "options": "Owner\nModerator\nMember\nRead Only",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "can_post_messages",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Can Post Messages"
+  },
+  {
+   "default": "0",
+   "fieldname": "can_invite_members",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Can Invite Members"
+  },
+  {
+   "default": "Now",
+   "fieldname": "joined_on",
+   "fieldtype": "Datetime",
+   "label": "Joined On",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-11 16:50:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Lexocrates Chat Member",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

@@ -1,0 +1,516 @@
+{
+ "charts": [
+  {
+   "chart_name": "LPO Jobs by Status",
+   "label": "LPO Jobs by Status"
+  },
+  {
+   "chart_name": "LPO Jobs by Priority",
+   "label": "LPO Jobs by Priority"
+  },
+  {
+   "chart_name": "LPO Matters by Status",
+   "label": "LPO Matters by Status"
+  },
+  {
+   "chart_name": "LPO QA Reviews by Status",
+   "label": "LPO QA Reviews by Status"
+  }
+ ],
+ "content": "[{\"id\":\"command_center_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Operational Command Center</b></span>\",\"col\":12}},{\"id\":\"open_jobs_kpi\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Open LPO Jobs\",\"col\":3}},{\"id\":\"engagements_kpi\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total LPO Matters\",\"col\":3}},{\"id\":\"qa_kpi\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Pending QA Reviews\",\"col\":3}},{\"id\":\"compliance_kpi\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Open Compliance Actions\",\"col\":3}},{\"id\":\"monitoring_spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"monitoring_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Live Workload Monitoring</b></span>\",\"col\":12}},{\"id\":\"job_status_chart\",\"type\":\"chart\",\"data\":{\"chart_name\":\"LPO Jobs by Status\",\"col\":6}},{\"id\":\"job_priority_chart\",\"type\":\"chart\",\"data\":{\"chart_name\":\"LPO Jobs by Priority\",\"col\":6}},{\"id\":\"engagement_status_chart\",\"type\":\"chart\",\"data\":{\"chart_name\":\"LPO Matters by Status\",\"col\":6}},{\"id\":\"qa_status_chart\",\"type\":\"chart\",\"data\":{\"chart_name\":\"LPO QA Reviews by Status\",\"col\":6}},{\"id\":\"actions_spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"actions_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Actions</b></span>\",\"col\":12}},{\"id\":\"new_job_shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New LPO Job\",\"col\":3}},{\"id\":\"jobs_shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"LPO Jobs\",\"col\":3}},{\"id\":\"new_engagement_shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Client Matter\",\"col\":3}},{\"id\":\"engagements_shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Client Matters\",\"col\":3}},{\"id\":\"customers_shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customers\",\"col\":3}},{\"id\":\"qa_shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"QA Reviews\",\"col\":3}},{\"id\":\"compliance_shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Compliance Actions\",\"col\":3}},{\"id\":\"users_shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Users\",\"col\":3}},{\"id\":\"tools_spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tools_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>LPO Modules &amp; Tools</b></span>\",\"col\":12}},{\"id\":\"core_card\",\"type\":\"card\",\"data\":{\"card_name\":\"LPO Core\",\"col\":4}},{\"id\":\"sla_card\",\"type\":\"card\",\"data\":{\"card_name\":\"SLA & Performance\",\"col\":4}},{\"id\":\"qa_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Quality Assurance\",\"col\":4}},{\"id\":\"compliance_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Compliance & Risk\",\"col\":4}},{\"id\":\"ai_card\",\"type\":\"card\",\"data\":{\"card_name\":\"AI Governance\",\"col\":4}}]",
+ "creation": "2026-08-11 16:07:09.971410",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "message-circle",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "LPO Operation",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LPO Core & Work Intake",
+   "link_count": 8,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Client Matters",
+   "link_count": 0,
+   "link_to": "LPO Matter",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LPO Jobs",
+   "link_count": 0,
+   "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Work Intakes",
+   "link_count": 0,
+   "link_to": "Lexocrates Work Intake",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Customers",
+   "link_count": 0,
+   "link_to": "Customer",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Portal Users",
+   "link_count": 0,
+   "link_to": "Lexocrates Portal User",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Client Registrations",
+   "link_count": 0,
+   "link_to": "Lexocrates Client Registration",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Client Departments",
+   "link_count": 0,
+   "link_to": "Lexocrates Client Department",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Portal Invitations",
+   "link_count": 0,
+   "link_to": "Lexocrates Portal Invitation",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workflows & SOP Engine",
+   "link_count": 7,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workflow Definitions",
+   "link_count": 0,
+   "link_to": "LPO Workflow Definition",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workflow Versions",
+   "link_count": 0,
+   "link_to": "LPO Workflow Version",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workflow Executions",
+   "link_count": 0,
+   "link_to": "LPO Workflow Execution",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SOPs",
+   "link_count": 0,
+   "link_to": "LPO SOP",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SOP Versions",
+   "link_count": 0,
+   "link_to": "LPO SOP Version",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SOP Runs",
+   "link_count": 0,
+   "link_to": "LPO SOP Run",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Node Runs",
+   "link_count": 0,
+   "link_to": "LPO Node Run",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Quality & Compliance",
+   "link_count": 3,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "QA Reviews",
+   "link_count": 0,
+   "link_to": "LPO QA Review",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Compliance Actions",
+   "link_count": 0,
+   "link_to": "LPO Compliance Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Portal Audit Events",
+   "link_count": 0,
+   "link_to": "Lexocrates Portal Audit Event",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "AI & Prompt Governance",
+   "link_count": 4,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "AI Governance Policies",
+   "link_count": 0,
+   "link_to": "LPO AI Governance Policy",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "AI Executions",
+   "link_count": 0,
+   "link_to": "LPO AI Execution",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Prompts",
+   "link_count": 0,
+   "link_to": "LPO Prompt",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Prompt Versions",
+   "link_count": 0,
+   "link_to": "LPO Prompt Version",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Billing & LexPacks",
+   "link_count": 5,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LexPack Plans",
+   "link_count": 0,
+   "link_to": "LexPack Plan",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LexPack Purchases",
+   "link_count": 0,
+   "link_to": "LexPack Purchase",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Client Wallets",
+   "link_count": 0,
+   "link_to": "Lexocrates Client Wallet",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Wallet Transactions",
+   "link_count": 0,
+   "link_to": "Lexocrates Wallet Transaction",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LexPack Settings",
+   "link_count": 0,
+   "link_to": "LexPack Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Communication & SLA",
+   "link_count": 3,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chat Channels",
+   "link_count": 0,
+   "link_to": "Lexocrates Chat Channel",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chat Messages",
+   "link_count": 0,
+   "link_to": "Lexocrates Chat Message",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SLA Clocks",
+   "link_count": 0,
+   "link_to": "LPO Clock",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-08-19 15:41:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO Operation",
+ "number_cards": [
+  {
+   "label": "Open LPO Jobs",
+   "number_card_name": "Open LPO Jobs"
+  },
+  {
+   "label": "Total LPO Matters",
+   "number_card_name": "Total LPO Matters"
+  },
+  {
+   "label": "Pending QA Reviews",
+   "number_card_name": "Pending QA Reviews"
+  },
+  {
+   "label": "Open Compliance Actions",
+   "number_card_name": "Open Compliance Actions"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "restrict_to_domain": "",
+ "roles": [
+  {
+   "role": "LPO_Admin"
+  },
+  {
+   "role": "LPO_Manager"
+  },
+  {
+   "role": "LPO_Analyst"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {
+   "color": "#2490ef",
+   "doc_view": "New",
+   "label": "New LPO Job",
+   "link_to": "LPO Job",
+   "type": "DocType"
+  },
+  {
+   "color": "#2490ef",
+   "doc_view": "List",
+   "format": "{} Open",
+   "label": "LPO Jobs",
+   "link_to": "LPO Job",
+   "stats_filter": "[[\"job_status\",\"not in\",[\"Delivered\",\"Completed\",\"Cancelled\"]]]",
+   "type": "DocType"
+  },
+  {
+   "color": "#29cd42",
+   "doc_view": "New",
+   "label": "New Client Matter",
+   "link_to": "LPO Matter",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Client Matters",
+   "link_to": "LPO Matter",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Customers",
+   "link_to": "Customer",
+   "type": "DocType"
+  },
+  {
+   "color": "#f5a623",
+   "doc_view": "List",
+   "format": "{} Pending",
+   "label": "QA Reviews",
+   "link_to": "LPO QA Review",
+   "stats_filter": "[[\"review_status\",\"not in\",[\"Approved\",\"Rejected\"]]]",
+   "type": "DocType"
+  },
+  {
+   "color": "#ff5858",
+   "doc_view": "List",
+   "format": "{} Open",
+   "label": "Compliance Actions",
+   "link_to": "LPO Compliance Log",
+   "stats_filter": "[[\"status\",\"not in\",[\"Resolved\",\"Closed\"]]]",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "List",
+   "label": "Users",
+   "link_to": "User",
+   "type": "DocType"
+  }
+ ],
+ "title": "LPO Operation"
+}

@@ -1,0 +1,163 @@
+openapi: 3.1.0
+info:
+  title: Lexocrates LPO Native API
+  version: 2026.08.14
+  description: |
+    Supported Frappe method endpoints for controlled Client onboarding,
+    Client operations, wallet reporting, and signed payment callbacks.
+servers:
+  - url: https://{host}
+    variables:
+      host:
+        default: development.localhost:8001
+components:
+  securitySchemes:
+    frappeSession:
+      type: apiKey
+      in: cookie
+      name: sid
+    frappeToken:
+      type: http
+      scheme: bearer
+    webhookHmac:
+      type: apiKey
+      in: header
+      name: X-Lexocrates-Signature
+  schemas:
+    FrappeResponse:
+      type: object
+      properties:
+        message: {}
+    RegistrationRequest:
+      type: object
+      required: [organization_name, organization_type, country, primary_user_name, designation, email]
+      properties:
+        organization_name: {type: string}
+        organization_type: {type: string}
+        country: {type: string}
+        primary_user_name: {type: string}
+        designation: {type: string}
+        email: {type: string, format: email}
+    MatterRequest:
+      type: object
+      required: [matter_title, practice_area, jurisdictions]
+      properties:
+        matter_title: {type: string}
+        practice_area: {type: string}
+        jurisdictions: {type: string}
+        billing_method: {type: string, enum: [Quoted Price, LexPack]}
+    WorkRequest:
+      type: object
+      required: [engagement, job_title, job_type, priority, due_date, task_description]
+      properties:
+        engagement: {type: string}
+        job_title: {type: string}
+        job_type: {type: string}
+        priority: {type: string, enum: [Low, Medium, High, Urgent]}
+        due_date: {type: string, format: date-time}
+        task_description: {type: string}
+    PaymentWebhook:
+      type: object
+      required: [payment_id, client_id, points, timestamp]
+      properties:
+        payment_id: {type: string}
+        idempotency_key: {type: string}
+        client_id: {type: string}
+        points: {type: number, exclusiveMinimum: 0}
+        timestamp: {type: string, format: date-time}
+paths:
+  /api/method/lex.portal_management.request_client_registration:
+    post:
+      summary: Create email-verification intake only; no tenant is provisioned
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: {$ref: '#/components/schemas/RegistrationRequest'}
+      responses:
+        '200': {description: Pending verification created, content: {application/json: {schema: {$ref: '#/components/schemas/FrappeResponse'}}}}
+  /api/method/lex.portal_management.verify_client_registration:
+    post:
+      summary: Verify applicant email and move registration to compliance review
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [token]
+              properties: {token: {type: string}}
+      responses:
+        '200': {description: Email verified; tenant still not provisioned}
+  /api/method/lex.portal_management.activate_approved_registration:
+    post:
+      summary: Activate a registration only after all compliance gates pass
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [token, password]
+              properties: {token: {type: string}, password: {type: string, format: password, minLength: 10}}
+      responses:
+        '200': {description: Client, Website User, Portal User, and Wallet created}
+        '403': {description: Invalid, expired, reused, or unapproved activation}
+  /api/method/lex.client_portal.get_portal_dashboard:
+    post:
+      summary: Get the authenticated Client-scoped workspace payload
+      security: [{frappeSession: []}, {frappeToken: []}]
+      responses:
+        '200': {description: Capability and Matter-scoped dashboard}
+  /api/method/lex.client_portal.create_matter:
+    post:
+      summary: Submit a Draft Matter for the authenticated Client
+      security: [{frappeSession: []}, {frappeToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: {$ref: '#/components/schemas/MatterRequest'}
+      responses:
+        '200': {description: Draft Matter created}
+  /api/method/lex.client_portal.create_work_request:
+    post:
+      summary: Submit a Draft Job under an authorized Matter
+      security: [{frappeSession: []}, {frappeToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: {$ref: '#/components/schemas/WorkRequest'}
+      responses:
+        '200': {description: Draft Job created}
+  /api/method/lex.client_portal.upload_matter_document:
+    post:
+      summary: Upload a private file into fail-closed quarantine
+      security: [{frappeSession: []}, {frappeToken: []}]
+      responses:
+        '200': {description: File saved with Clean or quarantined scan status}
+  /api/method/lex.client_portal.submit_client_approval:
+    post:
+      summary: Approve or reject a deliverable and record its receipt
+      security: [{frappeSession: []}, {frappeToken: []}]
+      responses:
+        '200': {description: Client decision and acknowledgement recorded}
+  /api/method/lex.wallet_statement.generate_wallet_statement_data:
+    post:
+      summary: Return the authenticated Client's reconciled immutable ledger
+      security: [{frappeSession: []}, {frappeToken: []}]
+      responses:
+        '200': {description: Wallet balances and transactions}
+  /api/method/lex.wallet_statement.handle_payment_topup_webhook:
+    post:
+      summary: Receive an HMAC-signed, replay-bounded, idempotent top-up
+      security: [{webhookHmac: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PaymentWebhook'}
+      responses:
+        '200': {description: Top-up posted once}
+        '403': {description: Signature invalid, timestamp stale, or endpoint not configured}

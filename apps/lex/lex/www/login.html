@@ -1,0 +1,477 @@
+{% extends "templates/web.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block page_content %}
+<link rel="stylesheet" href="/assets/lex/css/lexocrates_auth_pages.css?v=20260818-1">
+<style>
+	.lex-login-wrapper {
+		min-height: 82vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 40px 20px;
+		background: radial-gradient(circle at 50% 20%, rgba(36, 144, 239, 0.08), transparent 70%);
+	}
+	.lex-login-card {
+		width: 100%;
+		max-width: 520px;
+		background: var(--lex-surface, #ffffff);
+		border: 1px solid var(--lex-border, #e2e8f0);
+		border-radius: 16px;
+		box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.07), 0 0 1px rgba(0, 0, 0, 0.1);
+		padding: 36px 32px;
+	}
+	.lex-login-header {
+		text-align: center;
+		margin-bottom: 24px;
+	}
+	.lex-login-brand {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		font-size: 20px;
+		font-weight: 700;
+		color: var(--lex-heading, #0f172a);
+		margin-bottom: 6px;
+		letter-spacing: -0.5px;
+	}
+	.lex-login-brand img {
+		height: 32px;
+	}
+	.lex-login-sub {
+		font-size: 13px;
+		color: var(--lex-muted, #64748b);
+	}
+	.lex-login-tabs {
+		display: grid;
+		grid-template-columns: 1fr 1fr 1fr;
+		background: #f1f5f9;
+		padding: 4px;
+		border-radius: 10px;
+		margin-bottom: 20px;
+		gap: 4px;
+	}
+	.lex-login-tab {
+		border: none;
+		background: transparent;
+		padding: 9px 8px;
+		font-size: 12px;
+		font-weight: 600;
+		color: #64748b;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+	}
+	.lex-login-tab.active {
+		background: #ffffff;
+		color: #0f172a;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+	}
+	.lex-register-banner {
+		background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%);
+		border: 1px solid #bae6fd;
+		border-radius: 12px;
+		padding: 14px 16px;
+		margin-bottom: 20px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.lex-register-text h4 {
+		margin: 0 0 2px 0;
+		font-size: 13px;
+		font-weight: 700;
+		color: #0369a1;
+	}
+	.lex-register-text p {
+		margin: 0;
+		font-size: 11px;
+		color: #0c4a6e;
+	}
+	.btn-register {
+		white-space: nowrap;
+		background: #0284c7;
+		color: #ffffff !important;
+		font-weight: 600;
+		font-size: 12px;
+		padding: 6px 14px;
+		border-radius: 8px;
+		text-decoration: none;
+		transition: background 0.2s ease;
+	}
+	.btn-register:hover {
+		background: #0369a1;
+	}
+	.lex-login-btn {
+		width: 100%;
+		padding: 11px;
+		font-size: 14px;
+		font-weight: 600;
+		border-radius: 10px;
+		margin-top: 8px;
+	}
+	.lex-password-wrapper {
+		position: relative;
+		display: flex;
+		align-items: center;
+		width: 100%;
+	}
+	.lex-password-wrapper input {
+		padding-right: 42px;
+	}
+	.btn-toggle-password {
+		position: absolute;
+		right: 6px;
+		top: 50%;
+		transform: translateY(-50%);
+		background: transparent;
+		border: none;
+		padding: 6px 8px;
+		color: #64748b;
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 6px;
+		transition: color 0.15s ease, background 0.15s ease;
+		z-index: 5;
+	}
+	.btn-toggle-password:hover {
+		color: #0284c7;
+		background: #f1f5f9;
+	}
+	.btn-toggle-password:focus {
+		outline: none;
+		color: #0284c7;
+	}
+	.lex-login-footer {
+		margin-top: 24px;
+		text-align: center;
+		font-size: 12px;
+		color: #94a3b8;
+	}
+
+	/* Dark mode overrides for Login page */
+	html[data-theme="dark"] .lex-login-wrapper,
+	[data-theme="dark"] .lex-login-wrapper {
+		background: radial-gradient(circle at 50% 20%, rgba(127, 168, 217, 0.12), transparent 70%);
+	}
+	html[data-theme="dark"] .lex-login-card,
+	[data-theme="dark"] .lex-login-card {
+		background: var(--lex-surface, #121a29);
+		border-color: var(--lex-border, #263248);
+		box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.4);
+	}
+	html[data-theme="dark"] .lex-login-brand,
+	[data-theme="dark"] .lex-login-brand {
+		color: var(--lex-ink, #eaeef4);
+	}
+	html[data-theme="dark"] .lex-login-sub,
+	[data-theme="dark"] .lex-login-sub {
+		color: var(--lex-ink-muted, #9db0c6);
+	}
+	html[data-theme="dark"] .lex-login-tabs,
+	[data-theme="dark"] .lex-login-tabs {
+		background: var(--lex-surface-2, #182335);
+	}
+	html[data-theme="dark"] .lex-login-tab,
+	[data-theme="dark"] .lex-login-tab {
+		color: var(--lex-ink-muted, #9db0c6);
+	}
+	html[data-theme="dark"] .lex-login-tab.active,
+	[data-theme="dark"] .lex-login-tab.active {
+		background: var(--lex-surface, #121a29);
+		color: var(--lex-ink, #eaeef4);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+	html[data-theme="dark"] .lex-register-banner,
+	[data-theme="dark"] .lex-register-banner {
+		background: linear-gradient(135deg, #0f2942 0%, #163654 100%);
+		border-color: #1d4ed8;
+	}
+	html[data-theme="dark"] .lex-register-text h4,
+	[data-theme="dark"] .lex-register-text h4 {
+		color: #38bdf8;
+	}
+	html[data-theme="dark"] .lex-register-text p,
+	[data-theme="dark"] .lex-register-text p {
+		color: #bae6fd;
+	}
+	html[data-theme="dark"] .btn-toggle-password,
+	[data-theme="dark"] .btn-toggle-password {
+		color: var(--lex-ink-muted, #9db0c6);
+	}
+	html[data-theme="dark"] .btn-toggle-password:hover,
+	[data-theme="dark"] .btn-toggle-password:hover {
+		color: #38bdf8;
+		background: var(--lex-surface-2, #182335);
+	}
+	html[data-theme="dark"] .lex-login-footer,
+	[data-theme="dark"] .lex-login-footer {
+		color: var(--lex-ink-faint, #71839b);
+	}
+</style>
+
+<div class="lex-login-wrapper">
+	<div class="lex-login-card">
+		<!-- Brand Header -->
+		<div class="lex-login-header">
+			<div class="lex-login-brand">
+				<img src="/assets/lex/images/lexocrates-mark-dark.png" alt="Lexocrates Logo" onerror="this.style.display='none'">
+				<span>Lexocrates</span>
+			</div>
+			<p class="lex-login-sub">AI-Native SOP-Driven Legal Operations Platform</p>
+		</div>
+
+		<!-- 3 Login Mode Selector Tabs: Client Login | Login with Email | Staff Login -->
+		<div class="lex-login-tabs" role="tablist" aria-label="Login Options">
+			<button id="tab-client" class="lex-login-tab active" role="tab" aria-selected="true" type="button" onclick="switchLoginMode('client')">
+				🏢 Client
+			</button>
+			<button id="tab-email" class="lex-login-tab" role="tab" aria-selected="false" type="button" onclick="switchLoginMode('email')">
+				✉️ Email Link
+			</button>
+			<button id="tab-system" class="lex-login-tab" role="tab" aria-selected="false" type="button" onclick="switchLoginMode('system')">
+				⚡ Staff
+			</button>
+		</div>
+
+		<!-- New Client Register Direct Option Banner (Visible on Client tab only) -->
+		<div class="lex-register-banner" id="register-banner">
+			<div class="lex-register-text">
+				<h4>New Client Organization?</h4>
+				<p>Register to submit matters, review quotes &amp; LexPacks.</p>
+			</div>
+			<a href="/client-registration" class="btn btn-register">
+				Register Client →
+			</a>
+		</div>
+
+		<!-- Standard Password Authentication Form -->
+		<form id="lex-login-form" onsubmit="handleLoginSubmit(event)">
+			<input type="hidden" id="redirect_to" name="redirect_to" value="{{ redirect_to or '/client-portal' }}">
+
+			<div class="form-group mb-3">
+				<label class="control-label reqd" for="login_usr">Email / Username</label>
+				<input id="login_usr" class="form-control" name="usr" type="text" autocomplete="username" placeholder="name@company.com" required autofocus>
+			</div>
+
+			<div class="form-group mb-3" id="password-group">
+				<div class="d-flex justify-content-between align-items-center mb-1">
+					<label class="control-label reqd mb-0" for="login_pwd">Password</label>
+					<a href="/forgot" class="small text-muted" tabindex="-1">Forgot password?</a>
+				</div>
+				<div class="lex-password-wrapper">
+					<input id="login_pwd" class="form-control" name="pwd" type="password" autocomplete="current-password" placeholder="••••••••••••">
+					<button type="button" id="toggle-password-btn" class="btn-toggle-password" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility" title="Show / Hide Password" tabindex="-1">
+						<span id="pwd-toggle-icon">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+								<circle cx="12" cy="12" r="3"></circle>
+							</svg>
+						</span>
+					</button>
+				</div>
+			</div>
+
+			<div class="form-group form-check mb-3" id="remember-group">
+				<input type="checkbox" class="form-check-input" id="remember_me" name="remember_me" checked>
+				<label class="form-check-label small text-muted" for="remember_me">Keep me logged in</label>
+			</div>
+
+			<div id="login-alert" class="alert alert-danger mb-3" style="display: none;" role="alert"></div>
+			<div id="login-success" class="alert alert-success mb-3" style="display: none;" role="status"></div>
+
+			<button id="btn-login-submit" type="submit" class="btn btn-primary lex-login-btn">
+				Sign in to Client Portal
+			</button>
+		</form>
+
+		<div class="lex-login-footer">
+			Protected by Lexocrates Enterprise Zero-Trust Authorization &amp; Cryptographic Audit.
+			<div style="margin-top: 8px; font-weight: 600; color: #475569; font-size: 12px;">Powered by <a href="https://www.linkedin.com/in/deepak-rankawat-658b0a259/" target="_blank" rel="noopener noreferrer" style="color: #0284c7; text-decoration: underline;">Deepak Rankawat</a></div>
+		</div>
+	</div>
+</div>
+
+<script>
+	let currentMode = 'client';
+
+	function togglePasswordVisibility() {
+		const pwdInput = document.getElementById('login_pwd');
+		const iconContainer = document.getElementById('pwd-toggle-icon');
+		const toggleBtn = document.getElementById('toggle-password-btn');
+		if (!pwdInput) return;
+
+		const isPassword = pwdInput.type === 'password';
+		pwdInput.type = isPassword ? 'text' : 'password';
+
+		if (toggleBtn) {
+			toggleBtn.setAttribute('title', isPassword ? 'Hide Password' : 'Show Password');
+			toggleBtn.setAttribute('aria-label', isPassword ? 'Hide Password' : 'Show Password');
+		}
+
+		if (iconContainer) {
+			if (isPassword) {
+				// Eye-off icon (password currently shown, click to hide)
+				iconContainer.innerHTML = `
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+						<line x1="1" y1="1" x2="23" y2="23"></line>
+					</svg>
+				`;
+			} else {
+				// Eye icon (password currently masked, click to see)
+				iconContainer.innerHTML = `
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+						<circle cx="12" cy="12" r="3"></circle>
+					</svg>
+				`;
+			}
+		}
+	}
+
+	function switchLoginMode(mode) {
+		currentMode = mode;
+		const clientTab = document.getElementById('tab-client');
+		const emailTab = document.getElementById('tab-email');
+		const systemTab = document.getElementById('tab-system');
+		const pwdGroup = document.getElementById('password-group');
+		const rememberGroup = document.getElementById('remember-group');
+		const registerBanner = document.getElementById('register-banner');
+		const submitBtn = document.getElementById('btn-login-submit');
+		const redirectInput = document.getElementById('redirect_to');
+		const pwdInput = document.getElementById('login_pwd');
+		const alertBox = document.getElementById('login-alert');
+		const successBox = document.getElementById('login-success');
+
+		alertBox.style.display = 'none';
+		successBox.style.display = 'none';
+
+		clientTab.classList.remove('active');
+		emailTab.classList.remove('active');
+		systemTab.classList.remove('active');
+		clientTab.setAttribute('aria-selected', 'false');
+		emailTab.setAttribute('aria-selected', 'false');
+		systemTab.setAttribute('aria-selected', 'false');
+
+		if (mode === 'client') {
+			clientTab.classList.add('active');
+			clientTab.setAttribute('aria-selected', 'true');
+			registerBanner.style.display = 'flex';
+			pwdGroup.style.display = 'block';
+			rememberGroup.style.display = 'block';
+			pwdInput.required = true;
+			submitBtn.innerHTML = 'Sign in to Client Portal';
+			redirectInput.value = '/client-portal';
+		} else if (mode === 'email') {
+			emailTab.classList.add('active');
+			emailTab.setAttribute('aria-selected', 'true');
+			registerBanner.style.display = 'none';
+			pwdGroup.style.display = 'none';
+			rememberGroup.style.display = 'none';
+			pwdInput.required = false;
+			submitBtn.innerHTML = 'Send Secure Login Link to Email ✉️';
+			redirectInput.value = '/client-portal';
+		} else {
+			systemTab.classList.add('active');
+			systemTab.setAttribute('aria-selected', 'true');
+			registerBanner.style.display = 'none';
+			pwdGroup.style.display = 'block';
+			rememberGroup.style.display = 'block';
+			pwdInput.required = true;
+			submitBtn.innerHTML = 'Sign in to Legal Desk (/app)';
+			redirectInput.value = '/app';
+		}
+	}
+
+	async function handleLoginSubmit(event) {
+		event.preventDefault();
+		const form = event.target;
+		const alertBox = document.getElementById('login-alert');
+		const successBox = document.getElementById('login-success');
+		const submitBtn = document.getElementById('btn-login-submit');
+
+		alertBox.style.display = 'none';
+		successBox.style.display = 'none';
+		submitBtn.disabled = true;
+		const originalText = submitBtn.innerHTML;
+
+		if (currentMode === 'email') {
+			submitBtn.innerHTML = 'Sending email link...';
+			try {
+				const email = form.usr.value.trim();
+				const redirect = form.redirect_to.value;
+
+				const res = await frappe.call({
+					method: 'lex.portal_management.send_email_login_link',
+					args: {
+						email: email,
+						redirect_to: redirect,
+					}
+				});
+
+				successBox.innerHTML = `<strong>Login link sent!</strong> Check your email inbox (<b>${frappe.utils.escape_html(email)}</b>) for your 15-minute secure login link.`;
+				successBox.style.display = 'block';
+				submitBtn.disabled = false;
+				submitBtn.innerHTML = originalText;
+			} catch (err) {
+				alertBox.textContent = err.message || 'Could not send login link. Please check your email address.';
+				alertBox.style.display = 'block';
+				submitBtn.disabled = false;
+				submitBtn.innerHTML = originalText;
+			}
+		} else {
+			submitBtn.innerHTML = 'Signing in...';
+			try {
+				const usr = form.usr.value.trim();
+				const pwd = form.pwd.value;
+				const redirect = form.redirect_to.value;
+
+				const response = await frappe.call({
+					method: 'login',
+					args: {
+						usr: usr,
+						pwd: pwd,
+					}
+				});
+
+				if (response.message === 'Logged In' || response.message === 'No App') {
+					if (response.message === 'Logged In') {
+						let target = response.home_page || '/app';
+						if (redirect && redirect.startsWith('/app')) {
+							target = redirect;
+						} else if (currentMode === 'system') {
+							target = '/app';
+						}
+						window.location.href = target;
+					} else {
+						let target = '/client-portal';
+						if (redirect && !redirect.startsWith('/app')) {
+							target = redirect;
+						} else if (response.home_page && !response.home_page.startsWith('/app')) {
+							target = response.home_page;
+						}
+						window.location.href = target;
+					}
+				} else {
+					alertBox.textContent = response.message || 'Invalid email or password.';
+					alertBox.style.display = 'block';
+					submitBtn.disabled = false;
+					submitBtn.innerHTML = originalText;
+				}
+			} catch (err) {
+				alertBox.textContent = err.message || 'Invalid email or password. Please try again.';
+				alertBox.style.display = 'block';
+				submitBtn.disabled = false;
+				submitBtn.innerHTML = originalText;
+			}
+		}
+	}
+</script>
+{% endblock %}

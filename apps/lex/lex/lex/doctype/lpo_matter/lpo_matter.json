@@ -1,0 +1,392 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "format:MATTER-{YYYY}-{#####}",
+ "creation": "2026-08-11 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "matter_overview_section",
+  "matter_title",
+  "customer",
+  "customer_name",
+  "overview_column_break",
+  "status",
+  "matter_model",
+  "matter_manager",
+  "billing_section",
+  "billing_method",
+  "quoted_amount",
+  "quote_status",
+  "quote_approved_by",
+  "quote_approved_on",
+  "billing_column_break",
+  "lexpoints_estimated",
+  "lexpoints_reserved",
+  "lexpoints_consumed",
+  "funding_status",
+  "funding_transaction",
+  "execution_section",
+  "workflow_version_snapshot",
+  "sop_version_snapshot",
+  "scope_section",
+  "practice_area",
+  "jurisdictions",
+  "description",
+  "timeline_section",
+  "start_date",
+  "end_date",
+  "timeline_column_break",
+  "standard_turnaround_hours",
+  "sla_warning_hours",
+  "governance_section",
+  "confidentiality_level",
+  "data_residency",
+  "allow_ai_processing_by_default",
+  "authorization_section",
+  "authorized_portal_users",
+  "communication_section",
+  "chat_interface_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "matter_overview_section",
+   "fieldtype": "Section Break",
+   "label": "Client Matter"
+  },
+  {
+   "fieldname": "matter_title",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Matter Name",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "overview_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nActive\nOn Hold\nCompleted\nClosed",
+   "reqd": 1
+  },
+  {
+   "default": "Project",
+   "fieldname": "matter_model",
+   "fieldtype": "Select",
+   "label": "Matter Model",
+   "options": "Retainer\nProject\nFixed Fee\nHourly\nPer Document",
+   "reqd": 1
+  },
+  {
+   "fieldname": "matter_manager",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Matter Manager",
+   "options": "User",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "billing_section",
+   "fieldtype": "Section Break",
+   "label": "Matter Billing"
+  },
+  {
+   "default": "Quoted Price",
+   "fieldname": "billing_method",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Billing Method",
+   "options": "Quoted Price\nLexPack",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.billing_method=='Quoted Price'",
+   "fieldname": "quoted_amount",
+   "fieldtype": "Currency",
+   "label": "Quoted Amount",
+   "non_negative": 1
+  },
+  {
+   "default": "Pending Client Approval",
+   "depends_on": "eval:doc.billing_method=='Quoted Price'",
+   "fieldname": "quote_status",
+   "fieldtype": "Select",
+   "label": "Quote Status",
+   "options": "Not Required\nDraft\nPending Client Approval\nApproved\nRejected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quote_approved_by",
+   "fieldtype": "Link",
+   "label": "Quote Decision By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quote_approved_on",
+   "fieldtype": "Datetime",
+   "label": "Quote Decision On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "billing_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.billing_method=='LexPack'",
+   "fieldname": "lexpoints_estimated",
+   "fieldtype": "Float",
+   "label": "Estimated LexPoints",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "lexpoints_reserved",
+   "fieldtype": "Float",
+   "label": "Reserved LexPoints",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "lexpoints_consumed",
+   "fieldtype": "Float",
+   "label": "Consumed LexPoints",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "default": "Pending",
+   "depends_on": "eval:doc.billing_method=='LexPack'",
+   "fieldname": "funding_status",
+   "fieldtype": "Select",
+   "label": "Funding Status",
+   "options": "Not Required\nPending\nFunded\nInsufficient\nReleased",
+   "read_only": 1
+  },
+  {
+   "fieldname": "funding_transaction",
+   "fieldtype": "Link",
+   "label": "Funding Reservation",
+   "options": "Lexocrates Wallet Transaction",
+   "read_only": 1
+  },
+  {
+   "fieldname": "execution_section",
+   "fieldtype": "Section Break",
+   "label": "Execution Policy Snapshots"
+  },
+  {
+   "fieldname": "workflow_version_snapshot",
+   "fieldtype": "Link",
+   "label": "Workflow Version Snapshot",
+   "options": "LPO Workflow Version"
+  },
+  {
+   "fieldname": "sop_version_snapshot",
+   "fieldtype": "Link",
+   "label": "SOP Version Snapshot",
+   "options": "LPO SOP Version"
+  },
+  {
+   "fieldname": "scope_section",
+   "fieldtype": "Section Break",
+   "label": "Legal Scope"
+  },
+  {
+   "fieldname": "practice_area",
+   "fieldtype": "Select",
+   "label": "Practice Area",
+   "options": "Corporate & Commercial\nContract Review\nLitigation Support\nEmployment\nIntellectual Property\nRegulatory & Compliance\nDue Diligence\nLegal Research\nOther",
+   "reqd": 1
+  },
+  {
+   "description": "List the countries, states, provinces, courts, or regulatory regimes covered by this matter.",
+   "fieldname": "jurisdictions",
+   "fieldtype": "Small Text",
+   "label": "Jurisdictions",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Scope and Instructions"
+  },
+  {
+   "fieldname": "timeline_section",
+   "fieldtype": "Section Break",
+   "label": "Timeline and SLA"
+  },
+  {
+   "default": "Today",
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date"
+  },
+  {
+   "fieldname": "timeline_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "24",
+   "description": "Default delivery target for new work under this matter.",
+   "fieldname": "standard_turnaround_hours",
+   "fieldtype": "Int",
+   "label": "Standard Turnaround (Hours)",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "default": "4",
+   "description": "Hours before a deadline when the job should be treated as at risk.",
+   "fieldname": "sla_warning_hours",
+   "fieldtype": "Int",
+   "label": "SLA Warning (Hours)",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "governance_section",
+   "fieldtype": "Section Break",
+   "label": "Confidentiality and AI Governance"
+  },
+  {
+   "default": "Confidential",
+   "fieldname": "confidentiality_level",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Confidentiality Level",
+   "options": "Standard\nConfidential\nHighly Confidential\nRestricted",
+   "reqd": 1
+  },
+  {
+   "description": "Required storage or processing region, if contractually specified.",
+   "fieldname": "data_residency",
+   "fieldtype": "Data",
+   "label": "Data Residency"
+  },
+  {
+   "default": "0",
+   "description": "A job still records its own explicit AI-processing decision.",
+   "fieldname": "allow_ai_processing_by_default",
+   "fieldtype": "Check",
+   "label": "Allow AI Processing by Default"
+  },
+  {
+   "fieldname": "authorization_section",
+   "fieldtype": "Section Break",
+   "label": "Authorized Portal Users"
+  },
+  {
+   "fieldname": "authorized_portal_users",
+   "fieldtype": "Table",
+   "label": "Matter Authorization",
+   "options": "Lexocrates Matter Authorization"
+  },
+  {
+   "fieldname": "communication_section",
+   "fieldtype": "Section Break",
+   "label": "Secure Communication"
+  },
+  {
+   "fieldname": "chat_interface_html",
+   "fieldtype": "HTML",
+   "label": "Matter Conversation"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO Matter",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Analyst"
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Client"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "matter_title,customer,customer_name,practice_area,matter_manager",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "matter_title",
+ "track_changes": 1
+}

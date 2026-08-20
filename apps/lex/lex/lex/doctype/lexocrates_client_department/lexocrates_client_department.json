@@ -1,0 +1,37 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "format:CD-{#####}",
+ "creation": "2026-08-11 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["department_name", "client", "parent_department", "status", "description"],
+ "fields": [
+  {"fieldname": "department_name", "fieldtype": "Data", "in_global_search": 1, "in_list_view": 1, "label": "Department Name", "reqd": 1, "search_index": 1},
+  {"fieldname": "client", "fieldtype": "Link", "in_list_view": 1, "label": "Client", "options": "Customer", "reqd": 1, "search_index": 1},
+  {"fieldname": "parent_department", "fieldtype": "Link", "label": "Parent Department", "options": "Lexocrates Client Department"},
+  {"default": "Active", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Active\nDisabled", "reqd": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"}
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-08-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Lexocrates Client Department",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 0, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "write": 1},
+  {"create": 1, "delete": 0, "export": 1, "print": 1, "read": 1, "report": 1, "role": "LPO_Admin", "write": 1},
+  {"create": 1, "delete": 0, "export": 1, "print": 1, "read": 1, "report": 1, "role": "LPO_Manager", "write": 1},
+  {"read": 1, "role": "Lexocrates Client"}
+ ],
+ "search_fields": "department_name,client",
+ "show_title_field_in_link": 1,
+ "sort_field": "department_name",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "department_name",
+ "track_changes": 1
+}

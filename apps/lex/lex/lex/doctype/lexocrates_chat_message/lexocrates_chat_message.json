@@ -1,0 +1,280 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:LCM-{########}",
+ "creation": "2026-08-11 16:50:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "message_context_section",
+  "channel",
+  "sender",
+  "sent_at",
+  "system_generated",
+  "message_section",
+  "message_text",
+  "thread_reference",
+  "mentions",
+  "job_mentions",
+  "attachments",
+  "audit_section",
+  "source_doctype",
+  "source_name",
+  "automation_key",
+  "edited_on",
+  "pin_section",
+  "is_pinned",
+  "pinned_by",
+  "pinned_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "message_context_section",
+   "fieldtype": "Section Break",
+   "label": "Message Context"
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Channel",
+   "options": "Lexocrates Chat Channel",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "sender",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Sender",
+   "options": "User",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "sent_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Sent At",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "system_generated",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "System Generated",
+   "read_only": 1
+  },
+  {
+   "fieldname": "message_section",
+   "fieldtype": "Section Break",
+   "label": "Conversation"
+  },
+  {
+   "fieldname": "message_text",
+   "fieldtype": "Text Editor",
+   "in_global_search": 1,
+   "label": "Message Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "thread_reference",
+   "fieldtype": "Link",
+   "label": "Thread Reference",
+   "options": "Lexocrates Chat Message",
+   "search_index": 1
+  },
+  {
+   "description": "Server-normalized JSON list of mentioned User IDs.",
+   "fieldname": "mentions",
+   "fieldtype": "Small Text",
+   "label": "Mentions",
+   "read_only": 1
+  },
+  {
+   "description": "Server-normalized JSON list of LPO Jobs mentioned in this message.",
+   "fieldname": "job_mentions",
+   "fieldtype": "Long Text",
+   "label": "Job Mentions",
+   "read_only": 1
+  },
+  {
+   "description": "Audited JSON list of Frappe File URLs attached to this message.",
+   "fieldname": "attachments",
+   "fieldtype": "Long Text",
+   "label": "Attachments",
+   "read_only": 1
+  },
+  {
+   "fieldname": "audit_section",
+   "fieldtype": "Section Break",
+   "label": "Automation and Audit"
+  },
+  {
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "label": "Source DocType",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Source Name",
+   "options": "source_doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "automation_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Automation Key",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "edited_on",
+   "fieldtype": "Datetime",
+   "label": "Edited On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pin_section",
+   "fieldtype": "Section Break",
+   "label": "Channel Pin"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_pinned",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Pinned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pinned_by",
+   "fieldtype": "Link",
+   "label": "Pinned By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pinned_at",
+   "fieldtype": "Datetime",
+   "label": "Pinned At",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-11 16:50:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Lexocrates Chat Message",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Admin"
+  },
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Manager"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Analyst"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Client"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Junior Legal Associate"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Senior Legal Associate"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates QA Manager"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Operations Manager"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates AI Manager"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Sales & Marketing"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates HR"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Compliance Officer"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Finance"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lexocrates Director"
+  },
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  }
+ ],
+ "search_fields": "message_text,channel,sender,source_name",
+ "sort_field": "sent_at",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

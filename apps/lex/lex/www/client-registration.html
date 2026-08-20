@@ -1,0 +1,119 @@
+{% extends "templates/web.html" %}
+{% block title %}Register a Client Organization{% endblock %}
+{% block page_content %}
+<link rel="stylesheet" href="/assets/lex/css/lexocrates_auth_pages.css?v=20260818-1">
+<section class="lex-frappe-page">
+	<div class="lex-frappe-container" id="lex-registration-card">
+		<form id="lex-registration-form" class="lex-frappe-form">
+			<div class="lex-frappe-page-head">
+				<div>
+					<nav class="lex-form-breadcrumb" aria-label="Breadcrumb"><span>Client Portal</span><span aria-hidden="true">›</span><span>Onboarding</span></nav>
+					<h1>Client Organization</h1>
+					<p>Create the organization record and its primary portal administrator.</p>
+				</div>
+				<button class="btn btn-primary btn-sm" type="submit">Send verification link</button>
+			</div>
+			<div class="lex-completion-tracker" aria-label="Form completion">
+				<div class="lex-completion-summary">
+					<span id="lex-completion-status" role="status" aria-live="polite">0 of 2 required sections complete</span>
+					<strong id="lex-completion-percent">0%</strong>
+				</div>
+				<div id="lex-completion-bar" class="lex-completion-bar" role="progressbar" aria-valuemin="0" aria-valuemax="2" aria-valuenow="0" aria-label="Required sections completed"><span></span></div>
+				<ol class="lex-section-tracker">
+					<li data-tracker-item="organization">
+						<button type="button" data-section-target="organization-details">
+							<span class="lex-tracker-number" aria-hidden="true">1</span><span><strong>Organization</strong><small data-tracker-status>Incomplete</small></span>
+						</button>
+					</li>
+					<li data-tracker-item="administrator">
+						<button type="button" data-section-target="administrator-details">
+							<span class="lex-tracker-number" aria-hidden="true">2</span><span><strong>Administrator</strong><small data-tracker-status>Incomplete</small></span>
+						</button>
+					</li>
+					<li data-tracker-item="billing" data-state="optional">
+						<button type="button" data-section-target="billing-details">
+							<span class="lex-tracker-number" aria-hidden="true">3</span><span><strong>Billing &amp; Tax</strong><small data-tracker-status>Optional</small></span>
+						</button>
+					</li>
+				</ol>
+			</div>
+
+			<div class="lex-frappe-form-card">
+				<section id="organization-details" class="lex-frappe-section" data-form-section="organization" aria-labelledby="organization-details-heading">
+					<div class="lex-frappe-section-head">
+						<div><h2 id="organization-details-heading">Organization Details</h2><p>Basic legal and operating information for the client organization.</p></div>
+						<span class="lex-section-status" data-section-status="organization">Incomplete</span>
+					</div>
+					<div class="lex-frappe-form-grid">
+						<div class="form-group lex-span-2"><label class="control-label reqd" for="organization-name">Organization Name</label><input id="organization-name" class="form-control" name="organization_name" autocomplete="organization" required></div>
+						<div class="form-group"><label class="control-label reqd" for="organization-type">Organization Type</label><select id="organization-type" class="form-control" name="organization_type" required><option>Law Firm</option><option>Corporate Legal Department</option><option>Bank / Financial Institution</option><option>Insurance Company</option><option>Accounting Firm</option><option>Consulting Firm</option><option>Other</option></select></div>
+						<div class="form-group"><label class="control-label reqd" for="organization-country">Country</label><input id="organization-country" class="form-control" name="country" autocomplete="country-name" required></div>
+						<div class="form-group"><label class="control-label" for="organization-state">State / Province</label><input id="organization-state" class="form-control" name="state_province" autocomplete="address-level1"></div>
+						<div class="form-group"><label class="control-label" for="organization-website">Website</label><input id="organization-website" class="form-control" name="website" type="url" autocomplete="url" placeholder="https://example.com"></div>
+						<div class="form-group lex-span-2"><label class="control-label" for="organization-jurisdiction">Primary Jurisdiction</label><input id="organization-jurisdiction" class="form-control" name="primary_jurisdiction"><p class="help-box small text-muted">Primary country, state or regulatory jurisdiction for legal work.</p></div>
+					</div>
+				</section>
+
+				<section id="administrator-details" class="lex-frappe-section" data-form-section="administrator" aria-labelledby="administrator-details-heading">
+					<div class="lex-frappe-section-head">
+						<div><h2 id="administrator-details-heading">Primary Administrator</h2><p>This person will receive the verification link and manage portal access.</p></div>
+						<span class="lex-section-status" data-section-status="administrator">Incomplete</span>
+					</div>
+					<div class="lex-frappe-form-grid">
+						<div class="form-group"><label class="control-label reqd" for="administrator-name">Full Name</label><input id="administrator-name" class="form-control" name="primary_user_name" autocomplete="name" required></div>
+						<div class="form-group"><label class="control-label reqd" for="administrator-designation">Designation</label><input id="administrator-designation" class="form-control" name="designation" autocomplete="organization-title" required></div>
+						<div class="form-group"><label class="control-label reqd" for="administrator-email">Email</label><input id="administrator-email" class="form-control" name="email" type="email" autocomplete="email" required></div>
+						<div class="form-group"><label class="control-label" for="administrator-mobile">Mobile</label><input id="administrator-mobile" class="form-control" name="mobile" type="tel" autocomplete="tel"></div>
+					</div>
+				</section>
+
+				<section id="billing-details" class="lex-frappe-section" data-form-section="billing" aria-labelledby="billing-details-heading">
+					<div class="lex-frappe-section-head">
+						<div><h2 id="billing-details-heading">Billing &amp; Tax</h2><p>Default currency and organization tax registration details.</p></div>
+						<span class="lex-section-status optional" data-section-status="billing">Optional</span>
+					</div>
+					<div class="lex-frappe-form-grid">
+						<div class="form-group"><label class="control-label" for="billing-currency">Billing Currency</label><input id="billing-currency" class="form-control" name="billing_currency" maxlength="3" placeholder="INR"></div>
+						<div class="form-group lex-span-2"><label class="control-label" for="tax-information">Tax / VAT / GST Information</label><textarea id="tax-information" class="form-control" name="tax_information" rows="4"></textarea></div>
+					</div>
+				</section>
+			</div>
+			<div id="lex-auth-result" role="status"></div>
+		</form>
+
+		<form id="lex-registration-verify" class="lex-frappe-form" hidden>
+			<div class="lex-frappe-page-head">
+				<div><nav class="lex-form-breadcrumb" aria-label="Breadcrumb"><span>Client Portal</span><span aria-hidden="true">›</span><span>Verification</span></nav><h1>Verify Organization Email</h1><p>Confirm the applicant email before compliance review.</p></div>
+				<button class="btn btn-primary btn-sm" type="submit">Verify email</button>
+			</div>
+			<div class="lex-frappe-form-card"><section class="lex-frappe-section"><div class="lex-frappe-section-head"><h2>Controlled Onboarding</h2><p>Email verification does not create an account. Activation is available only after all required reviews pass.</p></div><div class="lex-frappe-form-grid"><div class="form-group lex-span-2" data-activation-password hidden><label class="control-label reqd" for="administrator-password">Password</label><input id="administrator-password" class="form-control" name="password" type="password" minlength="10" autocomplete="new-password"><p class="help-box small text-muted">Use at least 10 characters and avoid your name, email, or organization name.</p></div></div></section></div>
+			<div id="lex-verify-result" role="status"></div>
+		</form>
+	</div>
+
+	<!-- Popup Modal Dialog for Verification Link -->
+	<div id="lex-verification-modal" class="lex-modal-overlay" aria-hidden="true" hidden>
+		<div class="lex-modal-card" role="dialog" aria-labelledby="lex-modal-title" aria-modal="true">
+			<div class="lex-modal-header">
+				<div class="lex-modal-icon-wrap success">
+					<span class="lex-modal-icon">✓</span>
+				</div>
+				<div>
+					<h3 id="lex-modal-title">Verification Link Created!</h3>
+					<p id="lex-modal-subtitle">A verification request has been successfully registered.</p>
+				</div>
+				<button type="button" class="lex-modal-close" id="lex-modal-close-btn" aria-label="Close modal">&times;</button>
+			</div>
+			<div class="lex-modal-body" id="lex-modal-body">
+				<p>We have dispatched a verification email to your administrator address.</p>
+				<p class="lex-modal-hint">If you are testing locally or emails are disabled on your environment, you can use the direct link below to complete setup:</p>
+			</div>
+			<div class="lex-modal-footer">
+				<a id="lex-modal-direct-link" class="btn btn-primary btn-sm" href="#">Proceed to Verification &rarr;</a>
+				<button type="button" class="btn btn-default btn-sm" id="lex-modal-dismiss-btn">Dismiss</button>
+			</div>
+		</div>
+	</div>
+</section>
+<script src="/assets/lex/js/client_registration.js?v=20260814-1"></script>
+{% endblock %}
