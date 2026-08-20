@@ -1,0 +1,55 @@
+FROM python:3.11-slim-bookworm
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install required system dependencies, Node.js 18, Yarn, cron, and MariaDB client
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    python3-dev \
+    python3-pip \
+    python3-venv \
+    mariadb-client \
+    redis-tools \
+    wkhtmltopdf \
+    libssl-dev \
+    libffi-dev \
+    vim \
+    cron \
+    sudo \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g yarn \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create dedicated frappe user
+RUN useradd -ms /bin/bash frappe \
+    && echo "frappe ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Install frappe-bench CLI globally
+RUN pip install --no-cache-dir frappe-bench
+
+USER frappe
+WORKDIR /home/frappe/frappe-bench
+
+# Keep the Python runtime inside the image. The source apps are bind-mounted by
+# docker-compose for live development, but the virtualenv must survive container
+# recreation so web, workers and Socket.IO always start together.
+COPY --chown=frappe:frappe apps ./apps
+RUN python -m venv env \
+    && env/bin/pip install --no-cache-dir --upgrade pip wheel \
+    && env/bin/pip install --no-cache-dir \
+        -e apps/frappe \
+        -e apps/erpnext \
+        -e apps/erpnext_custom \
+        -e apps/lpo_msg
+
+COPY --chown=frappe:frappe docker/Procfile.dev ./Procfile
+RUN mkdir -p config/pids logs sites
+
+# Expose HTTP (8000) and SocketIO (9000)
+EXPOSE 8000 9000 11000 12000
+
+CMD ["bench", "start"]

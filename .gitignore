@@ -1,0 +1,51 @@
+# ===================================================================
+# STRICT SECURITY GITIGNORE FILE FOR FRAPPE / ERPNEXT DEV WORKSPACE
+# Prevents leaking credentials, database dumps, logs, and site configs.
+# ===================================================================
+
+# --- Sensitive Credential & Key Files ---
+.env
+*.env
+*.env.local
+*.pem
+*.key
+*.cert
+*.crt
+
+# --- Frappe Bench Site Data & Configs ---
+sites/
+sites/assets/
+sites/common_site_config.json
+sites/*/site_config.json
+sites/*/private/
+sites/*/public/files/
+
+# --- Runtime Data & Logs ---
+logs/
+*.log
+
+# --- Database Dumps & Backups ---
+*.sql
+*.sql.gz
+*.tar
+*.tgz
+sites/*/private/backups/
+
+# --- Dependencies & Virtual Environments ---
+node_modules/
+env/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# --- System & IDE Specific Files ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
+tmp/
+output/
+scratch/
+*.swp

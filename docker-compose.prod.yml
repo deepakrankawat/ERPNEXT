@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  mariadb:
+    image: mariadb:10.6
+    container_name: frappe-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-SecretDbRootPassword123!}
+      MYSQL_LOG_CONSOLE: "true"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-SecretDbRootPassword123!}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: frappe-redis-cache
+    restart: always
+    volumes:
+      - redis_cache_data:/data
+
+  redis-queue:
+    image: redis:7-alpine
+    container_name: frappe-redis-queue
+    restart: always
+    volumes:
+      - redis_queue_data:/data
+
+  frappe-bench:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: frappe-bench
+    restart: always
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+    environment:
+      - BENCH_SITE_NAME=${SITE_NAME:-development.localhost}
+      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-SecretDbRootPassword123!}
+    volumes:
+      - ./sites:/home/frappe/frappe-bench/sites
+      - ./apps:/home/frappe/frappe-bench/apps
+      - ./logs:/home/frappe/frappe-bench/logs
+    command: >
+      bash -c "
+        bench start
+      "
+
+volumes:
+  db_data:
+  redis_cache_data:
+  redis_queue_data:

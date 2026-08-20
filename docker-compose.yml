@@ -1,0 +1,94 @@
+services:
+  mariadb:
+    image: mariadb:10.6
+    container_name: frappe-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-SecretDbRootPassword123!}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --innodb-file-per-table=1
+    volumes:
+      - db-data:/var/lib/mysql
+    ports:
+      # Database access is host-local only; never expose MariaDB to Wi-Fi.
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: frappe-redis-cache
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  redis-queue:
+    image: redis:7-alpine
+    container_name: frappe-redis-queue
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6380:6379"
+
+  bench:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: frappe-bench
+    restart: unless-stopped
+    ports:
+      # The public development port maps to Bench's web process. The internal
+      # realtime-auth web process continues to use port 8001 inside the container.
+      - "0.0.0.0:${HTTP_PORT:-8000}:8000"
+      - "0.0.0.0:9000:9000" # SocketIO for native realtime messaging
+    working_dir: /home/frappe/frappe-bench
+    command: ["bench", "start"]
+    environment:
+      - SITE_NAME=${SITE_NAME:-development.localhost}
+      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-SecretDbRootPassword123!}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-SecretAdminPassword123!}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-SecretEncryptionKeyChangeMe32Char!}
+      - HTTP_PORT=${HTTP_PORT:-8000}
+    extra_hosts:
+      - "development.localhost:127.0.0.1"
+    volumes:
+      - ./apps:/home/frappe/frappe-bench/apps
+      - ./sites:/home/frappe/frappe-bench/sites
+      - ./logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+
+  proxy:
+    build:
+      context: ./docker/nginx
+      dockerfile: Dockerfile
+    container_name: frappe-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - bench
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: frappe-tunnel
+    restart: unless-stopped
+    command: tunnel --url https://proxy:443 --no-tls-verify
+    depends_on:
+      - proxy
+
+volumes:
+  db-data:
+
+

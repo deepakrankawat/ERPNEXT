@@ -1,0 +1,19 @@
+# ===================================================================
+# DOCKER BUILD EXCLUSION FILE (.dockerignore)
+# Ensures credentials, local site data, and backups are never baked into images.
+# ===================================================================
+.git
+.github
+.vscode
+.env
+.env.*
+sites/
+logs/
+*.sql
+*.sql.gz
+node_modules
+**/node_modules
+apps/frappe/frappe/public/node_modules
+apps/erpnext/erpnext/public/node_modules
+env
+venv

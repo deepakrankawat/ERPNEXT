@@ -1,0 +1,31 @@
+{
+  "name": "Frappe v15 ERPNext Local Dev Container",
+  "dockerComposeFile": [
+    "../docker-compose.yml"
+  ],
+  "service": "bench",
+  "workspaceFolder": "/home/frappe/frappe-bench",
+  "remoteUser": "frappe",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/home/frappe/frappe-bench/env/bin/python",
+        "python.analysis.extraPaths": [
+          "/home/frappe/frappe-bench/apps/frappe",
+          "/home/frappe/frappe-bench/apps"
+        ]
+      }
+    }
+  },
+
+  "forwardPorts": [8001, 9000, 3306],
+  "postCreateCommand": "bench version"
+}
