@@ -16,20 +16,37 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis-cache:
     image: redis:7-alpine
     container_name: frappe-redis-cache
     restart: always
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_cache_data:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis-queue:
     image: redis:7-alpine
     container_name: frappe-redis-queue
     restart: always
+    command: redis-server --maxmemory 256mb --maxmemory-policy noeviction
     volumes:
       - redis_queue_data:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frappe-bench:
     build:
@@ -58,6 +75,11 @@ services:
       bash -c "
         bench start
       "
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   db_data:
