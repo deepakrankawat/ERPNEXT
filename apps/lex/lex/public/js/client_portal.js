@@ -1,6 +1,18 @@
 (() => {
 	"use strict";
 
+	const THEME_STORAGE_KEY = "lexocrates-portal-theme";
+	const enforceLightTheme = () => {
+		document.documentElement.setAttribute("data-theme", "light");
+		document.documentElement.style.colorScheme = "light";
+		try { localStorage.removeItem(THEME_STORAGE_KEY); } catch (_) { /* localStorage unavailable */ }
+	};
+
+	enforceLightTheme();
+	new MutationObserver(() => {
+		if (document.documentElement.getAttribute("data-theme") !== "light") enforceLightTheme();
+	}).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
 	const init = () => {
 		const root = document.getElementById("lex-client-portal");
 		if (!root) return;
@@ -116,54 +128,8 @@
 			menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
 			logout: '<path d="M9 21H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h4"/><path d="M15 16l5-4-5-4M20 12H9"/>',
 			search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.35-4.35"/>',
-			sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/>',
-			moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.7 6.7 0 0 0 10.5 10.5Z"/>',
 		};
 		return `<span class="lex-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${paths[name] || paths.file}</svg></span>`;
-	}
-
-	const THEME_STORAGE_KEY = "lexocrates-portal-theme";
-
-	function storedTheme() {
-		try { return localStorage.getItem(THEME_STORAGE_KEY); } catch (_) { return null; }
-	}
-
-	function systemPrefersDark() {
-		return Boolean(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-	}
-
-	function effectiveTheme() {
-		const saved = storedTheme();
-		return saved === "dark" || saved === "light" ? saved : (systemPrefersDark() ? "dark" : "light");
-	}
-
-	function applyTheme(theme) {
-		document.documentElement.setAttribute("data-theme", theme);
-	}
-
-	function setTheme(theme) {
-		try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch (_) { /* localStorage unavailable */ }
-		applyTheme(theme);
-		syncThemeToggle();
-	}
-
-	function syncThemeToggle() {
-		const button = document.querySelector("[data-theme-toggle]");
-		if (!button) return;
-		const current = effectiveTheme();
-		const next = current === "dark" ? "light" : "dark";
-		button.setAttribute("aria-pressed", String(current === "dark"));
-		const iconSlot = button.querySelector(".lex-icon");
-		const labelSlot = button.querySelector("[data-theme-toggle-label]");
-		if (iconSlot) iconSlot.outerHTML = icon(current === "dark" ? "sun" : "moon");
-		if (labelSlot) labelSlot.textContent = `Switch to ${next} mode`;
-	}
-
-	function bindThemeToggle(root) {
-		root.querySelector("[data-theme-toggle]")?.addEventListener("click", () => {
-			setTheme(effectiveTheme() === "dark" ? "light" : "dark");
-		});
-		syncThemeToggle();
 	}
 
 	function render(root, data) {
@@ -180,20 +146,20 @@
 							<li class="nav-item"><button class="btn-reset nav-link notifications-icon text-muted" type="button" data-go="messages" aria-label="Messages">${icon("message")}</button></li>
 							<li class="vertical-bar d-none d-sm-block"></li>
 							<li class="nav-item d-none d-md-block"><a class="nav-link" href="mailto:support@lexocrates.com">Help</a></li>
-							<li class="nav-item dropdown lex-user-dropdown"><button class="btn-reset nav-link" type="button" data-user-menu-toggle aria-label="User menu"><span class="lex-presence-avatar"><span class="avatar avatar-medium" title="${escapeHTML(data.profile.full_name)}">${escapeHTML(initials(data.profile.full_name))}</span>${presenceDot(data.profile.email)}</span></button><div class="dropdown-menu dropdown-menu-right" data-user-menu><div class="lex-user-menu-head"><strong>${escapeHTML(data.profile.full_name)}</strong><span>${escapeHTML(data.profile.portal_role)}</span><small id="lex-current-presence">Offline</small></div><div class="dropdown-divider"></div><div class="lex-presence-menu"><label for="lex-presence-select">Availability</label><select id="lex-presence-select" class="form-control input-xs"><option value="Online">Online</option><option value="Away">Away</option><option value="Busy">Busy</option><option value="Offline">Offline</option></select></div><div class="dropdown-divider"></div><button class="dropdown-item lex-theme-toggle" type="button" data-theme-toggle aria-pressed="false">${icon("moon")}<span data-theme-toggle-label>Switch to dark mode</span></button><div class="dropdown-divider"></div><button class="dropdown-item" type="button" data-go="organization">Organization</button><button id="lex-portal-logout" class="dropdown-item" type="button">Log out</button></div></li>
+							<li class="nav-item dropdown lex-user-dropdown"><button class="btn-reset nav-link" type="button" data-user-menu-toggle aria-label="User menu"><span class="lex-presence-avatar"><span class="avatar avatar-medium" title="${escapeHTML(data.profile.full_name)}">${escapeHTML(initials(data.profile.full_name))}</span>${presenceDot(data.profile.email)}</span></button><div class="dropdown-menu dropdown-menu-right" data-user-menu><div class="lex-user-menu-head"><strong>${escapeHTML(data.profile.full_name)}</strong><span>${escapeHTML(data.profile.portal_role)}</span><small id="lex-current-presence">Offline</small></div><div class="dropdown-divider"></div><div class="lex-presence-menu"><label for="lex-presence-select">Availability</label><select id="lex-presence-select" class="form-control input-xs"><option value="Online">Online</option><option value="Away">Away</option><option value="Busy">Busy</option><option value="Offline">Offline</option></select></div><div class="dropdown-divider"></div><button class="dropdown-item" type="button" data-go="organization">Organization</button><button id="lex-portal-logout" class="dropdown-item" type="button">Log out</button></div></li>
 						</ul>
 					</div>
 				</div>
 			</header>
 			<div class="lex-desk-body">
 				<div class="lex-sidebar-overlay" data-close-sidebar></div>
-				<aside class="lex-sidebar desk-sidebar standard-sidebar" aria-label="Client workspace navigation">
+				<aside id="lex-client-navigation" class="lex-sidebar desk-sidebar standard-sidebar" aria-label="Client workspace navigation">
 					<div class="lex-sidebar-title"><button class="btn-reset" type="button" data-close-sidebar aria-label="Close navigation">${icon("menu")}</button><div><strong>Client Workspace</strong><span>${escapeHTML(data.client.customer_name)}</span></div></div>
 					<nav class="lex-nav standard-sidebar-section"><div class="lex-nav-label standard-sidebar-label">Workspace</div>${data.navigation.map((item, index) => navItem(item, index, data)).join("")}</nav>
 					<div class="lex-sidebar-footer"><span>${escapeHTML(clientId)}</span><small>Secure client access</small></div>
 				</aside>
 				<div class="lex-workspace">
-					<header class="lex-topbar page-head"><div class="lex-topbar-inner page-head-content"><div class="lex-topbar-start"><button class="lex-mobile-menu btn btn-default btn-sm" type="button" data-open-sidebar aria-label="Open navigation">${icon("menu")}</button><div class="lex-page-heading"><h1 id="lex-page-title">Dashboard</h1><span>${escapeHTML(data.client.customer_name)}</span></div></div><div class="lex-topbar-end"><span class="indicator-pill blue no-indicator-dot">${escapeHTML(clientId)}</span></div></div></header>
+					<header class="lex-topbar page-head"><div class="lex-topbar-inner page-head-content"><div class="lex-topbar-start"><button class="lex-mobile-menu btn btn-default btn-sm" type="button" data-open-sidebar aria-label="Open navigation" aria-controls="lex-client-navigation" aria-expanded="false">${icon("menu")}</button><div class="lex-page-heading"><h1 id="lex-page-title">Dashboard</h1><span>${escapeHTML(data.client.customer_name)}</span></div></div><div class="lex-topbar-end"><span class="indicator-pill blue no-indicator-dot">${escapeHTML(clientId)}</span></div></div></header>
 					<div class="lex-content layout-main-section">
 					${data.profile.mfa_required && !data.profile.mfa_enabled ? '<div class="lex-alert">Multi-factor authentication is required for this account. Contact Lexocrates support before handling sensitive work.</div>' : ''}
 					${overviewSection(data)}${mattersSection(data)}${workIntakeSection(data)}${workRequestsSection(data)}${documentsSection(data)}${approvalsSection(data)}${reportsSection(data)}${messagesSection()}${billingSection(data)}${walletSection(data)}${usersSection(data)}${organizationSection(data)}
@@ -204,7 +170,6 @@
 		bindLogout(document.getElementById("lex-portal-logout"));
 		bindNavigation(root, data);
 		bindNavbar(root, data);
-		bindThemeToggle(root);
 		bindForms(root, data);
 		setupPresence(data.profile.email);
 	}
@@ -458,6 +423,12 @@
 
 	function bindNavigation(root, data) {
 		const app = document.getElementById("lex-app");
+		const menuButton = root.querySelector("[data-open-sidebar]");
+		const setSidebarOpen = (open) => {
+			app.classList.toggle("sidebar-open", open);
+			document.body.classList.toggle("lex-portal-sidebar-open", open);
+			menuButton?.setAttribute("aria-expanded", String(open));
+		};
 		const available = new Set(data.navigation.filter((item) => item.section).map((item) => item.section));
 		const titleBySection = Object.fromEntries(data.navigation.filter((item) => item.section).map((item) => [item.section, item.label]));
 		const activate = (requested) => {
@@ -467,25 +438,39 @@
 			const title = titleBySection[section] || "Dashboard";
 			document.getElementById("lex-page-title").textContent = title;
 			document.getElementById("lex-navbar-page-title").textContent = title;
-			app.classList.remove("sidebar-open");
+			setSidebarOpen(false);
 			if (section === "messages") loadChat();
 			window.scrollTo({ top: 0, behavior: "smooth" });
 		};
 		root.querySelectorAll("[data-section]").forEach((button) => button.addEventListener("click", () => { window.location.hash = button.dataset.section; activate(button.dataset.section); }));
 		root.querySelectorAll("[data-go]").forEach((button) => button.addEventListener("click", () => { window.location.hash = button.dataset.go; activate(button.dataset.go); }));
-		root.querySelector("[data-open-sidebar]")?.addEventListener("click", () => app.classList.add("sidebar-open"));
-		root.querySelector("[data-close-sidebar]")?.addEventListener("click", () => app.classList.remove("sidebar-open"));
+		menuButton?.addEventListener("click", () => setSidebarOpen(true));
+		root.querySelectorAll("[data-close-sidebar]").forEach((button) => button.addEventListener("click", () => setSidebarOpen(false)));
+		document.addEventListener("keydown", (event) => {
+			if (event.key === "Escape") setSidebarOpen(false);
+		});
+		window.addEventListener("resize", () => {
+			if (window.innerWidth >= 1080) setSidebarOpen(false);
+		}, { passive: true });
 		window.addEventListener("hashchange", () => activate(window.location.hash.slice(1)), { passive: true });
 		activate(window.location.hash.slice(1) || "overview");
 	}
 
 	function bindNavbar(root, data) {
 		const menu = root.querySelector('[data-user-menu]');
-		root.querySelector('[data-user-menu-toggle]')?.addEventListener('click', (event) => {
-			event.stopPropagation(); menu?.classList.toggle('show');
+		const menuToggle = root.querySelector('[data-user-menu-toggle]');
+		menuToggle?.setAttribute('aria-expanded', 'false');
+		menuToggle?.addEventListener('click', (event) => {
+			event.stopPropagation();
+			const open = !menu?.classList.contains('show');
+			menu?.classList.toggle('show', open);
+			menuToggle.setAttribute('aria-expanded', String(open));
 		});
 		document.addEventListener('click', (event) => {
-			if (!event.target.closest('.lex-user-dropdown')) menu?.classList.remove('show');
+			if (!event.target.closest('.lex-user-dropdown')) {
+				menu?.classList.remove('show');
+				menuToggle?.setAttribute('aria-expanded', 'false');
+			}
 		});
 		const search = document.getElementById('lex-workspace-search');
 		search?.addEventListener('submit', (event) => {

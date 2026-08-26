@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 import frappe
 from frappe.client import get as get_client_document
@@ -62,6 +63,22 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		):
 			self.assertTrue(frappe.db.exists("Role", role), role)
 			self.assertFalse(frappe.db.get_value("Role", role, "desk_access"), role)
+
+	def test_client_portal_is_light_only_and_has_mobile_breakpoints(self):
+		app_path = Path(frappe.get_app_path("lex"))
+		template = (app_path / "www" / "client-portal.html").read_text(encoding="utf-8")
+		script = (app_path / "public" / "js" / "client_portal.js").read_text(encoding="utf-8")
+		styles = (app_path / "public" / "css" / "client_portal.css").read_text(encoding="utf-8")
+
+		self.assertIn('setAttribute("data-theme", "light")', template)
+		self.assertIn('setAttribute("data-theme", "light")', script)
+		self.assertIn('localStorage.removeItem("lexocrates-portal-theme")', template)
+		self.assertNotIn("data-theme-toggle", script)
+		self.assertNotIn("prefers-color-scheme: dark", styles)
+		self.assertNotIn('data-theme="dark"', styles)
+		self.assertIn("@media (max-width: 640px)", styles)
+		self.assertIn("@media (max-width: 480px)", styles)
+		self.assertIn("100dvh", styles)
 
 	def test_compliance_approved_registration_creates_company_admin_and_wallet(self):
 		country = frappe.db.get_value("Country", {}, "name")

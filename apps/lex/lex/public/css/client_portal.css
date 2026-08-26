@@ -46,68 +46,6 @@
 	color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme="light"]) {
-		--lex-bg: #0a0f1a;
-		--lex-surface: #121a29;
-		--lex-surface-2: #182335;
-		--lex-surface-3: #202d43;
-		--lex-border: #263248;
-		--lex-border-strong: #37455f;
-		--lex-ink: #eaeef4;
-		--lex-ink-muted: #9db0c6;
-		--lex-ink-faint: #71839b;
-		--lex-on-primary: #0a0f1a;
-		--lex-primary: #7fa8d9;
-		--lex-primary-hover: #9cbfe6;
-		--lex-primary-soft: #1c2a3f;
-		--lex-accent: #2dd4bf;
-		--lex-accent-soft: #10312d;
-		--lex-green: #4ade80;
-		--lex-green-bg: #123321;
-		--lex-red: #f68f85;
-		--lex-red-bg: #3a1614;
-		--lex-orange: #fbbf53;
-		--lex-orange-bg: #38270a;
-		--lex-blue: #7ea6ff;
-		--lex-blue-bg: #142140;
-		--lex-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-		--lex-shadow-md: 0 6px 16px rgba(0, 0, 0, 0.4);
-		--lex-shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.55);
-		color-scheme: dark;
-	}
-}
-
-:root[data-theme="dark"] {
-	--lex-bg: #0a0f1a;
-	--lex-surface: #121a29;
-	--lex-surface-2: #182335;
-	--lex-surface-3: #202d43;
-	--lex-border: #263248;
-	--lex-border-strong: #37455f;
-	--lex-ink: #eaeef4;
-	--lex-ink-muted: #9db0c6;
-	--lex-ink-faint: #71839b;
-	--lex-on-primary: #0a0f1a;
-	--lex-primary: #7fa8d9;
-	--lex-primary-hover: #9cbfe6;
-	--lex-primary-soft: #1c2a3f;
-	--lex-accent: #2dd4bf;
-	--lex-accent-soft: #10312d;
-	--lex-green: #4ade80;
-	--lex-green-bg: #123321;
-	--lex-red: #f68f85;
-	--lex-red-bg: #3a1614;
-	--lex-orange: #fbbf53;
-	--lex-orange-bg: #38270a;
-	--lex-blue: #7ea6ff;
-	--lex-blue-bg: #142140;
-	--lex-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-	--lex-shadow-md: 0 6px 16px rgba(0, 0, 0, 0.4);
-	--lex-shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.55);
-	color-scheme: dark;
-}
-
 /* ---------- Reset & base ---------- */
 
 #lex-client-portal,
@@ -126,8 +64,10 @@ body.lex-client-workspace-page {
 #lex-client-portal {
 	display: block;
 	min-height: 100vh;
+	min-height: 100dvh;
 	background: var(--lex-bg);
 	color: var(--lex-ink);
+	color-scheme: light;
 	font-family: var(--lex-font);
 	font-size: 14.5px;
 	line-height: 1.5;
@@ -339,8 +279,6 @@ body.lex-client-workspace-page {
 }
 
 .lexocrates-logo-light { display: none; }
-html[data-theme="dark"] .lexocrates-logo-dark { display: none; }
-html[data-theme="dark"] .lexocrates-logo-light { display: inline-block; }
 
 .lex-breadcrumbs {
 	display: flex;
@@ -614,10 +552,6 @@ html[data-theme="dark"] .lexocrates-logo-light { display: inline-block; }
 	cursor: pointer;
 }
 
-.lex-theme-toggle .lex-icon {
-	color: var(--lex-ink-muted);
-}
-
 .dropdown-item:hover {
 	background: var(--lex-surface-2);
 }
@@ -784,6 +718,10 @@ html[data-theme="dark"] .lexocrates-logo-light { display: inline-block; }
 	pointer-events: auto;
 }
 
+body.lex-portal-sidebar-open {
+	overflow: hidden;
+}
+
 .lex-workspace {
 	flex: 1 1 auto;
 	min-width: 0;
@@ -948,12 +886,6 @@ html[data-theme="dark"] .lexocrates-logo-light { display: inline-block; }
 	display: grid;
 	gap: 20px;
 	box-shadow: var(--lex-shadow-md);
-}
-
-html[data-theme="dark"] .lex-welcome,
-:root[data-theme="dark"] .lex-welcome {
-	background: linear-gradient(135deg, #121a29, #1a273d);
-	border: 1px solid var(--lex-border);
 }
 
 .lex-eyebrow {
@@ -2323,10 +2255,47 @@ html[data-theme="dark"] .lex-welcome,
 
 /* ---------- Responsive: mobile page furniture ---------- */
 
+@media (max-width: 1079px) {
+	.lex-content {
+		max-width: none;
+	}
+
+	.standard-sidebar-item,
+	.lex-sidebar-title button,
+	.lex-mobile-menu {
+		min-height: 44px;
+	}
+}
+
 @media (max-width: 640px) {
+	:root {
+		--lex-navbar-height: 64px;
+	}
+
+	.lex-navbar .container {
+		gap: 8px;
+		padding: 0 12px;
+	}
+
+	.lex-navbar .lexocrates-brand-wordmark {
+		height: 48px;
+	}
+
+	.lex-navbar .lexocrates-brand-wordmark img {
+		max-width: 132px;
+	}
+
 	.lex-navbar .lex-breadcrumbs,
 	.navbar-nav .nav-item.d-none.d-sm-flex {
 		display: none;
+	}
+
+	.navbar-collapse {
+		gap: 2px;
+	}
+
+	.navbar-nav .nav-link {
+		padding: 4px 6px;
 	}
 
 	#lex-workspace-search {
@@ -2340,6 +2309,164 @@ html[data-theme="dark"] .lex-welcome,
 	.lex-topbar-inner {
 		padding: 10px 12px;
 	}
+
+	.lex-topbar-start {
+		flex: 1 1 auto;
+	}
+
+	.lex-page-heading {
+		max-width: 100%;
+	}
+
+	.lex-page-heading h1 {
+		font-size: 17px;
+	}
+
+	.lex-page-heading span {
+		font-size: 12px;
+	}
+
+	.lex-section {
+		gap: 14px;
+	}
+
+	.lex-section-header h2 {
+		font-size: 18px;
+	}
+
+	.lex-welcome,
+	.lex-card-head,
+	.lex-card-body,
+	.frappe-card,
+	.section-body {
+		padding: 14px;
+	}
+
+	.section-head {
+		padding: 14px 14px 4px;
+	}
+
+	.form-section-description {
+		padding: 0 14px;
+	}
+
+	.lex-form input:not([type="checkbox"]),
+	.lex-form select,
+	.lex-form textarea,
+	.form-control {
+		font-size: 16px;
+	}
+
+	.lex-button,
+	.lex-section-actions .lex-button {
+		min-height: 42px;
+	}
+
+	.lex-table-wrap {
+		margin-inline: -1px;
+		overscroll-behavior-inline: contain;
+	}
+
+	.lex-chat {
+		height: max(500px, calc(100dvh - 200px));
+	}
+
+	.lex-chat-sidebar {
+		max-height: 170px;
+	}
+
+	.lex-chat-header {
+		padding: 12px 14px;
+	}
+
+	.lex-chat-messages {
+		padding: 14px 12px;
+		gap: 12px;
+		overscroll-behavior-y: contain;
+	}
+
+	.lex-message {
+		max-width: 90%;
+	}
+
+	.lex-message-content {
+		padding: 9px 11px;
+	}
+
+	.lex-chat-compose {
+		gap: 8px;
+		padding: 10px;
+	}
+
+	.lex-chat-compose input[name="message"] {
+		order: 1;
+		flex-basis: calc(100% - 62px);
+		font-size: 16px;
+	}
+
+	.lex-chat-job-picker {
+		order: 3;
+		flex: 1 1 auto;
+		max-width: none;
+		font-size: 16px;
+	}
+
+	.lex-chat-compose button {
+		order: 2;
+		padding: 0 16px;
+	}
+}
+
+@media (max-width: 480px) {
+	.lex-topbar-end {
+		display: none;
+	}
+
+	.lex-metrics,
+	.lex-quote-summary,
+	.lex-confirm-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.lex-section-actions,
+	.lex-button-row {
+		width: 100%;
+	}
+
+	.lex-section-actions .lex-button,
+	.lex-button-row .lex-button {
+		flex: 1 1 100%;
+		width: 100%;
+	}
+
+	.dropdown-menu {
+		position: fixed;
+		top: calc(var(--lex-navbar-height) - 4px);
+		right: 10px;
+		left: 10px;
+		min-width: 0;
+		width: auto;
+	}
+
+	.lex-commercial-note .lex-button {
+		margin-left: 0;
+		width: 100%;
+	}
+}
+
+@media (max-width: 360px) {
+	.lex-navbar .lexocrates-brand-wordmark img {
+		max-width: 108px;
+	}
+
+	.notifications-icon {
+		width: 32px;
+	}
+
+	.avatar-medium {
+		width: 32px;
+		height: 32px;
+	}
 }
 
 .d-none { display: none; }
@@ -2352,118 +2479,3 @@ html[data-theme="dark"] .lex-welcome,
 @media (min-width: 768px) {
 	.d-md-block { display: block !important; }
 }
-
-/* ---------- Comprehensive Dark Mode UI & Contrast Fixes ---------- */
-html[data-theme="dark"],
-:root[data-theme="dark"] {
-	/* Form Inputs & Selects */
-	select option,
-	.form-control option,
-	.lex-form select option {
-		background-color: #121a29 !important;
-		color: #eaeef4 !important;
-	}
-
-	.form-control,
-	.lex-form input,
-	.lex-form select,
-	.lex-form textarea,
-	.search-bar input,
-	.lex-chat-compose input,
-	.lex-chat-job-picker {
-		background-color: #182335 !important;
-		color: #eaeef4 !important;
-		border-color: #263248 !important;
-	}
-
-	/* Primary Buttons in Dark Mode: High Contrast Navy Text on Light Blue */
-	.btn-primary,
-	.lex-button:not(.secondary):not(.danger),
-	.btn-register,
-	#btn-login-submit {
-		background-color: #7fa8d9 !important;
-		color: #0a0f1a !important;
-		border-color: #7fa8d9 !important;
-		font-weight: 700 !important;
-	}
-
-	.btn-primary:hover,
-	.lex-button:not(.secondary):not(.danger):hover {
-		background-color: #9cbfe6 !important;
-		border-color: #9cbfe6 !important;
-	}
-
-	/* Secondary & Reset Buttons */
-	.lex-button.secondary,
-	.btn-default,
-	.btn-reset {
-		background-color: #121a29 !important;
-		color: #eaeef4 !important;
-		border-color: #263248 !important;
-	}
-
-	.lex-button.secondary:hover,
-	.btn-default:hover {
-		background-color: #182335 !important;
-		color: #ffffff !important;
-	}
-
-	/* Status Review Boxes & Alerts */
-	.lex-review-state {
-		background-color: #38270a !important;
-		color: #fbbf53 !important;
-		border: 1px solid #784707 !important;
-	}
-	.lex-review-state p,
-	.lex-review-state small {
-		color: #fde68a !important;
-	}
-
-	.lex-funded-state {
-		background-color: #123321 !important;
-		color: #4ade80 !important;
-		border: 1px solid #166534 !important;
-	}
-
-	/* Scope Boxes & Code Snippets */
-	.lex-scope-box,
-	.lex-sla-document,
-	.lex-modal-hint {
-		background-color: #182335 !important;
-		border-color: #263248 !important;
-		color: #9db0c6 !important;
-	}
-
-	.lex-scope-box p,
-	.lex-scope-box strong {
-		color: #eaeef4 !important;
-	}
-
-	/* Table Hover & Borders */
-	.lex-table th {
-		color: #71839b !important;
-		border-bottom-color: #263248 !important;
-	}
-	.lex-table td {
-		border-bottom-color: #263248 !important;
-		color: #eaeef4 !important;
-	}
-	.lex-table tbody tr:hover {
-		background-color: #182335 !important;
-	}
-
-	/* Chat UI Dark Mode */
-	.lex-chat-messages {
-		background-color: #0a0f1a !important;
-	}
-	.lex-message-content {
-		background-color: #121a29 !important;
-		border-color: #263248 !important;
-		color: #eaeef4 !important;
-	}
-	.lex-message.own .lex-message-content {
-		background-color: #1c2a3f !important;
-		border-color: #37455f !important;
-	}
-}
-

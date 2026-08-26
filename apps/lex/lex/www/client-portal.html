@@ -5,10 +5,12 @@
 	{{ super() }}
 	<script>
 	(function () {
-		// Applied before first paint so switching themes never flashes the wrong one.
+		// The Client Workspace is intentionally light-only. Apply the theme before
+		// first paint and discard the retired portal-specific theme preference.
+		document.documentElement.setAttribute("data-theme", "light");
+		document.documentElement.style.colorScheme = "light";
 		try {
-			var saved = localStorage.getItem("lexocrates-portal-theme");
-			if (saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
+			localStorage.removeItem("lexocrates-portal-theme");
 		} catch (e) { /* localStorage unavailable */ }
 	})();
 	</script>
@@ -18,7 +20,7 @@
 {% block breadcrumbs %}{% endblock %}
 
 {% block page_container %}
-<link rel="stylesheet" href="/assets/lex/css/client_portal.css?v=20260818-1">
+<link rel="stylesheet" href="/assets/lex/css/client_portal.css?v=20260826-1">
 <main
 	id="lex-client-portal"
 	class="lex-portal-shell"
@@ -42,5 +44,5 @@
 	</div>
 	{% endif %}
 </main>
-<script src="/assets/lex/js/client_portal.js?v=20260818-1"></script>
+<script src="/assets/lex/js/client_portal.js?v=20260826-1"></script>
 {% endblock %}
