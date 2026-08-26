@@ -32,6 +32,7 @@ class LPOMatter(Document):
 		self._validate_dates()
 		self._validate_billing()
 		self._validate_activation_gates()
+		self._set_default_execution_snapshots()
 		self._protect_execution_snapshots()
 		self._validate_authorized_portal_users()
 		self._validate_closure()
@@ -147,8 +148,24 @@ class LPOMatter(Document):
 		if not previous or previous.status == "Draft":
 			return
 		for fieldname in ("workflow_version_snapshot", "sop_version_snapshot"):
-			if previous.get(fieldname) and self.get(fieldname) != previous.get(fieldname):
-				frappe.throw(_("Execution policy snapshots cannot change after Matter activation."), frappe.PermissionError)
+			previous_value = str(previous.get(fieldname) or "")
+			current_value = str(self.get(fieldname) or "")
+			if previous_value and current_value != previous_value:
+				frappe.throw(
+					_("Execution policy snapshot {0} cannot change after Matter activation.").format(
+						frappe.bold(fieldname)
+					),
+					frappe.PermissionError,
+				)
+
+	def _set_default_execution_snapshots(self):
+		if self.status != "Active" or (self.workflow_version_snapshot and self.sop_version_snapshot):
+			return
+		from lex.execution_policies import get_execution_policy_snapshots
+
+		workflow_version, sop_version = get_execution_policy_snapshots()
+		self.workflow_version_snapshot = self.workflow_version_snapshot or workflow_version
+		self.sop_version_snapshot = self.sop_version_snapshot or sop_version
 
 	def _validate_authorized_portal_users(self):
 		seen = set()

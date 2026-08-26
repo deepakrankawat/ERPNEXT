@@ -115,7 +115,9 @@ class RealTimeClient {
 
 	get_host(port = 9000) {
 		let host = window.location.origin;
-		if (window.dev_server) {
+		const is_localhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+		const has_custom_port = window.location.port && window.location.port !== "80" && window.location.port !== "443";
+		if (window.dev_server && (is_localhost || has_custom_port)) {
 			let parts = host.split(":");
 			port = frappe.boot.socketio_port || port.toString() || "9000";
 			if (parts.length > 2) {

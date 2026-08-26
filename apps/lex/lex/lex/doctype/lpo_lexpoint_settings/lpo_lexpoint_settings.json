@@ -1,0 +1,40 @@
+{
+ "actions": [],
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "formula_section", "formula_version", "minimum_charge", "rounding_increment", "contingency_buffer", "formula_column", "words_per_page", "apply_reviewer_multiplier", "require_human_approval",
+  "confidence_section", "auto_quote_confidence", "classification_confidence", "jurisdiction_confidence", "variance_alert_percent"
+ ],
+ "fields": [
+  {"fieldname": "formula_section", "fieldtype": "Section Break", "label": "LexPoint Formula Settings"},
+  {"default": "LEXPOINTS-1.0", "fieldname": "formula_version", "fieldtype": "Data", "label": "Formula Version", "reqd": 1},
+  {"default": "10", "fieldname": "minimum_charge", "fieldtype": "Int", "label": "Minimum Charge per Task", "reqd": 1},
+  {"default": "1", "fieldname": "rounding_increment", "fieldtype": "Int", "label": "Rounding Increment", "reqd": 1},
+  {"default": "1.05", "fieldname": "contingency_buffer", "fieldtype": "Float", "label": "Contingency Buffer", "precision": "4", "reqd": 1},
+  {"fieldname": "formula_column", "fieldtype": "Column Break"},
+  {"default": "500", "fieldname": "words_per_page", "fieldtype": "Int", "label": "Fallback Words per Page", "reqd": 1},
+  {"default": "0", "description": "Reviewer multiplier is neutral until management approves calibrated rates.", "fieldname": "apply_reviewer_multiplier", "fieldtype": "Check", "label": "Apply Reviewer Multiplier"},
+  {"default": "1", "fieldname": "require_human_approval", "fieldtype": "Check", "label": "Require Human Pricing Approval", "read_only": 1},
+  {"fieldname": "confidence_section", "fieldtype": "Section Break", "label": "Confidence and Calibration Controls"},
+  {"default": "72", "fieldname": "auto_quote_confidence", "fieldtype": "Percent", "label": "Auto-Quote Confidence Threshold", "reqd": 1},
+  {"default": "80", "fieldname": "classification_confidence", "fieldtype": "Percent", "label": "Document Classification Threshold", "reqd": 1},
+  {"default": "75", "fieldname": "jurisdiction_confidence", "fieldtype": "Percent", "label": "Jurisdiction Detection Threshold", "reqd": 1},
+  {"default": "10", "fieldname": "variance_alert_percent", "fieldtype": "Percent", "label": "Approved-vs-Actual Variance Alert", "reqd": 1}
+ ],
+ "issingle": 1,
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO LexPoint Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "read": 1, "role": "System Manager", "write": 1},
+  {"create": 1, "read": 1, "role": "LPO_Admin", "write": 1},
+  {"create": 1, "read": 1, "role": "LPO_Manager", "write": 1},
+  {"read": 1, "role": "CEO"}
+ ],
+ "states": [],
+ "track_changes": 1
+}

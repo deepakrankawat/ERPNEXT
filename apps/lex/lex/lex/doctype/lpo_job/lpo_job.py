@@ -26,6 +26,18 @@ ASSIGNMENT_REQUIRED_STATUSES = {
 	"Delivered",
 	"Completed",
 }
+ALLOWED_STATUS_TRANSITIONS = {
+	"Draft": {"Activated", "Cancelled"},
+	"Activated": {"Assigned", "Cancelled"},
+	"Assigned": {"In Progress", "On Hold", "Cancelled"},
+	"In Progress": {"On Hold", "QA Review", "Cancelled"},
+	"On Hold": {"In Progress", "Cancelled"},
+	"QA Review": {"In Progress", "Ready for Delivery", "Cancelled"},
+	"Ready for Delivery": {"In Progress", "Delivered", "Completed", "Cancelled"},
+	"Delivered": {"Completed"},
+	"Completed": set(),
+	"Cancelled": set(),
+}
 LOCKED_FOR_ANALYSTS = {
 	"engagement",
 	"customer",
@@ -42,6 +54,7 @@ class LPOJob(Document):
 	def validate(self):
 		self._load_engagement_context()
 		self._protect_client_submission()
+		self._validate_status_transition()
 		self._validate_matter_activation()
 		self._validate_execution_snapshots()
 		self._capture_document_lineage()
@@ -51,6 +64,22 @@ class LPOJob(Document):
 		self._set_completed_on()
 		self._set_client_approval_state()
 		self._set_delivery_receipt_state()
+		self._validate_quality_and_client_gates()
+
+	def _validate_status_transition(self):
+		if self.is_new() or getattr(frappe.flags, "lex_job_transition_override", False):
+			return
+		previous = self.get_doc_before_save()
+		if not previous or previous.job_status == self.job_status:
+			return
+		allowed = ALLOWED_STATUS_TRANSITIONS.get(previous.job_status, set())
+		if self.job_status not in allowed:
+			frappe.throw(
+				_("Job status cannot move directly from {0} to {1}.").format(
+					frappe.bold(previous.job_status), frappe.bold(self.job_status)
+				),
+				frappe.ValidationError,
+			)
 
 	def _load_engagement_context(self):
 		if not self.engagement:
@@ -130,7 +159,8 @@ class LPOJob(Document):
 		previous = self.get_doc_before_save()
 		if previous and previous.job_status not in {"Draft", "Activated"}:
 			for fieldname in ("workflow_version_snapshot", "sop_version_snapshot"):
-				if previous.get(fieldname) != self.get(fieldname):
+				previous_value = str(previous.get(fieldname) or "")
+				if previous_value and previous_value != str(self.get(fieldname) or ""):
 					frappe.throw(_("Job execution policy snapshots are immutable after assignment."), frappe.PermissionError)
 
 	def _capture_document_lineage(self):
@@ -239,9 +269,38 @@ class LPOJob(Document):
 		if self.job_status in {"Delivered", "Completed"} and self.delivery_receipt_status in {None, "", "Not Delivered"}:
 			self.delivery_receipt_status = "Awaiting Acknowledgement"
 
+	def _validate_quality_and_client_gates(self):
+		if self.job_status in {"Ready for Delivery", "Delivered", "Completed"} and self.qa_required:
+			approved_review = frappe.db.exists(
+				"LPO QA Review",
+				{"job": self.name, "review_status": "Approved"},
+			)
+			if not approved_review:
+				frappe.throw(
+					_("An approved QA Review is required before client delivery."),
+					frappe.ValidationError,
+				)
+		if self.job_status in {"Delivered", "Completed"} and self.client_approval_status != "Approved":
+			frappe.throw(
+				_("Client approval is required before the Job can be delivered or completed."),
+				frappe.ValidationError,
+			)
+
 
 def _file_checksum_and_security_status(file_url: str, label: str, *, require_clean: bool) -> str:
-	file_name = frappe.db.get_value("File", {"file_url": file_url}, "name")
+	# A URL may have historical File rows after regeneration. Always validate the
+	# newest clean managed attachment instead of relying on an unordered get_value call.
+	filters = {"file_url": file_url}
+	if require_clean and frappe.get_meta("File").has_field("custom_lex_scan_status"):
+		filters["custom_lex_scan_status"] = "Clean"
+	files = frappe.get_all(
+		"File",
+		filters=filters,
+		pluck="name",
+		order_by="creation desc",
+		limit=1,
+	)
+	file_name = files[0] if files else None
 	if not file_name:
 		frappe.throw(_("{0} must reference a managed File record.").format(label), frappe.ValidationError)
 	file_doc = frappe.get_doc("File", file_name)
@@ -254,7 +313,11 @@ def _file_checksum_and_security_status(file_url: str, label: str, *, require_cle
 	content = file_doc.get_content()
 	if isinstance(content, str):
 		content = content.encode("utf-8")
-	return hashlib.sha256(content).hexdigest()
+	checksum = hashlib.sha256(content).hexdigest()
+	stored_checksum = file_doc.get("custom_lex_checksum") if file_doc.meta.has_field("custom_lex_checksum") else None
+	if require_clean and stored_checksum and checksum != stored_checksum:
+		frappe.throw(_("{0} changed after its security scan.").format(label), frappe.ValidationError)
+	return checksum
 
 
 def _has_management_access(user: str) -> bool:

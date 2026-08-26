@@ -22,10 +22,11 @@ def get_openapi_specification() -> dict:
 					"responses": {"200": {"description": "Dashboard metadata and metrics"}},
 				}
 			},
-			"/api/method/lex.ai_gateway.invoke_ai_gateway": {
+			"/api/method/lex.work_intake.request_cost_estimate": {
 				"post": {
-					"summary": "Execute governed LLM inference request",
-					"responses": {"200": {"description": "Governed AI execution output"}},
+					"summary": "Request a governed Work Intake cost estimate",
+					"description": "Client-safe endpoint. It does not expose legal AI chat, prompts, models, reasoning, or raw AI output.",
+					"responses": {"200": {"description": "Sanitized quote and workflow status"}},
 				}
 			},
 			"/api/method/lex.wallet_statement.generate_wallet_statement_data": {

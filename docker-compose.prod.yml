@@ -1,87 +1,127 @@
-version: "3.8"
+x-frappe-common: &frappe-common
+  build:
+    context: .
+    dockerfile: Dockerfile.prod
+  restart: unless-stopped
+  environment:
+    BENCH_SITE_NAME: ${SITE_NAME:?Set SITE_NAME in .env}
+  volumes:
+    - ./sites:/home/frappe/frappe-bench/sites
+    - ./logs:/home/frappe/frappe-bench/logs
+    - clamav_data:/var/lib/clamav:ro
+  depends_on:
+    mariadb:
+      condition: service_healthy
+    redis-cache:
+      condition: service_started
+    redis-queue:
+      condition: service_started
+    clamav-updater:
+      condition: service_started
 
 services:
   mariadb:
     image: mariadb:10.6
-    container_name: frappe-db
-    restart: always
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-SecretDbRootPassword123!}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
       MYSQL_LOG_CONSOLE: "true"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --innodb-file-per-table=1
     volumes:
       - db_data:/var/lib/mysql
-      - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-SecretDbRootPassword123!}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
       timeout: 5s
-      retries: 5
-    logging:
-      driver: "json-file"
+      retries: 12
+    logging: &logging
+      driver: json-file
       options:
-        max-size: "10m"
+        max-size: 10m
         max-file: "3"
 
   redis-cache:
     image: redis:7-alpine
-    container_name: frappe-redis-cache
-    restart: always
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis_cache_data:/data
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
 
   redis-queue:
     image: redis:7-alpine
-    container_name: frappe-redis-queue
-    restart: always
-    command: redis-server --maxmemory 256mb --maxmemory-policy noeviction
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
     volumes:
       - redis_queue_data:/data
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
 
-  frappe-bench:
+  clamav-updater:
     build:
       context: .
-      dockerfile: Dockerfile.dev
-    container_name: frappe-bench
-    restart: always
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      redis-cache:
-        condition: service_started
-      redis-queue:
-        condition: service_started
-    ports:
-      - "8000:8000"
-      - "9000:9000"
-    environment:
-      - BENCH_SITE_NAME=${SITE_NAME:-development.localhost}
-      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-SecretDbRootPassword123!}
+      dockerfile: Dockerfile.prod
+    user: root
+    restart: unless-stopped
+    command: ["bash", "-lc", "freshclam || true; exec freshclam --daemon --foreground --checks=12 --stdout"]
     volumes:
-      - ./sites:/home/frappe/frappe-bench/sites
-      - ./apps:/home/frappe/frappe-bench/apps
-      - ./logs:/home/frappe/frappe-bench/logs
-    command: >
-      bash -c "
-        bench start
-      "
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - clamav_data:/var/lib/clamav
+    logging: *logging
+
+  frappe-web:
+    <<: *frappe-common
+    command:
+      - gunicorn
+      - --chdir
+      - sites
+      - --bind
+      - 0.0.0.0:8000
+      - --workers
+      - ${GUNICORN_WORKERS:-4}
+      - --threads
+      - ${GUNICORN_THREADS:-4}
+      - --worker-class
+      - gthread
+      - --timeout
+      - "180"
+      - frappe.app:application
+    ports:
+      - 127.0.0.1:${HTTP_PORT:-8000}:8000
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/method/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    logging: *logging
+
+  socketio:
+    <<: *frappe-common
+    command: ["bench", "socketio"]
+    ports:
+      - 127.0.0.1:${SOCKETIO_PORT:-9000}:9000
+    logging: *logging
+
+  scheduler:
+    <<: *frappe-common
+    command: ["bench", "schedule"]
+    logging: *logging
+
+  worker-short:
+    <<: *frappe-common
+    command: ["bench", "worker", "--queue", "short,default"]
+    logging: *logging
+
+  worker-long:
+    <<: *frappe-common
+    command: ["bench", "worker", "--queue", "long"]
+    logging: *logging
 
 volumes:
+  clamav_data:
   db_data:
   redis_cache_data:
   redis_queue_data:

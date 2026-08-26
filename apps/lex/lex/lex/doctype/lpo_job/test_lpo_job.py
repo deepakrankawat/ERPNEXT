@@ -39,6 +39,13 @@ class TestLPOJob(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			self.engagement.save()
 
+	def test_job_rejects_skipped_status_transitions(self):
+		job = _make_job(self.engagement.name)
+		job.job_status = "Completed"
+
+		with self.assertRaises(frappe.ValidationError):
+			job.save()
+
 
 def _make_job(engagement, insert=True, **values):
 	doc = frappe.get_doc(

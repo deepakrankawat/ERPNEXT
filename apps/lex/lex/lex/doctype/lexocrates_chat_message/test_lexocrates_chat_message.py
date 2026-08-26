@@ -89,6 +89,9 @@ class TestLexocratesChatMessage(FrappeTestCase):
 
 		self.assertEqual(reply["thread_reference"], root["name"])
 		self.assertEqual([row["name"] for row in history], [root["name"], reply["name"]])
+		self.assertEqual(root["sender_full_name"], "Administrator")
+		self.assertEqual(root["sender_role"], "Administrator")
+		self.assertIn("sender_roles", root)
 
 	def test_realtime_event_is_channel_scoped_and_after_commit(self):
 		with patch("frappe.publish_realtime") as publish:
@@ -159,6 +162,18 @@ class TestLexocratesChatMessage(FrappeTestCase):
 		self.assertTrue(any(call.args[0] == "chat_read_receipt" for call in publish.call_args_list))
 		preference = set_channel_preferences(self.channel.name, "Mentions Only")
 		self.assertEqual(preference["notification_level"], "Mentions Only")
+		muted = set_channel_preferences(self.channel.name, "Muted")
+		self.assertEqual(muted["notification_level"], "Muted")
+		self.assertTrue(muted["muted"])
+		self.assertEqual(
+			frappe.db.get_value(
+				"Lexocrates Chat User State",
+				{"channel": self.channel.name, "user": "Administrator"},
+				["notification_level", "muted"],
+				as_dict=True,
+			),
+			{"notification_level": "Muted", "muted": 1},
+		)
 
 	def test_pins_and_thread_details(self):
 		root = send_message(self.channel.name, "Pinned root")

@@ -8,13 +8,14 @@ from typing import Iterable
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import now_datetime, strip_html
+from frappe.utils import cint, now_datetime, strip_html
 
 from lex.client_access import get_portal_user
 
 
 CLIENT_ROLE = "Lexocrates Client"
 INTERNAL_CHAT_ROLES = {
+	"CEO",
 	"LPO_Admin",
 	"LPO_Manager",
 	"LPO_Analyst",
@@ -50,6 +51,50 @@ CONTEXT_DOCTYPES = {
 	"LPO AI Job Request",
 }
 CHANNEL_NAME_PATTERN = re.compile(r"^#[a-z0-9][a-z0-9._-]{1,79}$")
+CHAT_ROLE_PRIORITY = (
+	"CEO",
+	"Lexocrates Director",
+	"LPO_Admin",
+	"LPO_Manager",
+	"Lexocrates Operations Manager",
+	"Senior Legal Associate",
+	"Junior Legal Associate",
+	"Lexocrates QA Manager",
+	"Lexocrates Compliance Officer",
+	"Lexocrates AI Manager",
+	"Lexocrates Finance",
+	"Lexocrates Sales & Marketing",
+	"Lexocrates HR",
+	"LPO_Analyst",
+	"System Manager",
+	"Sales Manager",
+	"Accounts Manager",
+	"HR Manager",
+	"Projects Manager",
+	"Support Manager",
+	"Quality Manager",
+	"Sales User",
+	"Accounts User",
+	"Employee",
+	"Lexocrates Client Administrator",
+	"Lexocrates Partner General Counsel",
+	"Lexocrates Operations User",
+	"Lexocrates Legal User",
+	"Lexocrates Compliance User",
+	"Lexocrates Finance User",
+	"Lexocrates Procurement User",
+	"Lexocrates Read Only User",
+	"Lexocrates Client",
+)
+GENERIC_ROLES = {
+	"All",
+	"Desk User",
+	"Guest",
+	"Website Manager",
+	"Report Manager",
+	"Translator",
+	"Prepared Report User",
+}
 
 
 class LexocratesChatChannel(Document):
@@ -80,6 +125,7 @@ class LexocratesChatChannel(Document):
 				_("Direct messages are available only between enabled System Users."),
 				frappe.PermissionError,
 			)
+		self.system_user_only = 1
 		self.direct_message_key = hashlib.sha256("|".join(users).encode()).hexdigest()
 
 	def _validate_reference(self):
@@ -162,8 +208,17 @@ class LexocratesChatChannel(Document):
 					),
 					frappe.ValidationError,
 				)
-			if member.user != "Administrator" and not APP_ROLES.intersection(
-				frappe.get_roles(member.user)
+			if self.get("system_user_only") and not is_enabled_system_user(member.user):
+				frappe.throw(
+					_("Internal team channels can contain enabled System Users only: {0}.").format(
+						frappe.bold(member.user)
+					),
+					frappe.PermissionError,
+				)
+			if (
+				member.user != "Administrator"
+				and not is_enabled_system_user(member.user)
+				and not APP_ROLES.intersection(frappe.get_roles(member.user))
 			):
 				frappe.throw(
 					_("Channel member {0} must have an approved Lexocrates role.").format(
@@ -235,7 +290,7 @@ def is_management_user(user: str | None = None) -> bool:
 
 def is_chat_user(user: str | None = None) -> bool:
 	user = user or frappe.session.user
-	return user == "Administrator" or bool(_roles(user).intersection(APP_ROLES))
+	return bool(is_enabled_system_user(user) or _roles(user).intersection(APP_ROLES))
 
 
 def is_enabled_system_user(user: str | None = None) -> bool:
@@ -255,6 +310,43 @@ def is_client_only_user(user: str | None = None) -> bool:
 	user = user or frappe.session.user
 	roles = _roles(user)
 	return CLIENT_ROLE in roles and not roles.intersection(INTERNAL_CHAT_ROLES)
+
+
+@frappe.request_cache
+def get_user_chat_identity(user: str) -> dict:
+	"""Return the canonical name and business-role label used throughout chat."""
+	account = frappe.db.get_value(
+		"User", user, ["name", "full_name", "user_image", "user_type"], as_dict=True
+	)
+	if not account:
+		return frappe._dict({
+			"name": user,
+			"full_name": user,
+			"user_image": None,
+			"user_type": None,
+			"primary_role": _("Unknown user"),
+			"roles": [],
+		})
+
+	roles = [role for role in frappe.get_roles(user) if role not in GENERIC_ROLES]
+	if user == "Administrator":
+		primary_role = _("Administrator")
+		ordered_roles = [primary_role]
+	else:
+		primary_role = next((role for role in CHAT_ROLE_PRIORITY if role in roles), None)
+		if not primary_role:
+			primary_role = sorted(roles)[0] if roles else account.user_type or _("User")
+		ordered_roles = [role for role in CHAT_ROLE_PRIORITY if role in roles]
+		if not ordered_roles:
+			ordered_roles = [primary_role]
+	return frappe._dict({
+		"name": account.name,
+		"full_name": account.full_name or account.name,
+		"user_image": account.user_image,
+		"user_type": account.user_type,
+		"primary_role": primary_role,
+		"roles": ordered_roles,
+	})
 
 
 def _member_row(doc, user: str):
@@ -478,6 +570,7 @@ def create_channel(
 	reference_doctype: str | None = None,
 	reference_name: str | None = None,
 	members=None,
+	system_user_only: int = 0,
 ) -> dict:
 	if not is_management_user():
 		frappe.throw(_("Only LPO managers can create channels."), frappe.PermissionError)
@@ -504,6 +597,7 @@ def create_channel(
 			"description": description,
 			"reference_doctype": reference_doctype,
 			"reference_name": reference_name,
+			"system_user_only": cint(system_user_only),
 			"members": member_rows,
 		}
 	).insert()
@@ -691,13 +785,15 @@ def serialize_channel(doc) -> dict:
 	display_name = doc.channel_name
 	direct_user = None
 	direct_user_image = None
+	direct_user_role = None
 	if doc.get("is_direct_message"):
 		other = next((member.user for member in doc.members if member.user != frappe.session.user), None)
 		if other:
 			direct_user = other
-			user_details = frappe.db.get_value("User", other, ["full_name", "user_image"], as_dict=True)
-			display_name = user_details.full_name if user_details and user_details.full_name else other
-			direct_user_image = user_details.user_image if user_details else None
+			identity = get_user_chat_identity(other)
+			display_name = identity["full_name"]
+			direct_user_image = identity["user_image"]
+			direct_user_role = identity["primary_role"]
 	channel = {
 		"name": doc.name,
 		"channel_name": doc.channel_name,
@@ -708,9 +804,11 @@ def serialize_channel(doc) -> dict:
 		"reference_name": doc.reference_name,
 		"last_message_at": str(doc.last_message_at) if doc.last_message_at else None,
 		"is_direct_message": bool(doc.get("is_direct_message")),
+		"system_user_only": bool(doc.get("system_user_only") or doc.get("is_direct_message")),
 		"display_name": display_name,
 		"direct_user": direct_user,
 		"direct_user_image": direct_user_image,
+		"direct_user_role": direct_user_role,
 		"member_count": len(doc.members),
 		"can_post": can_post_to_channel(doc),
 		"can_manage": can_manage_channel(doc),
@@ -720,6 +818,34 @@ def serialize_channel(doc) -> dict:
 	}
 	channel.update(_get_matter_context(doc.reference_doctype, doc.reference_name))
 	return channel
+
+
+@frappe.whitelist()
+def get_channel_members(channel: str) -> list[dict]:
+	"""Return role-labelled members only to users who can view the channel."""
+	doc = frappe.get_doc("Lexocrates Chat Channel", channel)
+	if not can_view_channel(doc):
+		frappe.throw(_("You cannot view this channel."), frappe.PermissionError)
+	rows = []
+	for member in doc.members:
+		identity = get_user_chat_identity(member.user)
+		rows.append(
+			{
+				**identity,
+				"channel_role": member.channel_role,
+				"can_post_messages": bool(member.can_post_messages),
+				"can_invite_members": bool(member.can_invite_members),
+			}
+		)
+	return sorted(
+		rows,
+		key=lambda row: (
+			{"Owner": 0, "Moderator": 1, "Member": 2, "Read Only": 3}.get(
+				row["channel_role"], 9
+			),
+			(row["full_name"] or row["name"]).casefold(),
+		),
+	)
 
 
 @frappe.request_cache
@@ -787,6 +913,7 @@ def get_or_create_direct_channel(other_user: str) -> dict:
 			"channel_type": "Private",
 			"status": "Active",
 			"is_direct_message": 1,
+			"system_user_only": 1,
 			"direct_message_key": direct_key,
 			"description": _("Private direct conversation."),
 			"members": [

@@ -3,21 +3,29 @@
  "creation": "2026-08-14 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
+ "issingle": 1,
  "field_order": [
   "gateway_section", "enabled", "test_mode", "key_id", "key_secret", "webhook_secret", "api_timeout_seconds",
+  "readiness_section", "readiness_html", "last_connection_test_on", "readiness_column", "last_connection_test_status", "last_connection_test_message",
   "checkout_section", "checkout_name", "checkout_description", "checkout_theme_color", "accounting_section",
   "company", "selling_item", "direct_quote_item", "mode_of_payment", "accounting_column", "razorpay_clearing_account", "income_account", "cost_center",
-  "intake_section", "intake_sla_version", "intake_sla_document", "quote_currency", "direct_quote_rate_per_point", "quote_validity_days", "low_confidence_threshold", "enable_ai_intake_analysis", "intake_ai_provider", "intake_ai_model", "auto_approve_ai_pricing", "intake_sla_terms",
+  "intake_section", "intake_sla_version", "intake_sla_document", "quote_currency", "direct_quote_rate_per_point", "quote_validity_days", "low_confidence_threshold", "enable_ai_intake_analysis", "intake_ai_provider", "intake_ai_model", "auto_approve_ai_pricing", "auto_approve_ai_pricing_authorized_by", "auto_approve_ai_pricing_authorized_on", "intake_sla_terms",
   "webhook_help"
  ],
  "fields": [
   {"fieldname": "gateway_section", "fieldtype": "Section Break", "label": "Razorpay Payment Gateway"},
-  {"default": "0", "fieldname": "enabled", "fieldtype": "Check", "label": "Enable LexPack Purchases"},
+  {"default": "0", "description": "Adding API keys alone does not activate checkout. Enable only after the configuration test and webhook setup are complete.", "fieldname": "enabled", "fieldtype": "Check", "label": "Enable LexPack Purchases"},
   {"default": "1", "fieldname": "test_mode", "fieldtype": "Check", "label": "Test Mode"},
   {"fieldname": "key_id", "fieldtype": "Data", "label": "Razorpay Key ID"},
   {"fieldname": "key_secret", "fieldtype": "Password", "label": "Razorpay Key Secret"},
   {"fieldname": "webhook_secret", "fieldtype": "Password", "label": "Razorpay Webhook Secret"},
   {"default": "15", "fieldname": "api_timeout_seconds", "fieldtype": "Int", "label": "API Timeout (Seconds)"},
+  {"fieldname": "readiness_section", "fieldtype": "Section Break", "label": "Gateway Readiness"},
+  {"fieldname": "readiness_html", "fieldtype": "HTML"},
+  {"fieldname": "last_connection_test_on", "fieldtype": "Datetime", "label": "Last API Test On", "read_only": 1},
+  {"fieldname": "readiness_column", "fieldtype": "Column Break"},
+  {"default": "Not Tested", "fieldname": "last_connection_test_status", "fieldtype": "Select", "label": "Last API Test", "options": "Not Tested\nPassed\nFailed", "read_only": 1},
+  {"fieldname": "last_connection_test_message", "fieldtype": "Small Text", "label": "Last API Test Result", "read_only": 1},
   {"fieldname": "checkout_section", "fieldtype": "Section Break", "label": "Checkout Presentation"},
   {"default": "Lexocrates Legal Services Pvt. Ltd.", "fieldname": "checkout_name", "fieldtype": "Data", "label": "Checkout Business Name"},
   {"default": "Purchase prepaid legal capacity with non-expiring LexPoints.", "fieldname": "checkout_description", "fieldtype": "Small Text", "label": "Checkout Description"},
@@ -39,9 +47,11 @@
   {"default": "7", "fieldname": "quote_validity_days", "fieldtype": "Int", "label": "Quote Validity (Days)"},
   {"default": "72", "fieldname": "low_confidence_threshold", "fieldtype": "Percent", "label": "Operations Review Below Confidence"},
   {"default": "0", "fieldname": "enable_ai_intake_analysis", "fieldtype": "Check", "label": "Enable Governed AI Intake Analysis"},
-  {"default": "OpenAI", "depends_on": "enable_ai_intake_analysis", "fieldname": "intake_ai_provider", "fieldtype": "Data", "label": "Intake AI Provider"},
-  {"default": "gpt-4o", "depends_on": "enable_ai_intake_analysis", "fieldname": "intake_ai_model", "fieldtype": "Data", "label": "Intake AI Model"},
-  {"default": "0", "fieldname": "auto_approve_ai_pricing", "fieldtype": "Check", "label": "Auto-Approve Estimated Pricing (Skip CEO Approval)", "description": "Off by default: every quote (AI-estimated or manually issued) requires CEO approval before the client can pay. Turn on to have quotes become payable immediately after estimation, with no CEO sign-off step."},
+  {"default": "OpenAI", "fieldname": "intake_ai_provider", "fieldtype": "Data", "hidden": 1, "label": "Legacy Intake AI Provider", "read_only": 1},
+  {"default": "gpt-4o", "fieldname": "intake_ai_model", "fieldtype": "Data", "hidden": 1, "label": "Legacy Intake AI Model", "read_only": 1},
+  {"default": "0", "description": "CEO-controlled policy. When active, only a completed, threshold-passing AI-Assisted Formula estimate bypasses individual CEO approval and opens client funding. Formula, manual, failed and low-confidence estimates never bypass review.", "fieldname": "auto_approve_ai_pricing", "fieldtype": "Check", "label": "CEO Auto-Approve Eligible AI Estimates", "read_only": 1},
+  {"fieldname": "auto_approve_ai_pricing_authorized_by", "fieldtype": "Link", "label": "Auto-Approval Authorized By", "options": "User", "read_only": 1},
+  {"fieldname": "auto_approve_ai_pricing_authorized_on", "fieldtype": "Datetime", "label": "Auto-Approval Authorized On", "read_only": 1},
   {"fieldname": "intake_sla_terms", "fieldtype": "Long Text", "label": "Client Intake SLA Terms"},
   {"fieldname": "webhook_help", "fieldtype": "HTML", "options": "<p class='text-muted'>Configure Razorpay webhook events <b>payment.captured</b>, <b>payment.failed</b> and <b>order.paid</b> to <code>/api/method/lex.lexpack.handle_razorpay_webhook</code>. The same verified endpoint fulfils recommended LexPack and direct fixed-quote payments. Keep the webhook secret different from the API key secret.</p>"}
  ],
@@ -54,7 +64,8 @@
  "owner": "Administrator",
  "permissions": [
   {"create": 1, "read": 1, "role": "System Manager", "write": 1},
-  {"create": 1, "read": 1, "role": "Accounts Manager", "write": 1}
+  {"create": 1, "read": 1, "role": "Accounts Manager", "write": 1},
+  {"read": 1, "role": "CEO"}
  ],
  "states": [],
  "track_changes": 1

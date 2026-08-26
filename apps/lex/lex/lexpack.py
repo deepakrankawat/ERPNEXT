@@ -16,6 +16,7 @@ from lex.portal_audit import create_portal_audit_event
 
 RAZORPAY_API_ROOT = "https://api.razorpay.com/v1"
 PURCHASE_ROLES = {"System Manager", "Accounts Manager", "Accounts User", "Lexocrates Finance", "LPO_Admin"}
+RAZORPAY_SETUP_ROLES = {"System Manager", "Accounts Manager"}
 PAID_STATES = {"Paid", "Refund Pending", "Refunded"}
 
 
@@ -45,10 +46,11 @@ def get_lexpack_portal_data(portal_user=None):
 		limit_page_length=50,
 	)
 	settings = _load_settings()
+	readiness = get_razorpay_readiness(settings)
 	return {
 		"plans": plans,
 		"purchases": purchases,
-		"payment_enabled": bool(settings.get("enabled") and settings.get("key_id")),
+		"payment_enabled": readiness["payment_enabled"],
 		"purchase_access": bool(portal_user.lexpack_purchase_access),
 		"fair_pricing_note": _("Rolling 12-month tier upgrades are automatic. LexPoints never expire."),
 		"commercial_note": _("Bundle pricing is illustrative and remains subject to final commercial approval."),
@@ -147,7 +149,7 @@ def verify_razorpay_payment(
 			action="LexPack Payment Signature Rejected",
 			object_type="LexPack Purchase",
 			object_id=purchase_doc.name,
-			result="Denied",
+			result="Failure",
 		)
 		frappe.throw(_("Payment verification failed. No LexPoints were credited."), frappe.PermissionError)
 
@@ -174,12 +176,45 @@ def handle_razorpay_webhook():
 	webhook_secret = settings.get_password("webhook_secret")
 	raw_body = frappe.request.get_data(cache=True) or b""
 	provided = (frappe.get_request_header("X-Razorpay-Signature") or "").strip()
-	expected = hmac.new(webhook_secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-	if not provided or not hmac.compare_digest(provided, expected):
+	if not _webhook_signature_is_valid(raw_body, provided, webhook_secret):
 		frappe.throw(_("Invalid Razorpay webhook signature."), frappe.PermissionError)
-	payload = frappe.request.get_json() or {}
+	try:
+		payload = json.loads(raw_body.decode("utf-8"))
+	except (UnicodeDecodeError, json.JSONDecodeError):
+		frappe.throw(_("Invalid Razorpay webhook payload."), frappe.ValidationError)
+	if not isinstance(payload, dict):
+		frappe.throw(_("Invalid Razorpay webhook payload."), frappe.ValidationError)
 	event = payload.get("event")
 	event_id = (frappe.get_request_header("X-Razorpay-Event-Id") or "").strip() or None
+	if event_id and _event_already_processed(event_id):
+		return {"status": "duplicate", "event_id": event_id}
+	if event not in {"payment.captured", "payment.failed", "order.paid"}:
+		return {"status": "ignored", "event": event}
+	payment = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
+	order = ((payload.get("payload") or {}).get("order") or {}).get("entity") or {}
+	order_id = payment.get("order_id") or order.get("id")
+	if not order_id:
+		return {"status": "ignored", "reason": "No Razorpay order in event"}
+	job_token = event_id or hashlib.sha256(raw_body).hexdigest()
+	frappe.enqueue(
+		"lex.lexpack.process_razorpay_webhook",
+		queue="short",
+		timeout=120,
+		enqueue_after_commit=True,
+		job_id=f"razorpay-webhook-{job_token[:48]}",
+		deduplicate=True,
+		payload=payload,
+		event_id=event_id,
+	)
+	return {"status": "accepted", "event_id": event_id}
+
+
+def process_razorpay_webhook(payload: dict, event_id: str | None = None):
+	"""Process an authenticated webhook outside the request/response cycle."""
+	settings = _get_settings(require_enabled=True)
+	if event_id and _event_already_processed(event_id):
+		return {"status": "duplicate", "event_id": event_id}
+	event = payload.get("event")
 	payment = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
 	order = ((payload.get("payload") or {}).get("order") or {}).get("entity") or {}
 	order_id = payment.get("order_id") or order.get("id")
@@ -209,6 +244,15 @@ def handle_razorpay_webhook():
 		_set_purchase_values(purchase_doc, status="Failed", gateway_event_id=event_id, failure_reason=failure)
 		return {"status": "failed", "purchase": purchase_doc.name}
 	return {"status": "ignored", "event": event, "purchase": purchase_doc.name}
+
+
+def _event_already_processed(event_id: str) -> bool:
+	if not event_id:
+		return False
+	return bool(
+		frappe.db.exists("LexPack Purchase", {"gateway_event_id": event_id})
+		or frappe.db.exists("Lexocrates Work Intake", {"gateway_event_id": event_id})
+	)
 
 
 def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None):
@@ -576,10 +620,15 @@ def _resolve_exchange_rate(plan_currency: str, company: str) -> float:
 
 def _get_settings(require_enabled=False):
 	settings = _load_settings()
-	if require_enabled and not settings.get("enabled"):
-		frappe.throw(_("LexPack online purchase is not enabled yet."), frappe.ValidationError)
-	if require_enabled and (not settings.get("key_id") or not settings.get_password("key_secret", raise_exception=False)):
-		frappe.throw(_("Razorpay API credentials are incomplete."), frappe.ValidationError)
+	if require_enabled:
+		readiness = get_razorpay_readiness(settings)
+		if not readiness["enabled"]:
+			frappe.throw(_("LexPack online purchase is not enabled yet."), frappe.ValidationError)
+		if not readiness["configured"]:
+			frappe.throw(
+				_("Razorpay configuration is incomplete: {0}").format("; ".join(readiness["issues"])),
+				frappe.ValidationError,
+			)
 	return settings
 
 
@@ -591,17 +640,185 @@ def _load_settings():
 		return frappe.new_doc("LexPack Settings")
 
 
+def get_razorpay_readiness(settings=None):
+	"""Return a secret-free local readiness report for checkout activation."""
+	settings = settings or _load_settings()
+	issues = []
+	key_id = str(settings.get("key_id") or "").strip()
+	key_secret = _settings_password(settings, "key_secret")
+	webhook_secret = _settings_password(settings, "webhook_secret")
+	test_mode = bool(cint(settings.get("test_mode")))
+	expected_prefix = "rzp_test_" if test_mode else "rzp_live_"
+
+	if not key_id:
+		issues.append(_("Razorpay Key ID is missing"))
+	elif not key_id.startswith(expected_prefix):
+		issues.append(
+			_("Razorpay Key ID must start with {0} while {1} Mode is selected").format(
+				expected_prefix, _("Test") if test_mode else _("Live")
+			)
+		)
+	if not key_secret:
+		issues.append(_("Razorpay Key Secret is missing"))
+	if not webhook_secret:
+		issues.append(_("Razorpay Webhook Secret is missing"))
+	elif key_secret and hmac.compare_digest(key_secret, webhook_secret):
+		issues.append(_("Webhook Secret must be different from the API Key Secret"))
+	non_accounting_issue_count = len(issues)
+
+	company = settings.get("company")
+	if not company or not frappe.db.exists("Company", company):
+		issues.append(_("A valid Company is required"))
+
+	selling_item = settings.get("selling_item")
+	if not _valid_sales_item(selling_item):
+		issues.append(_("LexPack Selling Item must be an enabled sales item"))
+	direct_quote_item = settings.get("direct_quote_item") or selling_item
+	if not _valid_sales_item(direct_quote_item):
+		issues.append(_("Fixed Quote Selling Item must be an enabled sales item"))
+
+	mode_of_payment = settings.get("mode_of_payment")
+	if not mode_of_payment or not frappe.db.exists("Mode of Payment", mode_of_payment):
+		issues.append(_("A valid Mode of Payment is required"))
+
+	clearing_account = settings.get("razorpay_clearing_account")
+	account_values = (
+		frappe.db.get_value("Account", clearing_account, ["company", "is_group", "account_type"])
+		if clearing_account
+		else None
+	)
+	if not account_values or account_values[0] != company or cint(account_values[1]) or account_values[2] not in {"Bank", "Cash"}:
+		issues.append(_("Razorpay Clearing Account must be a leaf Bank or Cash account for the selected Company"))
+
+	income_account = settings.get("income_account")
+	if income_account:
+		account = frappe.db.get_value("Account", income_account, ["company", "is_group", "root_type"])
+		if not account or account[0] != company or cint(account[1]) or account[2] != "Income":
+			issues.append(_("LexPack Income Account must be a leaf Income account for the selected Company"))
+	cost_center = settings.get("cost_center")
+	if cost_center:
+		center = frappe.db.get_value("Cost Center", cost_center, ["company", "is_group"])
+		if not center or center[0] != company or cint(center[1]):
+			issues.append(_("Cost Center must be a leaf cost center for the selected Company"))
+
+	credentials_ready = bool(key_id and key_secret and key_id.startswith(expected_prefix))
+	webhook_ready = bool(webhook_secret and (not key_secret or webhook_secret != key_secret))
+	accounting_ready = len(issues) == non_accounting_issue_count
+	configured = not issues
+	enabled = bool(cint(settings.get("enabled")))
+	return {
+		"enabled": enabled,
+		"configured": configured,
+		"payment_enabled": bool(enabled and configured),
+		"mode": "Test" if test_mode else "Live",
+		"credentials_ready": credentials_ready,
+		"webhook_ready": webhook_ready,
+		"accounting_ready": accounting_ready,
+		"api_test_status": settings.get("last_connection_test_status") or "Not Tested",
+		"api_tested_on": settings.get("last_connection_test_on"),
+		"api_test_message": settings.get("last_connection_test_message") or "",
+		"issues": [str(issue) for issue in issues],
+	}
+
+
+@frappe.whitelist()
+def get_razorpay_status():
+	_require_razorpay_setup_access()
+	status = get_razorpay_readiness()
+	status["webhook_url"] = frappe.utils.get_url(
+		"/api/method/lex.lexpack.handle_razorpay_webhook"
+	)
+	status["required_webhook_events"] = ["payment.captured", "payment.failed", "order.paid"]
+	return status
+
+
+@frappe.whitelist()
+def test_razorpay_configuration():
+	"""Authenticate with Razorpay using a read-only Orders request; never creates a charge."""
+	_require_razorpay_setup_access()
+	settings = _load_settings()
+	readiness = get_razorpay_readiness(settings)
+	if not readiness["credentials_ready"]:
+		message = _("API test was not run because the Key ID/Secret or Test/Live mode is invalid.")
+		_record_razorpay_connection_test("Failed", message)
+		return {
+			"ok": False,
+			"api_authenticated": False,
+			"message": message,
+			"readiness": get_razorpay_readiness(_load_settings()),
+		}
+	try:
+		response = _razorpay_request("GET", "/orders", settings, {"count": 1})
+		if not isinstance(response, dict) or response.get("entity") != "collection" or not isinstance(response.get("items"), list):
+			frappe.throw(_("Razorpay returned an unexpected API response."), frappe.ValidationError)
+		message = _("Razorpay API authentication succeeded in {0} Mode. No order or charge was created.").format(
+			readiness["mode"]
+		)
+		_record_razorpay_connection_test("Passed", message)
+		readiness = get_razorpay_readiness(_load_settings())
+		return {"ok": True, "api_authenticated": True, "message": message, "readiness": readiness}
+	except Exception as exc:
+		message = _safe_gateway_error(exc)
+		_record_razorpay_connection_test("Failed", message)
+		return {
+			"ok": False,
+			"api_authenticated": False,
+			"message": message,
+			"readiness": get_razorpay_readiness(_load_settings()),
+		}
+
+
+def _record_razorpay_connection_test(status: str, message: str):
+	values = {
+		"last_connection_test_on": now_datetime(),
+		"last_connection_test_status": status,
+		"last_connection_test_message": str(message)[:500],
+	}
+	for fieldname, value in values.items():
+		if frappe.get_meta("LexPack Settings").has_field(fieldname):
+			frappe.db.set_single_value("LexPack Settings", fieldname, value)
+	frappe.clear_cache(doctype="LexPack Settings")
+
+
+def _require_razorpay_setup_access():
+	if frappe.session.user == "Administrator" or set(frappe.get_roles()).intersection(RAZORPAY_SETUP_ROLES):
+		return
+	frappe.throw(_("System Manager or Accounts Manager access is required."), frappe.PermissionError)
+
+
+def _settings_password(settings, fieldname: str) -> str:
+	raw_value = settings.get(fieldname)
+	if raw_value and raw_value != "*****":
+		return str(raw_value)
+	try:
+		return str(settings.get_password(fieldname, raise_exception=False) or "")
+	except (frappe.AuthenticationError, frappe.DoesNotExistError):
+		return ""
+
+
+def _valid_sales_item(item_code: str | None) -> bool:
+	if not item_code:
+		return False
+	values = frappe.db.get_value("Item", item_code, ["disabled", "is_sales_item"])
+	return bool(values and not cint(values[0]) and cint(values[1]))
+
+
 def _razorpay_request(method: str, path: str, settings, payload=None):
+	method = method.upper()
 	try:
 		response = requests.request(
 			method,
 			f"{RAZORPAY_API_ROOT}{path}",
 			auth=(settings.key_id, settings.get_password("key_secret")),
-			json=payload,
+			params=payload if method == "GET" else None,
+			json=payload if method != "GET" else None,
 			timeout=cint(settings.api_timeout_seconds or 15),
 		)
 		response.raise_for_status()
-		return response.json()
+		try:
+			return response.json()
+		except ValueError:
+			frappe.throw(_("Razorpay returned an unreadable API response."), frappe.ValidationError)
 	except requests.RequestException as exc:
 		message = _("Razorpay could not process this request.")
 		if getattr(exc, "response", None) is not None:
@@ -652,6 +869,13 @@ def _checkout_signature_is_valid(order_id: str, payment_id: str, signature: str,
 		f"{order_id}|{payment_id}".encode("utf-8"),
 		hashlib.sha256,
 	).hexdigest()
+	return hmac.compare_digest(expected, signature)
+
+
+def _webhook_signature_is_valid(raw_body: bytes, signature: str, webhook_secret: str) -> bool:
+	if not raw_body or not signature or not webhook_secret:
+		return False
+	expected = hmac.new(webhook_secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
 	return hmac.compare_digest(expected, signature)
 
 
@@ -735,6 +959,15 @@ def manually_approve_lexpack_plan(
 
 	if not frappe.db.exists("Customer", client):
 		frappe.throw(_("Customer {0} does not exist.").format(client), frappe.NotFoundError)
+	if work_intake:
+		if not frappe.db.exists("Lexocrates Work Intake", work_intake):
+			frappe.throw(_("Work Intake {0} does not exist.").format(work_intake), frappe.DoesNotExistError)
+		intake_doc = frappe.get_doc("Lexocrates Work Intake", work_intake)
+		if intake_doc.client != client:
+			frappe.throw(_("Work Intake belongs to another Client."), frappe.PermissionError)
+		from lex.work_intake import _validate_ready_quote
+
+		_validate_ready_quote(intake_doc)
 
 	plan_doc = frappe.get_doc("LexPack Plan", plan)
 	settings = _get_settings(require_enabled=False)
@@ -873,4 +1106,3 @@ def _create_manual_payment_entry(purchase_doc, settings, payment, reason: str):
 	entry.flags.ignore_permissions = True
 	entry.submit()
 	return entry
-

@@ -1,0 +1,8 @@
+# Copyright (c) 2026, Lexocrates and contributors
+# For license information, please see license.txt
+
+from frappe.model.document import Document
+
+
+class LPOAIDocumentServiceItem(Document):
+	pass

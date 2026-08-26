@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "field:service_code",
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "identity_section", "service_code", "service_name", "service_family", "active", "identity_column", "aliases", "internal_pricing_key", "notes",
+  "pricing_section", "billing_measure", "base_quantity", "standard_hours", "pricing_column", "market_midpoint_per_hour", "base_lexpoints", "default_sla_label", "default_sla_hours"
+ ],
+ "fields": [
+  {"fieldname": "identity_section", "fieldtype": "Section Break", "label": "LexPoint Service Rule"},
+  {"fieldname": "service_code", "fieldtype": "Data", "in_list_view": 1, "label": "Service Code", "reqd": 1, "search_index": 1, "unique": 1},
+  {"fieldname": "service_name", "fieldtype": "Data", "in_global_search": 1, "in_list_view": 1, "label": "Service Name", "reqd": 1, "search_index": 1, "unique": 1},
+  {"fieldname": "service_family", "fieldtype": "Select", "in_list_view": 1, "label": "LexPack Family", "options": "Research\nLitigation\nContracts\neDiscovery\nCompliance\nOperations", "reqd": 1},
+  {"default": "1", "fieldname": "active", "fieldtype": "Check", "in_list_view": 1, "label": "Active"},
+  {"fieldname": "identity_column", "fieldtype": "Column Break"},
+  {"description": "Comma or newline separated document/service names used for AI matching.", "fieldname": "aliases", "fieldtype": "Small Text", "label": "Classification Aliases"},
+  {"fieldname": "internal_pricing_key", "fieldtype": "Data", "label": "Internal Pricing Key", "read_only": 1, "unique": 1},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "Scope Notes"},
+  {"fieldname": "pricing_section", "fieldtype": "Section Break", "label": "Volume and Base LexPoints"},
+  {"fieldname": "billing_measure", "fieldtype": "Select", "in_list_view": 1, "label": "Billing Measure", "options": "pages\ndocuments\nhours\njurisdictions\ntopics\ncontracts\npolicies\nbusiness units\nmatters\nlegal questions\nevidence records", "reqd": 1},
+  {"default": "1", "fieldname": "base_quantity", "fieldtype": "Float", "label": "Base Quantity", "reqd": 1},
+  {"default": "1", "fieldname": "standard_hours", "fieldtype": "Float", "label": "Estimated Standard Hours", "reqd": 1},
+  {"fieldname": "pricing_column", "fieldtype": "Column Break"},
+  {"default": "1", "fieldname": "market_midpoint_per_hour", "fieldtype": "Currency", "label": "Market Midpoint per Hour", "reqd": 1},
+  {"default": "1", "fieldname": "base_lexpoints", "fieldtype": "Int", "in_list_view": 1, "label": "Base LexPoints", "reqd": 1},
+  {"fieldname": "default_sla_label", "fieldtype": "Data", "label": "Default SLA Label", "reqd": 1},
+  {"default": "72", "fieldname": "default_sla_hours", "fieldtype": "Int", "label": "Default SLA Hours", "reqd": 1}
+ ],
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO LexPoint Service Rule",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "LPO_Admin", "share": 1, "write": 1},
+  {"create": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "LPO_Manager", "write": 1},
+  {"read": 1, "report": 1, "role": "CEO"}
+ ],
+ "search_fields": "service_name,service_family,aliases,internal_pricing_key",
+ "show_title_field_in_link": 1,
+ "sort_field": "service_family",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "service_name",
+ "track_changes": 1
+}

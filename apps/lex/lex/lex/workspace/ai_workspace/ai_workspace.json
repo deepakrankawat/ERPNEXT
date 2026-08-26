@@ -16,7 +16,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Decision Center",
-   "link_count": 5,
+   "link_count": 16,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -24,9 +24,79 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "AI Provider Settings",
+   "link_count": 0,
+   "link_to": "LPO AI Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Verified AI Model Registry",
+   "link_count": 0,
+   "link_to": "LPO AI Model Registry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "AI Execution Audit",
+   "link_count": 0,
+   "link_to": "LPO AI Execution",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "AI Governance Policies",
+   "link_count": 0,
+   "link_to": "LPO AI Governance Policy",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "AI Processing Queue",
    "link_count": 0,
    "link_to": "LPO Job",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "AI Document Processors",
+   "link_count": 0,
+   "link_to": "LPO AI Document Processor",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "AI Document Services",
+   "link_count": 0,
+   "link_to": "LPO AI Document Service",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Document Export History",
+   "link_count": 0,
+   "link_to": "LPO AI Document Export",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -70,9 +140,49 @@
    "link_type": "Page",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Intake AI Estimates",
+   "link_count": 0,
+   "link_to": "LPO AI Document Estimate",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LexPoint Service Rules",
+   "link_count": 0,
+   "link_to": "LPO LexPoint Service Rule",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LexPoint Multipliers",
+   "link_count": 0,
+   "link_to": "LPO LexPoint Multiplier",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LexPoint Formula Settings",
+   "link_count": 0,
+   "link_to": "LPO LexPoint Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-08-18 17:20:46.558664",
+ "modified": "2026-08-25 08:13:38.347638",
  "modified_by": "Administrator",
  "module": "Lex",
  "name": "AI Workspace",

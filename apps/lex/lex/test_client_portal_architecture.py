@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+
 import frappe
+from frappe.client import get as get_client_document
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, now_datetime
+from frappe.utils.file_manager import save_file
+from werkzeug.exceptions import Forbidden
 
 from lex import client_portal, persona_workspaces, portal_management, work_intake
 from lex.audit_worm_chain import verify_audit_trail_integrity
@@ -12,6 +17,8 @@ from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction
 	reverse_transaction,
 )
 from lex.portal_audit import create_portal_audit_event
+from lex.pdf_watermark import _resolve_downloadable_file
+from lex.file_quarantine import release_internally_generated_file
 
 
 STRONG_TEST_PASSWORD = "Correct-Harbor-Legal-Portal-2026!"
@@ -264,6 +271,123 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("My Matters", legal_navigation)
 		self.assertIn("Documents", legal_navigation)
 		self.assertNotIn("Billing", legal_navigation)
+
+	def test_final_job_document_unlocks_only_after_completion(self):
+		client = _make_client()
+		user = _make_user()
+		portal_user = _make_portal_user(user.name, client, "Legal User")
+		matter = _make_matter(client)
+		matter.append("authorized_portal_users", _authorization(portal_user))
+		matter.save(ignore_permissions=True)
+		job = frappe.get_doc({
+			"doctype": "LPO Job",
+			"job_title": "Completion-gated delivery",
+			"engagement": matter.name,
+			"job_type": "Contract Review",
+			"job_status": "Activated",
+			"priority": "Medium",
+			"task_description": "Prepare the final reviewed agreement.",
+			"received_at": now_datetime(),
+			"due_date": add_days(now_datetime(), 2),
+		}).insert(ignore_permissions=True)
+		file_doc = save_file(
+			fname="completed-deliverable.txt",
+			content=b"Final completion-gated legal deliverable.",
+			dt="LPO Job",
+			dn=job.name,
+			is_private=1,
+		)
+		frappe.db.set_value(
+			"LPO Job", job.name,
+			{
+				"delivery_document": file_doc.file_url,
+				"job_status": "Activated",
+				"ai_processing_allowed": 1,
+				"ai_token_budget": 777,
+				"ai_tokens_used": 123,
+				"ai_instructions": "INTERNAL AI INSTRUCTION",
+				"ai_review_status": "Passed",
+				"ai_review_summary": "INTERNAL AI REVIEW SUMMARY",
+			},
+			update_modified=False,
+		)
+
+		frappe.set_user(user.name)
+		with self.assertRaises(Forbidden):
+			_resolve_downloadable_file(file_id=file_doc.name)
+		portal_job = get_client_document("LPO Job", job.name)
+		self.assertNotEqual(portal_job.get("ai_token_budget"), 777)
+		self.assertNotEqual(portal_job.get("ai_tokens_used"), 123)
+		self.assertNotEqual(portal_job.get("ai_instructions"), "INTERNAL AI INSTRUCTION")
+		self.assertNotEqual(portal_job.get("ai_review_status"), "Passed")
+		self.assertNotEqual(portal_job.get("ai_review_summary"), "INTERNAL AI REVIEW SUMMARY")
+		before = next(row for row in client_portal.get_portal_dashboard()["jobs"] if row.name == job.name)
+		self.assertFalse(before.delivery_download_url)
+
+		frappe.set_user("Administrator")
+		frappe.db.set_value("LPO Job", job.name, "job_status", "Completed", update_modified=False)
+		frappe.set_user(user.name)
+		self.assertEqual(_resolve_downloadable_file(file_id=file_doc.name).name, file_doc.name)
+		after = next(row for row in client_portal.get_portal_dashboard()["jobs"] if row.name == job.name)
+		self.assertTrue(after.delivery_download_url)
+		deliverable = next(
+			row for row in client_portal.get_portal_dashboard()["documents"] if row.name == file_doc.name
+		)
+		self.assertEqual(deliverable.portal_document_type, "Completed Deliverable")
+
+	def test_authorized_client_previews_then_approves_delivery(self):
+		client = _make_client()
+		user = _make_user()
+		portal_user = _make_portal_user(user.name, client, "Partner / General Counsel")
+		matter = _make_matter(client)
+		matter.append("authorized_portal_users", _authorization(portal_user))
+		matter.save(ignore_permissions=True)
+		job = frappe.get_doc({
+			"doctype": "LPO Job",
+			"job_title": "Client preview approval",
+			"engagement": matter.name,
+			"job_type": "Contract Review",
+			"job_status": "Activated",
+			"assigned_analyst": "Administrator",
+			"qa_required": 0,
+			"priority": "Medium",
+			"task_description": "Client reviews the protected final output.",
+			"received_at": now_datetime(),
+			"due_date": add_days(now_datetime(), 2),
+		}).insert(ignore_permissions=True)
+		content = b"Protected client-preview legal deliverable."
+		file_doc = save_file(
+			fname="client-preview-deliverable.txt",
+			content=content,
+			dt="LPO Job",
+			dn=job.name,
+			is_private=1,
+		)
+		release_internally_generated_file(
+			file_doc.name,
+			expected_checksum=hashlib.sha256(content).hexdigest(),
+		)
+		frappe.db.set_value(
+			"LPO Job",
+			job.name,
+			{
+				"delivery_document": file_doc.file_url,
+				"job_status": "Ready for Delivery",
+				"client_approval_status": "Pending",
+			},
+			update_modified=False,
+		)
+
+		frappe.set_user(user.name)
+		row = next(item for item in client_portal.get_portal_dashboard()["jobs"] if item.name == job.name)
+		self.assertTrue(row.delivery_preview_url)
+		self.assertFalse(row.delivery_download_url)
+		self.assertEqual(_resolve_downloadable_file(file_id=file_doc.name).name, file_doc.name)
+
+		result = client_portal.submit_client_approval(job.name, "Approved", "Approved for delivery.")
+		self.assertEqual(result["job_status"], "Completed")
+		row = next(item for item in client_portal.get_portal_dashboard()["jobs"] if item.name == job.name)
+		self.assertTrue(row.delivery_download_url)
 
 
 def _make_client() -> str:

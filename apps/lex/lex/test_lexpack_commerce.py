@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -66,6 +67,78 @@ class TestLexPackCommerce(FrappeTestCase):
 		self.assertTrue(lexpack._checkout_signature_is_valid(order_id, payment_id, signature, secret))
 		self.assertFalse(lexpack._checkout_signature_is_valid(order_id, payment_id, "tampered", secret))
 		self.assertEqual(lexpack._minor_units(299, "USD"), 29900)
+		raw_body = b'{"event":"payment.captured"}'
+		webhook_secret = "separate-webhook-secret"
+		webhook_signature = hmac.new(webhook_secret.encode(), raw_body, hashlib.sha256).hexdigest()
+		self.assertTrue(lexpack._webhook_signature_is_valid(raw_body, webhook_signature, webhook_secret))
+		self.assertFalse(lexpack._webhook_signature_is_valid(raw_body, "tampered", webhook_secret))
+
+	def test_gateway_readiness_requires_explicit_enable_and_matching_key_mode(self):
+		settings = _configure_test_gateway(enabled=0)
+		readiness = lexpack.get_razorpay_readiness(settings)
+		self.assertTrue(readiness["configured"])
+		self.assertFalse(readiness["payment_enabled"])
+		self.assertEqual(readiness["mode"], "Test")
+
+		settings.enabled = 1
+		readiness = lexpack.get_razorpay_readiness(settings)
+		self.assertTrue(readiness["payment_enabled"])
+
+		settings.key_id = "rzp_live_wrong_mode"
+		readiness = lexpack.get_razorpay_readiness(settings)
+		self.assertFalse(readiness["configured"])
+		self.assertFalse(readiness["payment_enabled"])
+		self.assertTrue(any("rzp_test_" in issue for issue in readiness["issues"]))
+
+	def test_configuration_test_uses_read_only_orders_api_and_hides_secrets(self):
+		_configure_test_gateway(enabled=0)
+		with patch("lex.lexpack._razorpay_request") as request:
+			request.return_value = {"entity": "collection", "count": 0, "items": []}
+			result = lexpack.test_razorpay_configuration()
+		request.assert_called_once()
+		method, path, _settings, payload = request.call_args.args
+		self.assertEqual((method, path, payload), ("GET", "/orders", {"count": 1}))
+		self.assertTrue(result["ok"])
+		self.assertTrue(result["api_authenticated"])
+		self.assertNotIn("unit-test-key-secret", str(result))
+		self.assertNotIn("unit-test-webhook-secret", str(result))
+
+	def test_razorpay_transport_sends_get_filters_as_query_parameters(self):
+		settings = _configure_test_gateway(enabled=0)
+		response = Mock()
+		response.raise_for_status.return_value = None
+		response.json.return_value = {"entity": "collection", "items": []}
+		with patch("lex.lexpack.requests.request", return_value=response) as request:
+			lexpack._razorpay_request("GET", "/orders", settings, {"count": 1})
+		kwargs = request.call_args.kwargs
+		self.assertEqual(kwargs["params"], {"count": 1})
+		self.assertIsNone(kwargs["json"])
+
+	def test_failed_webhook_processing_is_auditable_and_idempotent(self):
+		_configure_test_gateway(enabled=1)
+		client = _make_client()
+		purchase = _service_purchase(client, "STARTER", 299, 100)
+		lexpack._set_purchase_values(purchase, razorpay_order_id="order_failed_webhook")
+		payload = {
+			"event": "payment.failed",
+			"payload": {
+				"payment": {
+					"entity": {
+						"entity": "payment",
+						"id": "pay_failed_webhook",
+						"order_id": "order_failed_webhook",
+						"error_description": "Test payment was declined",
+					}
+				}
+			},
+		}
+		result = lexpack.process_razorpay_webhook(payload, "event_failed_webhook")
+		self.assertEqual(result["status"], "failed")
+		purchase.reload()
+		self.assertEqual(purchase.status, "Failed")
+		self.assertEqual(purchase.gateway_event_id, "event_failed_webhook")
+		duplicate = lexpack.process_razorpay_webhook(payload, "event_failed_webhook")
+		self.assertEqual(duplicate["status"], "duplicate")
 
 	def test_fair_pricing_bonus_is_atomic_and_idempotent(self):
 		client = _make_client()
@@ -236,3 +309,34 @@ def _service_purchase(client, plan, amount, points):
 		).insert(ignore_permissions=True)
 	finally:
 		frappe.flags.lexpack_purchase_service = previous
+
+
+def _configure_test_gateway(enabled=1):
+	install.ensure_lexpack_master_data()
+	company = frappe.db.get_value("Company", {"default_currency": "USD"}, "name") or frappe.db.get_value("Company", {}, "name")
+	clearing = frappe.db.get_value(
+		"Account",
+		{"company": company, "account_type": ["in", ["Bank", "Cash"]], "is_group": 0},
+		"name",
+	)
+	if not company or not clearing:
+		raise AssertionError("A test Company with a leaf Bank/Cash account is required")
+	frappe.db.set_single_value(
+		"LexPack Settings",
+		{
+			"enabled": enabled,
+			"test_mode": 1,
+			"key_id": "rzp_test_unit",
+			"company": company,
+			"selling_item": install.LEXPACK_ITEM_CODE,
+			"direct_quote_item": install.FIXED_QUOTE_ITEM_CODE,
+			"mode_of_payment": install.LEXPACK_MODE_OF_PAYMENT,
+			"razorpay_clearing_account": clearing,
+		},
+	)
+	from frappe.utils.password import set_encrypted_password
+
+	set_encrypted_password("LexPack Settings", "LexPack Settings", "unit-test-key-secret", "key_secret")
+	set_encrypted_password("LexPack Settings", "LexPack Settings", "unit-test-webhook-secret", "webhook_secret")
+	frappe.clear_cache(doctype="LexPack Settings")
+	return frappe.get_single("LexPack Settings")

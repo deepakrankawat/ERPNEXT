@@ -6,10 +6,17 @@ from frappe.tests.utils import FrappeTestCase
 from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 	_channel_matches_search,
 	_get_matter_context,
+	get_user_chat_identity,
 )
 
 
 class TestLexocratesChatChannel(FrappeTestCase):
+	def test_chat_identity_exposes_full_name_and_primary_role(self):
+		identity = get_user_chat_identity("Administrator")
+		self.assertEqual(identity["full_name"], "Administrator")
+		self.assertEqual(identity["primary_role"], "Administrator")
+		self.assertEqual(identity["user_type"], "System User")
+
 	def test_matter_channel_searches_id_name_and_organization(self):
 		channel = {
 			"channel_name": "#vendor-contract-review-matter-2026-00001",

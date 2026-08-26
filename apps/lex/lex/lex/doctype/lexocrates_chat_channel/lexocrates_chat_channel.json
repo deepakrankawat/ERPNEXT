@@ -11,6 +11,7 @@
   "channel_type",
   "status",
   "is_direct_message",
+  "system_user_only",
   "direct_message_key",
   "identity_column_break",
   "description",
@@ -62,6 +63,14 @@
    "fieldname": "is_direct_message",
    "fieldtype": "Check",
    "label": "Direct Message",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "When enabled, every channel member must be an enabled Desk/System User.",
+   "fieldname": "system_user_only",
+   "fieldtype": "Check",
+   "label": "Internal System Users Only",
    "read_only": 1
   },
   {

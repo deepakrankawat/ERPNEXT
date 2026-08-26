@@ -40,9 +40,21 @@
   "delivery_document",
   "delivery_document_checksum",
   "delivery_document_version",
+  "intake_estimate_doctype",
+  "intake_estimate",
   "ai_governance_section",
   "ai_processing_allowed",
+  "ai_token_budget",
+  "ai_tokens_used",
   "ai_instructions",
+  "ai_copilot_section",
+  "ai_copilot_html",
+  "ai_review_section",
+  "ai_review_status",
+  "ai_review_score",
+  "ai_review_provider",
+  "ai_review_date",
+  "ai_review_summary",
   "quality_section",
   "qa_required",
   "qa_reviewer",
@@ -277,22 +289,116 @@
    "read_only": 1
   },
   {
+   "default": "LPO AI Document Estimate",
+   "fieldname": "intake_estimate_doctype",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Intake Estimate DocType",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "intake_estimate",
+   "fieldtype": "Dynamic Link",
+   "label": "Pre-Job AI Document Estimate",
+   "options": "intake_estimate_doctype",
+   "permlevel": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
    "fieldname": "ai_governance_section",
    "fieldtype": "Section Break",
-   "label": "AI Processing"
+   "label": "AI Processing",
+   "permlevel": 1
   },
   {
    "default": "0",
    "description": "This is a job-level decision. Confirm contractual and confidentiality requirements before enabling it.",
    "fieldname": "ai_processing_allowed",
    "fieldtype": "Check",
-   "label": "AI Processing Allowed"
+   "label": "AI Processing Allowed",
+   "permlevel": 1
+  },
+  {
+   "default": "200",
+   "description": "Max token budget for AI assistant queries on this Job.",
+   "fieldname": "ai_token_budget",
+   "fieldtype": "Int",
+   "label": "AI Token Budget (e.g. 200)",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "description": "Cumulative tokens consumed by AI queries on this Job.",
+   "fieldname": "ai_tokens_used",
+   "fieldtype": "Int",
+   "label": "AI Tokens Used",
+   "permlevel": 1,
+   "read_only": 1
   },
   {
    "depends_on": "eval:doc.ai_processing_allowed",
    "fieldname": "ai_instructions",
    "fieldtype": "Small Text",
-   "label": "AI Processing Instructions"
+   "label": "AI Processing Instructions",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "ai_copilot_section",
+   "fieldtype": "Section Break",
+   "label": "🤖 Job AI Legal Copilot & Chat",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "ai_copilot_html",
+   "fieldtype": "HTML",
+   "label": "AI Copilot",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "ai_review_section",
+   "fieldtype": "Section Break",
+   "label": "🔍 AI Job Review & Audit",
+   "permlevel": 1
+  },
+  {
+   "default": "Not Reviewed",
+   "fieldname": "ai_review_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "AI Review Status",
+   "options": "Not Reviewed\nReview Pending\nPassed\nAction Required",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_review_score",
+   "fieldtype": "Percent",
+   "label": "AI Quality Score",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_review_provider",
+   "fieldtype": "Data",
+   "label": "AI Review Model",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_review_date",
+   "fieldtype": "Datetime",
+   "label": "AI Reviewed On",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_review_summary",
+   "fieldtype": "Small Text",
+   "label": "AI Review Summary & Findings",
+   "permlevel": 1,
+   "read_only": 1
   },
   {
    "fieldname": "quality_section",
@@ -419,6 +525,12 @@
    "write": 1
   },
   {
+   "permlevel": 1,
+   "read": 1,
+   "role": "LPO_Admin",
+   "write": 1
+  },
+  {
    "create": 1,
    "email": 1,
    "export": 1,
@@ -430,10 +542,22 @@
    "write": 1
   },
   {
+   "permlevel": 1,
+   "read": 1,
+   "role": "LPO_Manager",
+   "write": 1
+  },
+  {
    "email": 1,
    "print": 1,
    "read": 1,
    "report": 1,
+   "role": "LPO_Analyst",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
    "role": "LPO_Analyst",
    "write": 1
   },
@@ -454,6 +578,12 @@
    "report": 1,
    "role": "System Manager",
    "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
    "write": 1
   }
  ],

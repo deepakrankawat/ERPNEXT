@@ -12,6 +12,10 @@
   "job",
   "correlation_id",
   "use_case",
+  "provider",
+  "model",
+  "api_credential",
+  "endpoint_type",
   "model_provider_version",
   "prompt_version",
   "policy_version",
@@ -34,6 +38,9 @@
   "retries",
   "fallback",
   "error",
+  "provider_error_code",
+  "provider_http_status",
+  "retryable_failure",
   "provider_request_id",
   "retention_until",
   "evaluation_status",
@@ -77,6 +84,30 @@
    "fieldname": "use_case",
    "fieldtype": "Data",
    "label": "Use Case"
+  },
+  {
+   "fieldname": "provider",
+   "fieldtype": "Data",
+   "label": "Provider",
+   "read_only": 1
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model",
+   "read_only": 1
+  },
+  {
+   "fieldname": "api_credential",
+   "fieldtype": "Data",
+   "label": "Named API Credential",
+   "read_only": 1
+  },
+  {
+   "fieldname": "endpoint_type",
+   "fieldtype": "Data",
+   "label": "Endpoint Type",
+   "read_only": 1
   },
   {
    "fieldname": "model_provider_version",
@@ -186,8 +217,27 @@
   },
   {
    "fieldname": "error",
-   "fieldtype": "Data",
+   "fieldtype": "Small Text",
    "label": "Error"
+  },
+  {
+   "fieldname": "provider_error_code",
+   "fieldtype": "Data",
+   "label": "Provider Error Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "provider_http_status",
+   "fieldtype": "Int",
+   "label": "Provider HTTP Status",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "retryable_failure",
+   "fieldtype": "Check",
+   "label": "Retryable Failure",
+   "read_only": 1
   },
   {
    "fieldname": "provider_request_id",
@@ -251,7 +301,6 @@
  "permissions": [
   {
    "create": 1,
-   "delete": 1,
    "email": 1,
    "export": 1,
    "print": 1,

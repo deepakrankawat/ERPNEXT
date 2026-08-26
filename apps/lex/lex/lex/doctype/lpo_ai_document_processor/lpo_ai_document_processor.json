@@ -1,0 +1,289 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "format:AIDOC-{YYYY}-{#####}",
+ "creation": "2026-08-24 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "overview_section",
+  "title",
+  "job",
+  "matter",
+  "customer",
+  "document_category",
+  "overview_col_break",
+  "status",
+  "ai_credential",
+  "word_count",
+  "char_count",
+  "detected_language",
+  "source_section",
+  "source_file",
+  "source_file_name",
+  "source_checksum",
+  "extracted_text",
+  "studio_section",
+  "document_studio_html",
+  "services_section",
+  "services_applied",
+  "completion_section",
+  "final_output_text",
+  "final_output_file",
+  "final_output_pdf",
+  "final_output_docx",
+  "output_format",
+  "export_version",
+  "completed_by",
+  "completed_on",
+  "completion_summary"
+ ],
+ "fields": [
+  {
+   "fieldname": "overview_section",
+   "fieldtype": "Section Break",
+   "label": "Document Details"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Document Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "job",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "LPO Job",
+   "options": "LPO Job"
+  },
+  {
+   "fetch_from": "job.engagement",
+   "fieldname": "matter",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "LPO Matter",
+   "options": "LPO Matter"
+  },
+  {
+   "fetch_from": "matter.customer",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "default": "Contract / Agreement",
+   "fieldname": "document_category",
+   "fieldtype": "Select",
+   "label": "Document Category",
+   "options": "Contract / Agreement\nLegal Brief / Motion\nCompliance & Regulatory\nDue Diligence\nCorporate Policy\nFinancial / Invoicing\nGeneral Document"
+  },
+  {
+   "fieldname": "overview_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nExtracted\nIn Processing\nReady for Review\nCompleted\nCancelled"
+  },
+  {
+   "description": "Optional named credential from LPO AI Settings. Blank uses the central Document AI route.",
+   "fieldname": "ai_credential",
+   "fieldtype": "Select",
+   "label": "AI API Credential Override"
+  },
+  {
+   "default": "0",
+   "fieldname": "word_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Word Count",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "char_count",
+   "fieldtype": "Int",
+   "label": "Character Count",
+   "read_only": 1
+  },
+  {
+   "default": "English",
+   "fieldname": "detected_language",
+   "fieldtype": "Data",
+   "label": "Detected Language"
+  },
+  {
+   "fieldname": "source_section",
+   "fieldtype": "Section Break",
+   "label": "Source Document & Text"
+  },
+  {
+   "fieldname": "source_file",
+   "fieldtype": "Attach",
+   "label": "Source Document File"
+  },
+  {
+   "fieldname": "source_file_name",
+   "fieldtype": "Data",
+   "label": "File Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_checksum",
+   "fieldtype": "Data",
+   "label": "File Checksum",
+   "read_only": 1
+  },
+  {
+   "fieldname": "extracted_text",
+   "fieldtype": "Long Text",
+   "label": "Extracted Text"
+  },
+  {
+   "fieldname": "studio_section",
+   "fieldtype": "Section Break",
+   "label": "AI Document Processing Studio"
+  },
+  {
+   "fieldname": "document_studio_html",
+   "fieldtype": "HTML",
+   "label": "Interactive Studio"
+  },
+  {
+   "fieldname": "services_section",
+   "fieldtype": "Section Break",
+   "label": "Applied AI Services History"
+  },
+  {
+   "fieldname": "services_applied",
+   "fieldtype": "Table",
+   "label": "Services Applied",
+   "options": "LPO AI Document Service Item"
+  },
+  {
+   "fieldname": "completion_section",
+   "fieldtype": "Section Break",
+   "label": "Final Output & Delivery"
+  },
+  {
+   "fieldname": "final_output_text",
+   "fieldtype": "Long Text",
+   "label": "Final Output Content"
+  },
+  {
+   "fieldname": "final_output_file",
+   "fieldtype": "Attach",
+   "label": "Generated Output Artifact",
+   "read_only": 1
+  },
+  {
+   "fieldname": "final_output_pdf",
+   "fieldtype": "Attach",
+   "label": "Generated PDF",
+   "read_only": 1
+  },
+  {
+   "fieldname": "final_output_docx",
+   "fieldtype": "Attach",
+   "label": "Generated DOCX",
+   "read_only": 1
+  },
+  {
+   "fieldname": "output_format",
+   "fieldtype": "Data",
+   "label": "Last Output Format",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "export_version",
+   "fieldtype": "Int",
+   "label": "Export Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_by",
+   "fieldtype": "Link",
+   "label": "Completed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_on",
+   "fieldtype": "Datetime",
+   "label": "Completed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completion_summary",
+   "fieldtype": "Small Text",
+   "label": "Completion Summary"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-08-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO AI Document Processor",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Analyst",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

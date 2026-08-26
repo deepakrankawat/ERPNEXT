@@ -9,11 +9,15 @@ function authenticate_with_frappe(socket, next) {
 	let namespace = socket.nsp.name;
 	namespace = namespace.slice(1, namespace.length); // remove leading `/`
 
-	if (namespace != get_site_name(socket)) {
+	let site_name = get_site_name(socket);
+	if (namespace && site_name && namespace !== site_name) {
 		next(new Error("Invalid namespace"));
+		return;
 	}
 
-	if (get_hostname(socket.request.headers.host) != get_hostname(socket.request.headers.origin)) {
+	const host_name = get_hostname(socket.request.headers.host);
+	const origin_name = get_hostname(socket.request.headers.origin);
+	if (origin_name && host_name && origin_name !== host_name && host_name !== "127.0.0.1" && host_name !== "localhost") {
 		next(new Error("Invalid origin"));
 		return;
 	}
@@ -35,7 +39,11 @@ function authenticate_with_frappe(socket, next) {
 		return;
 	}
 
-	let auth_req = request.get(get_url(socket, "/api/method/frappe.realtime.get_user_info"));
+	let auth_req = request
+		.get(get_url(socket, "/api/method/frappe.realtime.get_user_info"))
+		.set("Host", site_name || socket.request.headers.host || "")
+		.set("X-Frappe-Site-Name", site_name || "");
+
 	if (authorization_header) {
 		auth_req = auth_req.set("Authorization", authorization_header);
 	} else if (cookies.sid) {
@@ -49,6 +57,7 @@ function authenticate_with_frappe(socket, next) {
 			socket.user_type = res.body.message.user_type;
 			socket.sid = cookies.sid;
 			socket.authorization_header = authorization_header;
+			socket.site_name = site_name;
 			next();
 		})
 		.catch((e) => {
@@ -61,6 +70,8 @@ function get_site_name(socket) {
 		return socket.site_name;
 	} else if (socket.request.headers["x-frappe-site-name"]) {
 		socket.site_name = get_hostname(socket.request.headers["x-frappe-site-name"]);
+	} else if (socket.request.headers.origin && get_hostname(socket.request.headers.origin) !== "localhost" && get_hostname(socket.request.headers.origin) !== "127.0.0.1") {
+		socket.site_name = get_hostname(socket.request.headers.origin);
 	} else if (
 		conf.default_site &&
 		["localhost", "127.0.0.1"].indexOf(get_hostname(socket.request.headers.host)) !== -1

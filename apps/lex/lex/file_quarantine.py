@@ -62,10 +62,168 @@ def scan_and_validate_inbound_file(file_doc_name: str) -> dict:
 	}
 
 
+def enqueue_lpo_job_file_scan(doc, method=None):
+	"""Queue a malware scan after a Desk attachment is committed to an LPO Job."""
+	if doc.attached_to_doctype != "LPO Job" or not doc.attached_to_name:
+		return
+	frappe.enqueue(
+		"lex.file_quarantine.scan_lpo_job_file_background",
+		queue="short",
+		enqueue_after_commit=True,
+		file_doc_name=doc.name,
+		initiated_by=frappe.session.user,
+	)
+
+
+def scan_lpo_job_file_background(file_doc_name: str, initiated_by: str | None = None):
+	"""Scan a queued Job attachment under its authenticated uploader's identity."""
+	if not frappe.db.exists("File", file_doc_name):
+		return
+	doc = frappe.get_doc("File", file_doc_name)
+	if doc.attached_to_doctype != "LPO Job" or not doc.attached_to_name:
+		return
+	previous_user = frappe.session.user
+	try:
+		if initiated_by and frappe.db.get_value("User", initiated_by, "enabled"):
+			frappe.set_user(initiated_by)
+		else:
+			frappe.set_user("Administrator")
+		return scan_and_validate_inbound_file(file_doc_name)
+	except Exception:
+		frappe.log_error(
+			title="LPO Job Attachment Scan",
+			message=frappe.get_traceback(),
+			reference_doctype="File",
+			reference_name=file_doc_name,
+		)
+	finally:
+		frappe.set_user(previous_user)
+
+
+def rescan_unavailable_files(limit: int = 25):
+	"""Retry previously unavailable malware scans after the scanner recovers."""
+	if not (frappe.conf.get("lexocrates_clamscan_path") or shutil.which("clamscan")):
+		return []
+	files = frappe.get_all(
+		"File",
+		filters={
+			"custom_lex_scan_status": "Scanner Unavailable",
+			"attached_to_doctype": ["in", ["Lexocrates Work Intake", "LPO Matter", "LPO Job"]],
+			"is_folder": 0,
+		},
+		fields=["name", "attached_to_doctype", "attached_to_name"],
+		order_by="modified asc",
+		limit_page_length=max(1, min(int(limit or 25), 100)),
+	)
+	previous_user = frappe.session.user
+	results = []
+	try:
+		frappe.set_user("Administrator")
+		for row in files:
+			try:
+				result = scan_and_validate_inbound_file(row.name)
+				results.append(result)
+				if row.attached_to_doctype == "Lexocrates Work Intake":
+					from lex.work_intake import _refresh_document_state
+
+					_refresh_document_state(frappe.get_doc("Lexocrates Work Intake", row.attached_to_name))
+			except Exception:
+				frappe.log_error(
+					title="Inbound File Rescan Failed",
+					message=frappe.get_traceback(),
+					reference_doctype="File",
+					reference_name=row.name,
+				)
+	finally:
+		frappe.set_user(previous_user)
+	return results
+
+
+def release_internally_generated_text_file(
+	file_doc_name: str,
+	*,
+	expected_checksum: str,
+	generator: str = "Lexocrates Internal Generator",
+) -> dict:
+	return release_internally_generated_file(
+		file_doc_name,
+		expected_checksum=expected_checksum,
+		generator=generator,
+		allowed_extensions={".md", ".txt"},
+	)
+
+
+def release_internally_generated_file(
+	file_doc_name: str,
+	*,
+	expected_checksum: str,
+	generator: str = "Lexocrates Internal Generator",
+	allowed_extensions: set[str] | None = None,
+) -> dict:
+	"""Release a private server-generated text, PDF, or DOCX deliverable.
+
+	Inbound uploads still require the configured malware scanner. This path is
+	intentionally limited to trusted code that just created an LPO Job artifact.
+	"""
+	if not frappe.db.exists("File", file_doc_name):
+		frappe.throw(_("Generated File document not found."), frappe.DoesNotExistError)
+
+	doc = frappe.get_doc("File", file_doc_name)
+	if doc.attached_to_doctype != "LPO Job" or not doc.attached_to_name or not doc.is_private:
+		frappe.throw(
+			_("Only private, internally generated LPO Job files can use this release path."),
+			frappe.PermissionError,
+		)
+	extension = os.path.splitext((doc.file_name or "").lower())[1]
+	permitted = allowed_extensions or {".md", ".txt", ".pdf", ".docx"}
+	if extension not in permitted:
+		frappe.throw(_("Generated file type is not permitted for internal release."), frappe.ValidationError)
+
+	content = doc.get_content()
+	if isinstance(content, str):
+		content = content.encode("utf-8")
+	checksum = hashlib.sha256(content).hexdigest()
+	if not expected_checksum or checksum != expected_checksum:
+		_set_scan_state(doc.name, "Rejected", checksum=checksum, engine=generator, reason="Generated content checksum mismatch")
+		frappe.throw(_("Generated document checksum verification failed."), frappe.ValidationError)
+
+	unsafe_reason = None
+	if b"EICAR-STANDARD-ANTIVIRUS-TEST-FILE" in content:
+		unsafe_reason = "EICAR malware test signature detected"
+	elif content.startswith((b"MZ", b"\x7fELF")):
+		unsafe_reason = "Executable content detected"
+	elif extension in {".md", ".txt"}:
+		try:
+			content.decode("utf-8")
+		except UnicodeDecodeError:
+			unsafe_reason = "Generated text is not valid UTF-8"
+		if b"\x00" in content:
+			unsafe_reason = "Generated text contains null bytes"
+	elif extension == ".pdf" and not content.startswith(b"%PDF-"):
+		unsafe_reason = "Generated content is not a valid PDF signature"
+	elif extension == ".docx":
+		try:
+			with zipfile.ZipFile(io.BytesIO(content)) as archive:
+				names = set(archive.namelist())
+			if "[Content_Types].xml" not in names or "word/document.xml" not in names:
+				unsafe_reason = "Generated DOCX package is incomplete"
+		except (OSError, zipfile.BadZipFile):
+			unsafe_reason = "Generated content is not a valid DOCX package"
+	if unsafe_reason:
+		_set_scan_state(doc.name, "Rejected", checksum=checksum, engine=generator, reason=unsafe_reason)
+		_audit_scan(doc, _file_client(doc), "Generated File Rejected", "Rejected", checksum, unsafe_reason)
+		frappe.throw(_("Generated document failed the internal content safety check."), frappe.ValidationError)
+
+	detail = f"Private server-generated {extension.lstrip('.').upper()} verified against its source checksum"
+	_set_scan_state(doc.name, "Clean", checksum=checksum, engine=generator, reason=detail)
+	_audit_scan(doc, _file_client(doc), "Generated File Released", "Clean", checksum, detail)
+	return {"status": "Clean", "file": doc.name, "checksum": checksum, "scanner_engine": generator}
+
+
 def _verify_scan_permission(doc):
 	if not is_client_user():
 		roles = set(frappe.get_roles(frappe.session.user))
-		if frappe.session.user == "Administrator" or roles.intersection({"LPO_Admin", "LPO_Manager", "System Manager"}):
+		if frappe.session.user == "Administrator" or roles.intersection({"LPO_Admin", "LPO_Manager", "LPO_Analyst", "System Manager"}):
 			return
 	if doc.attached_to_doctype == "LPO Matter" and has_matter_access(doc.attached_to_name, "upload"):
 		return

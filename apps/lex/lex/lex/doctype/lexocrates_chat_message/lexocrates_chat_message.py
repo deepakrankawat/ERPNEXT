@@ -13,6 +13,7 @@ from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 	can_manage_channel,
 	can_post_to_channel,
 	can_view_channel,
+	get_user_chat_identity,
 	get_permission_query_conditions as get_channel_permission_query_conditions,
 )
 
@@ -20,7 +21,9 @@ from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 MESSAGE_EDIT_WINDOW_MINUTES = 15
 MAX_MESSAGE_LENGTH = 10_000
 MAX_ATTACHMENTS = 10
-ALLOWED_REACTIONS = {"👍", "❤️", "✅", "👀", "🎉", "🙏"}
+ALLOWED_REACTIONS = {
+	"👍", "❤️", "✅", "👀", "🎉", "🙏", "🔥", "🚀", "💡", "👏", "💯", "📌", "😂", "🤝", "⚡", "🎯"
+}
 MENTION_PATTERN = re.compile(
 	r"(?<![\w@])@([A-Za-z0-9._+-]+(?:@[A-Za-z0-9.-]+\.[A-Za-z]{2,})?)"
 )
@@ -167,6 +170,7 @@ class LexocratesChatMessage(Document):
 					user=user,
 					after_commit=True,
 				)
+				_send_mention_notification(self, user)
 		self._publish_job_mentions(payload)
 
 	def _publish_job_mentions(self, payload):
@@ -328,18 +332,28 @@ def _bind_uploaded_files(message):
 			)
 
 
-def serialize_message(message: Any, sender_full_name: str | None = None) -> dict:
+def serialize_message(
+	message: Any,
+	sender_full_name: str | None = None,
+	sender_identity: dict | None = None,
+) -> dict:
 	if isinstance(message, str):
 		message = frappe.get_doc("Lexocrates Chat Message", message)
 	get = message.get
+	if sender_identity is None:
+		sender_identity = get_user_chat_identity(get("sender"))
 	if sender_full_name is None:
-		sender_full_name = frappe.db.get_value("User", get("sender"), "full_name")
+		sender_full_name = sender_identity.get("full_name")
 	timestamp = get("sent_at")
 	return {
 		"name": get("name"),
 		"channel": get("channel"),
 		"sender": get("sender"),
 		"sender_full_name": sender_full_name or get("sender"),
+		"sender_role": sender_identity.get("primary_role"),
+		"sender_roles": sender_identity.get("roles") or [],
+		"sender_user_type": sender_identity.get("user_type"),
+		"sender_image": sender_identity.get("user_image"),
 		"message_text": get("message_text"),
 		"sent_at": str(timestamp),
 		"formatted_timestamp": format_datetime(timestamp),
@@ -493,9 +507,9 @@ def get_messages(channel: str, before: str | None = None, limit: int = 100) -> l
 		limit_page_length=limit,
 	)
 	rows.reverse()
-	full_names = _sender_full_names(rows)
+	identities = _sender_identities(rows)
 	return _enrich_messages(
-		[serialize_message(row, full_names.get(row.sender)) for row in rows]
+		[serialize_message(row, sender_identity=identities.get(row.sender)) for row in rows]
 	)
 
 
@@ -532,9 +546,9 @@ def search_messages(search_text: str, channel: str | None = None, limit: int = 5
 		order_by="sent_at desc",
 		limit_page_length=min(max(int(limit or 50), 1), 100),
 	)
-	full_names = _sender_full_names(rows)
+	identities = _sender_identities(rows)
 	return _enrich_messages(
-		[serialize_message(row, full_names.get(row.sender)) for row in rows]
+		[serialize_message(row, sender_identity=identities.get(row.sender)) for row in rows]
 	)
 
 
@@ -613,11 +627,11 @@ def get_thread(message_name: str) -> dict:
 		limit_page_length=200,
 	)
 	all_rows = [root.as_dict()] + rows
-	full_names = _sender_full_names(all_rows)
+	identities = _sender_identities(all_rows)
 	return {
 		"root": root_name,
 		"messages": _enrich_messages(
-			[serialize_message(row, full_names.get(row.sender)) for row in all_rows]
+			[serialize_message(row, sender_identity=identities.get(row.sender)) for row in all_rows]
 		),
 	}
 
@@ -806,9 +820,9 @@ def get_pinned_messages(channel: str) -> list[dict]:
 		order_by="pinned_at desc",
 		limit_page_length=100,
 	)
-	full_names = _sender_full_names(rows)
+	identities = _sender_identities(rows)
 	return _enrich_messages(
-		[serialize_message(row, full_names.get(row.sender)) for row in rows]
+		[serialize_message(row, sender_identity=identities.get(row.sender)) for row in rows]
 	)
 
 
@@ -832,19 +846,9 @@ def publish_typing(channel: str, is_typing: int = 1) -> dict:
 	return payload
 
 
-def _sender_full_names(rows) -> dict[str, str]:
+def _sender_identities(rows) -> dict[str, dict]:
 	senders = {row.sender for row in rows if row.sender}
-	if not senders:
-		return {}
-	return {
-		row.name: row.full_name
-		for row in frappe.get_all(
-			"User",
-			filters={"name": ["in", list(senders)]},
-			fields=["name", "full_name"],
-			limit_page_length=0,
-		)
-	}
+	return {sender: get_user_chat_identity(sender) for sender in senders}
 
 
 def create_system_message(
@@ -880,3 +884,31 @@ def create_system_message(
 	finally:
 		frappe.flags.lexocrates_chat_automation = previous_flag
 	return serialize_message(doc)
+
+
+def _send_mention_notification(message_doc, user: str):
+	"""Create a system Notification Log and trigger realtime alert for mentioned user."""
+	try:
+		if not user or not frappe.db.exists("User", user):
+			return
+
+		channel_doc = frappe.get_cached_doc("Lexocrates Chat Channel", message_doc.channel)
+		sender_name = frappe.db.get_value("User", message_doc.sender, "full_name") or message_doc.sender
+		channel_title = channel_doc.display_name or channel_doc.channel_name
+		subject = _("{0} mentioned you in #{1}").format(sender_name, channel_title)
+
+		# Create standard Frappe Notification Log
+		notification = frappe.get_doc({
+			"doctype": "Notification Log",
+			"subject": subject,
+			"for_user": user,
+			"from_user": message_doc.sender,
+			"type": "Mention",
+			"document_type": "Lexocrates Chat Message",
+			"document_name": message_doc.name,
+			"email_content": message_doc.message_text,
+		})
+		notification.flags.ignore_permissions = True
+		notification.insert(ignore_permissions=True)
+	except Exception as e:
+		frappe.log_error(f"Failed to create Notification Log for mention: {e}", "Lexocrates Chat Mention")

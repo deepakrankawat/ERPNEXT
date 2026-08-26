@@ -14,6 +14,11 @@ from lex.client_access import (
 	has_matter_access,
 	has_portal_capability,
 )
+from lex.pdf_watermark import (
+	add_secure_download_url,
+	secure_download_url_for_file_url,
+	secure_pdf_download_url,
+)
 from lex.portal_audit import create_portal_audit_event
 
 
@@ -49,6 +54,24 @@ def get_portal_dashboard():
 		order_by="due_date asc",
 		limit_page_length=100,
 	)
+	for job in jobs:
+		# The canonical final deliverable is intentionally unavailable until the
+		# operational Job reaches Completed.  Ready-for-Delivery and Delivered are
+		# still internal/acknowledgement states, not the client's download gate.
+		job.delivery_download_url = (
+			secure_download_url_for_file_url(job.delivery_document)
+			if job.job_status == "Completed" and job.delivery_document else None
+		)
+		job.delivery_preview_url = (
+			secure_download_url_for_file_url(job.delivery_document)
+			if (
+				job.job_status == "Ready for Delivery"
+				and job.delivery_document
+				and portal_user.approval_authority not in {None, "", "None"}
+				and has_matter_access(job.engagement, "approve")
+			)
+			else None
+		)
 	open_jobs = sum(row.job_status not in {"Delivered", "Completed", "Cancelled"} for row in jobs)
 	wallet, transactions = _wallet_data(portal_user)
 	from lex.lexpack import get_lexpack_portal_data
@@ -62,7 +85,7 @@ def get_portal_dashboard():
 		order_by="event_timestamp desc",
 		limit_page_length=15,
 	)
-	documents = _documents(matters, jobs, intakes) if portal_user.can_upload_documents or matters or intakes else []
+	documents = _documents(matters, jobs, intakes, portal_user) if portal_user.can_upload_documents or matters or intakes else []
 	invoices = _invoices(portal_user.client) if portal_user.billing_access else []
 	approvals = [
 		row for row in jobs
@@ -164,26 +187,71 @@ def _portal_users(portal_user):
 	)
 
 
-def _documents(matters, jobs, intakes=None):
+def _documents(matters, jobs, intakes=None, portal_user=None):
+	"""Return client-owned uploads plus completed canonical deliverables only."""
 	rows = []
+	portal_user = portal_user or _require_portal_user()
+	client_users = frappe.get_all(
+		"Lexocrates Portal User",
+		filters={"client": portal_user.client},
+		pluck="user",
+		limit_page_length=0,
+	)
+	file_fields = [
+		"name", "file_name", "file_url", "file_size", "is_private", "owner",
+		"attached_to_doctype", "attached_to_name", "modified",
+	]
 	for doctype, names in (
 		("Lexocrates Work Intake", [row.get("name") for row in (intakes or [])]),
 		("LPO Matter", [row.name for row in matters]),
-		("LPO Job", [row.name for row in jobs]),
 	):
 		if not names:
 			continue
-		rows.extend(frappe.get_all(
+		uploads = frappe.get_all(
 			"File",
-			filters={"attached_to_doctype": doctype, "attached_to_name": ["in", names], "is_folder": 0},
-			fields=[
-				"name", "file_name", "file_url", "file_size", "is_private", "attached_to_doctype",
-				"attached_to_name", "modified",
-			],
+			filters={
+				"attached_to_doctype": doctype,
+				"attached_to_name": ["in", names],
+				"owner": ["in", client_users or [frappe.session.user]],
+				"is_folder": 0,
+			},
+			fields=file_fields,
 			order_by="modified desc",
 			limit_page_length=200,
-		))
+		)
+		for row in uploads:
+			row.portal_document_type = "Client Upload"
+		rows.extend(uploads)
+
+	delivery_by_job = {
+		row.name: row.delivery_document
+		for row in jobs
+		if row.job_status == "Completed" and row.delivery_document
+	}
+	if delivery_by_job:
+		deliverables = frappe.get_all(
+			"File",
+			filters={
+				"attached_to_doctype": "LPO Job",
+				"attached_to_name": ["in", list(delivery_by_job)],
+				"file_url": ["in", list(delivery_by_job.values())],
+				"is_folder": 0,
+			},
+			fields=file_fields,
+			order_by="modified desc",
+			limit_page_length=200,
+		)
+		for row in deliverables:
+			if delivery_by_job.get(row.attached_to_name) != row.file_url:
+				continue
+			row.portal_document_type = "Completed Deliverable"
+			rows.append(row)
+
+	# A historical File row can be returned through more than one scoped link.
+	rows = list({row.name: row for row in rows}.values())
 	rows.sort(key=lambda row: str(row.modified or ""), reverse=True)
+	for row in rows:
+		add_secure_download_url(row)
 	return rows
 
 
@@ -312,6 +380,7 @@ def upload_matter_document(matter: str, filename: str, content: str):
 		"name": file_doc.name,
 		"file_name": file_doc.file_name,
 		"file_url": file_doc.file_url,
+		"download_url": secure_pdf_download_url(file_doc.name) if extension == ".pdf" else file_doc.file_url,
 		"file_size": file_doc.file_size,
 		"attached_to_doctype": "LPO Matter",
 		"attached_to_name": matter,
@@ -326,30 +395,33 @@ def submit_client_approval(job: str, decision: str, notes: str | None = None):
 	portal_user = _require_portal_user()
 	if decision not in {"Approved", "Changes Requested"}:
 		frappe.throw(_("Choose Approved or Changes Requested."), frappe.ValidationError)
-	job_data = frappe.db.get_value(
-		"LPO Job", job, ["engagement", "job_status", "job_title"], as_dict=True
-	)
-	if not job_data or job_data.job_status != "Ready for Delivery" or not has_matter_access(job_data.engagement, "approve"):
+	job_doc = frappe.get_doc("LPO Job", job)
+	if job_doc.job_status != "Ready for Delivery" or not has_matter_access(job_doc.engagement, "approve"):
 		frappe.throw(_("This deliverable is not available for your approval."), frappe.PermissionError)
-	frappe.db.set_value("LPO Job", job, {
-		"client_approval_status": decision,
-		"client_approved_by": frappe.session.user,
-		"client_approved_on": now_datetime(),
-		"client_approval_notes": (notes or "").strip(),
-		"delivery_receipt_status": "Acknowledged" if decision == "Approved" else "Rejected",
-		"delivery_acknowledged_by": frappe.session.user,
-		"delivery_acknowledged_on": now_datetime(),
-	})
+	job_doc.client_approval_status = decision
+	job_doc.client_approved_by = frappe.session.user
+	job_doc.client_approved_on = now_datetime()
+	job_doc.client_approval_notes = (notes or "").strip()
+	job_doc.delivery_receipt_status = "Acknowledged" if decision == "Approved" else "Rejected"
+	job_doc.delivery_acknowledged_by = frappe.session.user
+	job_doc.delivery_acknowledged_on = now_datetime()
+	job_doc.job_status = "Completed" if decision == "Approved" else "In Progress"
+	previous_flag = getattr(frappe.flags, "lexocrates_portal_service", False)
+	frappe.flags.lexocrates_portal_service = True
+	try:
+		job_doc.save(ignore_permissions=True)
+	finally:
+		frappe.flags.lexocrates_portal_service = previous_flag
 	create_portal_audit_event(
 		client=portal_user.client,
 		portal_user=portal_user.name,
-		matter=job_data.engagement,
+		matter=job_doc.engagement,
 		action="Client Approval Submitted",
 		object_type="LPO Job",
 		object_id=job,
-		new_value={"decision": decision, "notes": (notes or "").strip()},
+		new_value={"decision": decision, "notes": (notes or "").strip(), "job_status": job_doc.job_status},
 	)
-	return {"name": job, "decision": decision}
+	return {"name": job, "decision": decision, "job_status": job_doc.job_status}
 
 
 @frappe.whitelist()
@@ -410,4 +482,6 @@ def _require_portal_user():
 	portal_user = get_portal_user()
 	if not portal_user:
 		frappe.throw(_("An active Lexocrates Portal User account is required."), frappe.PermissionError)
+	if portal_user.mfa_required and not frappe.db.get_single_value("System Settings", "enable_two_factor_auth"):
+		frappe.throw(_("Multi-factor authentication is required for this account but is not enabled on the site."), frappe.PermissionError)
 	return portal_user

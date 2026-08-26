@@ -1,0 +1,38 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "field:rule_key",
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["rule_key", "factor_type", "factor_key", "multiplier", "active", "score_column", "minimum_score", "maximum_score", "notes"],
+ "fields": [
+  {"fieldname": "rule_key", "fieldtype": "Data", "hidden": 1, "label": "Rule Key", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "factor_type", "fieldtype": "Select", "in_list_view": 1, "label": "Factor Type", "options": "Complexity\nPriority\nJurisdiction\nRisk\nReviewer Level", "reqd": 1},
+  {"fieldname": "factor_key", "fieldtype": "Data", "in_list_view": 1, "label": "Factor", "reqd": 1, "search_index": 1},
+  {"default": "1", "fieldname": "multiplier", "fieldtype": "Float", "in_list_view": 1, "label": "Multiplier", "precision": "4", "reqd": 1},
+  {"default": "1", "fieldname": "active", "fieldtype": "Check", "in_list_view": 1, "label": "Active"},
+  {"fieldname": "score_column", "fieldtype": "Column Break"},
+  {"description": "Used only for Complexity rules.", "fieldname": "minimum_score", "fieldtype": "Int", "label": "Minimum Score"},
+  {"description": "Used only for Complexity rules.", "fieldname": "maximum_score", "fieldtype": "Int", "label": "Maximum Score"},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "Management Notes"}
+ ],
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO LexPoint Multiplier",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "LPO_Admin", "share": 1, "write": 1},
+  {"create": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "LPO_Manager", "write": 1},
+  {"read": 1, "report": 1, "role": "CEO"}
+ ],
+ "search_fields": "factor_type,factor_key",
+ "sort_field": "factor_type",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

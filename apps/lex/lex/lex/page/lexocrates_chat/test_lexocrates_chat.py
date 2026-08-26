@@ -28,4 +28,5 @@ class TestLexocratesChatPage(FrappeTestCase):
 			reference_doctype=None,
 			reference_name=None,
 			members=None,
+			system_user_only=1,
 		)

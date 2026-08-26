@@ -12,17 +12,19 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     mariadb-client \
-    redis-tools \
-    wkhtmltopdf \
+	redis-tools \
+	clamav \
+	wkhtmltopdf \
     libssl-dev \
     libffi-dev \
     vim \
     cron \
     sudo \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs \
-    && npm install -g yarn \
-    && rm -rf /var/lib/apt/lists/*
+	&& apt-get install -y nodejs \
+	&& npm install -g yarn \
+	&& freshclam \
+	&& rm -rf /var/lib/apt/lists/*
 
 # Create dedicated frappe user
 RUN useradd -ms /bin/bash frappe \
@@ -44,7 +46,7 @@ RUN python -m venv env \
         -e apps/frappe \
         -e apps/erpnext \
         -e apps/erpnext_custom \
-        -e apps/lpo_msg
+        -e apps/lex
 
 COPY --chown=frappe:frappe docker/Procfile.dev ./Procfile
 RUN mkdir -p config/pids logs sites

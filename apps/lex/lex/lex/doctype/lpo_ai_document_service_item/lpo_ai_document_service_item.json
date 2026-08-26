@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "creation": "2026-08-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "service",
+  "service_name",
+  "service_code",
+  "status",
+  "custom_instructions",
+  "output_result",
+  "prompt_snapshot",
+  "tokens_used",
+  "cost",
+  "execution_time_seconds",
+  "executed_by",
+  "executed_on",
+  "ai_execution",
+  "error_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "service",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Service",
+   "options": "LPO AI Document Service",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Service Name"
+  },
+  {
+   "fieldname": "service_code",
+   "fieldtype": "Data",
+   "label": "Service Code"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nRunning\nCompleted\nFailed"
+  },
+  {
+   "fieldname": "custom_instructions",
+   "fieldtype": "Small Text",
+   "label": "Custom Instructions"
+  },
+  {
+   "fieldname": "output_result",
+   "fieldtype": "Long Text",
+   "label": "Output Result"
+  },
+  {
+   "fieldname": "prompt_snapshot",
+   "fieldtype": "Long Text",
+   "label": "Prompt Snapshot"
+  },
+  {
+   "default": "0",
+   "fieldname": "tokens_used",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Tokens Used"
+  },
+  {
+   "default": "0",
+   "fieldname": "cost",
+   "fieldtype": "Float",
+   "label": "Cost"
+  },
+  {
+   "default": "0",
+   "fieldname": "execution_time_seconds",
+   "fieldtype": "Float",
+   "label": "Duration (s)"
+  },
+  {
+   "fieldname": "executed_by",
+   "fieldtype": "Link",
+   "label": "Executed By",
+   "options": "User"
+  },
+  {
+   "fieldname": "executed_on",
+   "fieldtype": "Datetime",
+   "label": "Executed On"
+  },
+  {
+   "fieldname": "ai_execution",
+   "fieldtype": "Link",
+   "label": "AI Execution",
+   "options": "LPO AI Execution"
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Error Message"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-08-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO AI Document Service Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

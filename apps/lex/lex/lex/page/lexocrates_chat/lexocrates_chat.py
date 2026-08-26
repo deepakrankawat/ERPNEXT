@@ -4,15 +4,15 @@ import frappe
 from frappe import _
 
 from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
-	APP_ROLES,
 	CONTEXT_DOCTYPES,
 	can_start_direct_message,
 	create_channel as _create_channel,
 	ensure_contextual_channel,
 	get_channels,
+	get_channel_members as _get_channel_members,
 	get_or_create_direct_channel as _get_or_create_direct_channel,
+	get_user_chat_identity,
 	is_chat_user,
-	is_client_only_user,
 	is_management_user,
 	serialize_channel,
 )
@@ -40,7 +40,7 @@ from lex.lex.doctype.lexocrates_chat_presence.lexocrates_chat_presence import (
 @frappe.whitelist()
 def get_chat_bootstrap(selected_channel: str | None = None) -> dict:
 	if not is_chat_user():
-		frappe.throw(_("An LPO role is required to use Lexocrates Chat."), frappe.PermissionError)
+		frappe.throw(_("An enabled internal user or authorized client role is required to use Lexocrates Chat."), frappe.PermissionError)
 	channels = get_channels()
 	channel_names = {channel["name"] for channel in channels}
 	if selected_channel not in channel_names:
@@ -54,6 +54,7 @@ def get_chat_bootstrap(selected_channel: str | None = None) -> dict:
 			"User", frappe.session.user, "full_name"
 		)
 		or frappe.session.user,
+		"current_user_identity": get_user_chat_identity(frappe.session.user),
 		"can_create_channel": is_management_user(),
 		"can_start_direct_message": can_start_direct_message(),
 		"edit_window_minutes": MESSAGE_EDIT_WINDOW_MINUTES,
@@ -76,6 +77,7 @@ def create_channel(
 	reference_doctype: str | None = None,
 	reference_name: str | None = None,
 	members=None,
+	system_user_only: int = 1,
 ):
 	"""Expose channel creation without forwarding Frappe's internal request keys."""
 	return _create_channel(
@@ -85,7 +87,13 @@ def create_channel(
 		reference_doctype=reference_doctype,
 		reference_name=reference_name,
 		members=members,
+		system_user_only=system_user_only,
 	)
+
+
+@frappe.whitelist()
+def get_channel_members(channel: str):
+	return _get_channel_members(channel=channel)
 
 
 @frappe.whitelist()
@@ -220,12 +228,21 @@ def search_users(search_text: str | None = None) -> list[dict]:
 		limit_page_length=25,
 	)
 	return [
-		user
+		get_user_chat_identity(user.name)
 		for user in users
-		if user.name != frappe.session.user
-		and (
-			user.name == "Administrator"
-			or APP_ROLES.intersection(frappe.get_roles(user.name))
-			or bool(set(frappe.get_roles(user.name)).intersection({"System Manager", "LPO_Admin", "LPO_Manager", "LPO_Analyst"}))
-		)
+		if user.name != frappe.session.user and can_start_direct_message(user.name)
 	]
+
+
+@frappe.whitelist()
+def get_unread_summary() -> dict:
+	if not is_chat_user():
+		return {"total_unread": 0, "channels": []}
+	channels = get_channels()
+	total_unread = sum(int(c.get("unread_count") or 0) for c in channels)
+	unread_channels = [c for c in channels if int(c.get("unread_count") or 0) > 0]
+	return {
+		"total_unread": total_unread,
+		"channels": unread_channels,
+		"all_channels": channels[:15],
+	}

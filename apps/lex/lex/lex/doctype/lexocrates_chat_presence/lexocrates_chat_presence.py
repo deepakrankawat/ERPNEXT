@@ -56,14 +56,6 @@ def _is_chat_user(user: str) -> bool:
 	return is_chat_user(user)
 
 
-def _can_direct_message(user: str) -> bool:
-	from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
-		can_start_direct_message,
-	)
-
-	return can_start_direct_message(user)
-
-
 def _presence_recipients(user: str) -> set[str]:
 	recipients = {user}
 	channel_names = frappe.get_all(
@@ -85,17 +77,9 @@ def _presence_recipients(user: str) -> set[str]:
 			)
 		)
 
-	# Enabled internal chat users can discover one another in the Direct Message
-	# picker, so the same audience is allowed to receive their presence updates.
-	if _can_direct_message(user):
-		for candidate in frappe.get_all(
-			"User",
-			filters={"enabled": 1, "user_type": "System User"},
-			pluck="name",
-			limit_page_length=500,
-		):
-			if _can_direct_message(candidate):
-				recipients.add(candidate)
+	# Presence is published only to existing conversation peers. New DM candidates
+	# become peers as soon as the private channel is created; loading every Desk
+	# user here would make the chat bootstrap grow with the whole User table.
 	return {recipient for recipient in recipients if recipient and recipient != "Guest"}
 
 

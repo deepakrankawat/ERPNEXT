@@ -46,6 +46,10 @@
   "allow_ai_processing_by_default",
   "authorization_section",
   "authorized_portal_users",
+  "ai_matter_review_section",
+  "ai_matter_review_html",
+  "ai_matter_overall_score",
+  "ai_matter_last_audit",
   "communication_section",
   "chat_interface_html"
  ],
@@ -300,7 +304,8 @@
    "description": "A job still records its own explicit AI-processing decision.",
    "fieldname": "allow_ai_processing_by_default",
    "fieldtype": "Check",
-   "label": "Allow AI Processing by Default"
+   "label": "Allow AI Processing by Default",
+   "permlevel": 1
   },
   {
    "fieldname": "authorization_section",
@@ -312,6 +317,32 @@
    "fieldtype": "Table",
    "label": "Matter Authorization",
    "options": "Lexocrates Matter Authorization"
+  },
+  {
+   "fieldname": "ai_matter_review_section",
+   "fieldtype": "Section Break",
+   "label": "🤖 AI Matter Review & Job Audits",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "ai_matter_review_html",
+   "fieldtype": "HTML",
+   "label": "AI Review Dashboard",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "ai_matter_overall_score",
+   "fieldtype": "Percent",
+   "label": "Overall AI Quality Score",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_matter_last_audit",
+   "fieldtype": "Datetime",
+   "label": "Last AI Audit Date",
+   "permlevel": 1,
+   "read_only": 1
   },
   {
    "fieldname": "communication_section",
@@ -346,6 +377,12 @@
    "write": 1
   },
   {
+   "permlevel": 1,
+   "read": 1,
+   "role": "LPO_Admin",
+   "write": 1
+  },
+  {
    "create": 1,
    "email": 1,
    "export": 1,
@@ -357,9 +394,20 @@
    "write": 1
   },
   {
+   "permlevel": 1,
+   "read": 1,
+   "role": "LPO_Manager",
+   "write": 1
+  },
+  {
    "print": 1,
    "read": 1,
    "report": 1,
+   "role": "LPO_Analyst"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
    "role": "LPO_Analyst"
   },
   {
@@ -379,6 +427,12 @@
    "report": 1,
    "role": "System Manager",
    "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
    "write": 1
   }
  ],

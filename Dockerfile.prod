@@ -1,0 +1,48 @@
+FROM python:3.11-slim-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive \
+	PYTHONUNBUFFERED=1 \
+	PATH=/home/frappe/frappe-bench/env/bin:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	build-essential \
+	clamav \
+	curl \
+	git \
+	libffi-dev \
+	libssl-dev \
+	mariadb-client \
+	python3-dev \
+	redis-tools \
+	wkhtmltopdf \
+	&& curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+	&& apt-get install -y --no-install-recommends nodejs \
+	&& npm install --global yarn \
+	&& rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --shell /bin/bash frappe \
+	&& pip install --no-cache-dir frappe-bench
+
+USER frappe
+WORKDIR /home/frappe/frappe-bench
+
+COPY --chown=frappe:frappe apps ./apps
+COPY --chown=frappe:frappe docker/Procfile.dev ./Procfile
+
+RUN mkdir -p config/pids sites/assets logs \
+	&& python -m venv env \
+	&& env/bin/pip install --no-cache-dir --upgrade pip wheel \
+	&& env/bin/pip install --no-cache-dir \
+		-e apps/frappe \
+		-e apps/erpnext \
+		-e apps/erpnext_custom \
+		-e apps/lex \
+	&& printf 'frappe\nerpnext\nerpnext_custom\nlex\n' > sites/apps.txt \
+	&& cd apps/frappe && yarn install --frozen-lockfile \
+	&& cd /home/frappe/frappe-bench/apps/erpnext && yarn install --frozen-lockfile \
+	&& cd /home/frappe/frappe-bench \
+	&& bench build --production
+
+EXPOSE 8000 9000
+
+CMD ["gunicorn", "--chdir", "sites", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "4", "--worker-class", "gthread", "--timeout", "180", "frappe.app:application"]

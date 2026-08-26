@@ -27,8 +27,11 @@ add_to_apps_screen = [
 # ------------------
 
 # include js, css files in header of desk.html
-app_include_css = "/assets/lex/css/lexocrates_branding.css?v=20260818-1"
-app_include_js = "/assets/lex/js/lexocrates_desk_navbar.js?v=20260818-11"
+app_include_css = "/assets/lex/css/lexocrates_branding.css?v=20260825-1"
+app_include_js = [
+	"/assets/lex/js/lexocrates_chat_sound.js?v=20260825-1",
+	"/assets/lex/js/lexocrates_desk_navbar.js?v=20260825-1",
+]
 
 # include js, css files in header of web template
 web_include_css = "/assets/lex/css/lexocrates_branding.css?v=20260818-1"
@@ -113,6 +116,12 @@ after_migrate = [
 	"lex.persona_workspaces.ensure_persona_roles",
 	"lex.persona_workspaces.ensure_persona_workspaces",
 	"lex.client_workspace.migrate_client_users_to_portal",
+	"lex.ai_document_engine.ensure_default_ai_document_services",
+	"lex.execution_policies.ensure_default_execution_policies",
+	"lex.lex.doctype.lpo_ai_settings.lpo_ai_settings.ensure_ai_provider_registry",
+	"lex.pdf_watermark.ensure_all_pdfs_private",
+	"lex.lexpoint_estimation.ensure_default_lexpoint_rules",
+	"lex.install.ensure_ai_document_estimate_workspace_link",
 	"lex.audit_worm_chain.backfill_audit_hash_chain",
 	"lex.lexocrates_chat_sync.backfill_matter_chat_channels",
 ]
@@ -166,6 +175,7 @@ permission_query_conditions = {
 	"Lexocrates Wallet Transaction": "lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction.get_permission_query_conditions",
 	"LexPack Purchase": "lex.lex.doctype.lexpack_purchase.lexpack_purchase.get_permission_query_conditions",
 	"Lexocrates Work Intake": "lex.lex.doctype.lexocrates_work_intake.lexocrates_work_intake.get_permission_query_conditions",
+	"LPO AI Document Export": "lex.lex.doctype.lpo_ai_document_export.lpo_ai_document_export.get_permission_query_conditions",
 }
 
 has_permission = {
@@ -185,6 +195,7 @@ has_permission = {
 	"Lexocrates Wallet Transaction": "lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction.has_permission",
 	"LexPack Purchase": "lex.lex.doctype.lexpack_purchase.lexpack_purchase.has_permission",
 	"Lexocrates Work Intake": "lex.lex.doctype.lexocrates_work_intake.lexocrates_work_intake.has_permission",
+	"LPO AI Document Export": "lex.lex.doctype.lpo_ai_document_export.lpo_ai_document_export.has_permission",
 }
 
 # DocType Class
@@ -200,6 +211,10 @@ has_permission = {
 # Hook on document methods and events
 
 doc_events = {
+	"File": {
+		"before_validate": "lex.pdf_watermark.enforce_pdf_private_storage",
+		"after_insert": "lex.file_quarantine.enqueue_lpo_job_file_scan",
+	},
 	"User": {
 		"on_update": "lex.portal_audit.sync_portal_user_security",
 	},
@@ -232,6 +247,8 @@ scheduler_events = {
 	"hourly": [
 		"lex.chat_automation.publish_sla_breaches",
 		"lex.tasks.expire_portal_security_states",
+		"lex.work_intake.reconcile_funded_intakes",
+		"lex.file_quarantine.rescan_unavailable_files",
 	],
 	"cron": {
 		"* * * * *": [
@@ -250,10 +267,13 @@ scheduler_events = {
 
 # Overriding Methods
 # ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "lex.event.get_events"
-# }
+override_whitelisted_methods = {
+	# Prevent Frappe's generic download endpoint from returning an unmarked PDF.
+	# Non-PDF downloads preserve the framework's normal response behavior.
+	"frappe.handler.download_file": "lex.pdf_watermark.secure_download_file",
+	"frappe.utils.file_manager.download_file": "lex.pdf_watermark.secure_download_file",
+	"frappe.core.doctype.file.file.download_file": "lex.pdf_watermark.secure_download_file",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
@@ -273,8 +293,8 @@ scheduler_events = {
 
 # Request Events
 # ----------------
-# before_request = ["lex.utils.before_request"]
-# after_request = ["lex.utils.after_request"]
+before_request = ["lex.pdf_watermark.install_private_pdf_download_guard"]
+after_request = ["lex.pdf_watermark.watermark_system_user_pdf_response"]
 
 # Job Events
 # ----------

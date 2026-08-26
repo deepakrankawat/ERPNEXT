@@ -3,12 +3,17 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+from lex.portal_management import _safe_local_redirect
+
 no_cache = 1
 
 
 def get_context(context):
 	if frappe.session.user != "Guest":
-		redirect_to = frappe.local.request.args.get("redirect-to") or frappe.local.request.args.get("redirect_to")
+		redirect_to = _safe_local_redirect(
+			frappe.local.request.args.get("redirect-to") or frappe.local.request.args.get("redirect_to"),
+			"",
+		)
 		if not redirect_to:
 			user_type = frappe.db.get_value("User", frappe.session.user, "user_type")
 			if user_type == "System User":
@@ -37,5 +42,8 @@ def get_context(context):
 		raise frappe.Redirect
 
 	context.title = _("Lexocrates Platform Access")
-	context.redirect_to = frappe.local.request.args.get("redirect-to") or frappe.local.request.args.get("redirect_to") or ""
+	context.redirect_to = _safe_local_redirect(
+		frappe.local.request.args.get("redirect-to") or frappe.local.request.args.get("redirect_to"),
+		"",
+	)
 	return context

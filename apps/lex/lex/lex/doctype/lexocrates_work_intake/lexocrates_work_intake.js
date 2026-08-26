@@ -1,5 +1,10 @@
 frappe.ui.form.on("Lexocrates Work Intake", {
 	refresh(frm) {
+		if (!frm.is_new() && frm.doc.ai_document_estimate) {
+			frm.add_custom_button(__("Open AI Estimate"), () => {
+				frappe.set_route("Form", "LPO AI Document Estimate", frm.doc.ai_document_estimate);
+			}, __("Intake"));
+		}
 		if (!frm.is_new() && ["Security Review", "Analysis Pending"].includes(frm.doc.status)) {
 			frm.add_custom_button(__("Run Secure Analysis"), async () => {
 				await frappe.call({

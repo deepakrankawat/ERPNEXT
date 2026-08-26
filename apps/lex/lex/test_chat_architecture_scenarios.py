@@ -9,6 +9,8 @@ from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 	can_start_direct_message,
 	can_post_to_channel,
 	can_view_channel,
+	create_channel,
+	get_channel_members,
 	get_or_create_direct_channel,
 )
 from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import (
@@ -230,7 +232,22 @@ class TestChatArchitectureScenarios(FrappeTestCase):
 		frappe.set_user("Administrator")
 		channel = get_or_create_direct_channel(staff.name)
 		self.assertTrue(channel["is_direct_message"])
+		self.assertTrue(channel["system_user_only"])
 		self.assertEqual(channel["channel_type"], "Private")
+		self.assertEqual(channel["direct_user_role"], "LPO_Analyst")
+		self.assertEqual(
+			{row["primary_role"] for row in get_channel_members(channel["name"])},
+			{"Administrator", "LPO_Analyst"},
+		)
+
+		team_channel = create_channel(
+			channel_name=f"#test-team-{frappe.generate_hash(length=8).lower()}",
+			channel_type="Private",
+			members=[staff.name],
+			system_user_only=1,
+		)
+		self.assertTrue(team_channel["system_user_only"])
+		self.assertEqual(team_channel["member_count"], 2)
 
 		frappe.set_user(staff.name)
 		self.assertTrue(can_start_direct_message())
@@ -245,6 +262,15 @@ class TestChatArchitectureScenarios(FrappeTestCase):
 			search_users()
 		with self.assertRaises(frappe.PermissionError):
 			get_or_create_direct_channel("Administrator")
+
+		frappe.set_user("Administrator")
+		with self.assertRaises(frappe.PermissionError):
+			create_channel(
+				channel_name=f"#invalid-client-team-{frappe.generate_hash(length=8).lower()}",
+				channel_type="Private",
+				members=[website_user.name],
+				system_user_only=1,
+			)
 
 	def test_7_jobs_use_matter_room_and_are_mentionable(self):
 		client = _make_client("Matter Job Chat Client")

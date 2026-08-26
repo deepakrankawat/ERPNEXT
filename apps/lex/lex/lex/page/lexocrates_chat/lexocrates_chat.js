@@ -6,6 +6,14 @@ frappe.pages["lexocrates-chat"].on_page_show = (wrapper) => {
 	wrapper.lexocrates_chat?.show();
 };
 
+const EMOJI_CATEGORIES = {
+	"Reactions": ["👍", "❤️", "🔥", "🚀", "✅", "👀", "🎉", "🙏", "💡", "👏", "💯", "📌", "😂", "🤝", "⚡", "🎯"],
+	"Smileys": ["😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🤫", "🤔", "🤐", "🤨", "😐", "😑", "😶", "😏", "😒", "🙄", "😬", "😮", "😴", "😷", "🤒", "🤕", "🤢", "🤮", "🤧", "🥵", "🥶", "🥴", "😵", "🤯", "🤠", "🥳", "😎", "🤓", "🧐"],
+	"Hands & Gestures": ["👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "✌️", "🤟", "🤘", "👌", "🤌", "🤏", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐️", "🖖", "👋", "🤙", "💪", "🦾", "🖕", "✍️", "🙏", "🤝", "👏", "🙌", "👐", "🤲"],
+	"Work & Legal": ["💼", "📁", "📂", "📄", "📜", "📑", "📊", "📈", "📉", "⚖️", "🏛️", "🏢", "💻", "🖥️", "🖨️", "⌨️", "🖱️", "💾", "💿", "📱", "📞", "📠", "🔍", "🔎", "🔐", "🔒", "🔓", "✉️", "📧", "📦", "🏷️", "📌", "📍", "📎", "📏", "📋", "📅", "📆", "⏱️", "⏳", "⌛", "⏰"],
+	"Symbols & Badges": ["✅", "✔️", "☑️", "❌", "❎", "❓", "❗", "‼️", "⁉️", "⚠️", "⛔", "🚫", "💯", "💢", "💥", "💫", "💦", "💨", "🕳️", "💬", "💭", "🗯️", "🔴", "🟢", "🟡", "🔵", "🟣", "⚫", "⚪", "⭐", "🌟", "✨", "⚡", "🔥", "🚀", "💡", "🎯"]
+};
+
 class LexocratesChatPage {
 	constructor(wrapper) {
 		this.wrapper = wrapper;
@@ -27,6 +35,12 @@ class LexocratesChatPage {
 		this.last_presence_activity_event = 0;
 		this.realtime_connected = Boolean(frappe.realtime?.socket?.connected);
 		this.loaded = false;
+		this.sound_muted = window.lexocratesChatSound?.isMuted()
+			?? localStorage.getItem("lex_chat_sound_muted") === "1";
+		this.media_recorder = null;
+		this.audio_chunks = [];
+		this.recording_timer = null;
+
 		this.page = frappe.ui.make_app_page({
 			parent: wrapper,
 			title: __("Lexocrates Chat"),
@@ -36,6 +50,40 @@ class LexocratesChatPage {
 		this.render_shell();
 		this.bind_events();
 		this.bind_realtime();
+		this.bind_paste_and_drop();
+	}
+
+	update_sound_button() {
+		this.sound_muted = window.lexocratesChatSound?.isMuted() ?? this.sound_muted;
+		this.$root
+			.find(".lex-chat__sound-toggle")
+			.html(this.sound_muted ? "&#128263;" : "&#128276;")
+			.attr("title", this.sound_muted ? __("Unmute Sound") : __("Mute Sound"))
+			.attr("aria-label", this.sound_muted ? __("Unmute chat sounds") : __("Mute chat sounds"))
+			.attr("aria-pressed", this.sound_muted ? "true" : "false")
+			.toggleClass("is-muted", this.sound_muted);
+	}
+
+	play_chat_sound(kind, key = null) {
+		if (this.sound_muted) return;
+		window.lexocratesChatSound?.play(kind, key);
+	}
+
+	should_sound_message(message) {
+		if (!message || message.sender === this.bootstrap?.current_user) return false;
+		const channel = this.channels.find((item) => item.name === message.channel);
+		if (!channel || channel.notification_level === "Muted") return false;
+		if (
+			channel.notification_level === "Mentions Only" &&
+			!(message.mentions || []).includes(this.bootstrap?.current_user)
+		) return false;
+		return true;
+	}
+
+	play_incoming_message(message) {
+		if (!this.should_sound_message(message)) return;
+		const key = message.name ? `incoming:${message.name}` : null;
+		this.play_chat_sound("incoming", key);
 	}
 
 	render_shell() {
@@ -56,6 +104,7 @@ class LexocratesChatPage {
 						<div class="lex-chat__self-avatar"></div>
 						<div class="lex-chat__self-copy">
 							<strong class="lex-chat__self-name">${__("Loading user")}</strong>
+							<span class="lex-chat__self-role"></span>
 							<span class="lex-chat__self-status text-muted">${__("Offline")}</span>
 						</div>
 						<select class="form-control input-xs lex-chat__presence-select" aria-label="${__("Set your presence status")}">
@@ -67,7 +116,7 @@ class LexocratesChatPage {
 					</div>
 					<div class="lex-chat__channel-search">
 						<span class="lex-chat__search-icon">${frappe.utils.icon("search", "sm")}</span>
-						<input type="search" class="form-control lex-chat__channel-filter" placeholder="${__("Search Matter ID, name or organization")}" aria-label="${__("Search Matter channels by ID, name or organization")}">
+						<input type="search" class="form-control lex-chat__channel-filter" placeholder="${__("Search Matter ID, name or user")}" aria-label="${__("Search channels")}">
 					</div>
 					<div class="lex-chat__channel-list" role="navigation"></div>
 			</aside>
@@ -76,7 +125,7 @@ class LexocratesChatPage {
 				<div class="lex-chat__empty-state">
 					<div class="lex-chat__empty-icon">${frappe.utils.icon("message-circle", "xl")}</div>
 					<h3>${__("Secure legal operations communication")}</h3>
-					<p>${__("Choose a channel to review its auditable conversation history.")}</p>
+					<p>${__("Choose a channel or team member to review conversations.")}</p>
 				</div>
 				<div class="lex-chat__active hidden">
 					<header class="lex-chat__header">
@@ -87,10 +136,12 @@ class LexocratesChatPage {
 						<div class="lex-chat__header-actions">
 							<span class="lex-chat__live-status indicator-pill gray">${__("Connecting")}</span>
 							<div class="lex-chat__message-search">
-								<input type="search" class="form-control input-xs lex-chat__message-search-input" placeholder="${__("Search this channel")}">
+								<input type="search" class="form-control input-xs lex-chat__message-search-input" placeholder="${__("Search messages…")}">
 							</div>
-							<button class="btn btn-default btn-sm lex-chat__pinned">${__("Pinned")}</button>
-							<button class="btn btn-default btn-sm lex-chat__notifications">${frappe.utils.icon("notification", "sm")}</button>
+							<button class="btn btn-default btn-sm lex-chat__members" type="button" title="${__("Channel Members")}">${frappe.utils.icon("users", "sm")} <span>0</span></button>
+							<button class="btn btn-default btn-sm lex-chat__sound-toggle${this.sound_muted ? " is-muted" : ""}" type="button" title="${this.sound_muted ? __("Unmute Sound") : __("Mute Sound")}" aria-label="${this.sound_muted ? __("Unmute chat sounds") : __("Mute chat sounds")}" aria-pressed="${this.sound_muted ? "true" : "false"}">${this.sound_muted ? "&#128263;" : "&#128276;"}</button>
+							<button class="btn btn-default btn-sm lex-chat__pinned" title="${__("Pinned Messages")}">${__("Pinned")}</button>
+							<button class="btn btn-default btn-sm lex-chat__notifications" title="${__("Notification Settings")}">${frappe.utils.icon("notification", "sm")}</button>
 							<button class="btn btn-default btn-sm lex-chat__manage-channel hidden">${__("Manage")}</button>
 						</div>
 					</header>
@@ -104,17 +155,45 @@ class LexocratesChatPage {
 						<button class="btn btn-link btn-sm lex-chat__cancel-reply">${__("Cancel")}</button>
 					</div>
 					<div class="lex-chat__attachment-tray hidden"></div>
-					<footer class="lex-chat__composer">
-						<textarea class="form-control lex-chat__composer-input" maxlength="10000" placeholder="${__("Write a message. Use @username to mention a colleague.")}"></textarea>
-						<div class="lex-chat__composer-actions">
-						<div>
-							<button class="btn btn-default btn-sm lex-chat__mention" title="${__("Mention a user")}">@</button>
-							<button class="btn btn-default btn-sm lex-chat__job-mention hidden" title="${__("Mention a related Job")}">@Job</button>
-							<button class="btn btn-default btn-sm lex-chat__attach" title="${__("Attach files")}">${frappe.utils.icon("attachment", "sm")}</button>
+
+					<!-- Rich WYSIWYG Composer Area -->
+					<footer class="lex-chat__composer-container">
+						<div class="lex-chat__md-toolbar">
+							<button type="button" class="btn btn-link btn-xs lex-md-btn" data-format="bold" title="${__("Bold (Ctrl+B)")}"><b>B</b></button>
+							<button type="button" class="btn btn-link btn-xs lex-md-btn" data-format="italic" title="${__("Italic (Ctrl+I)")}"><i>I</i></button>
+							<button type="button" class="btn btn-link btn-xs lex-md-btn" data-format="strike" title="${__("Strikethrough")}"><s>S</s></button>
+							<span class="lex-md-divider"></span>
+							<button type="button" class="btn btn-link btn-xs lex-md-btn" data-format="code" title="${__("Inline Code")}"><code>&lt;&gt;</code></button>
+							<button type="button" class="btn btn-link btn-xs lex-md-btn" data-format="codeblock" title="${__("Code Block")}"><code>{ }</code></button>
+							<button type="button" class="btn btn-link btn-xs lex-md-btn" data-format="quote" title="${__("Blockquote")}">❝</button>
+							<button type="button" class="btn btn-link btn-xs lex-md-btn" data-format="bullet" title="${__("Bullet List")}">• List</button>
+							<button type="button" class="btn btn-link btn-xs lex-md-btn" data-format="link" title="${__("Insert Link")}">🔗</button>
+						</div>
+
+						<div class="lex-chat__composer-inner">
+						<div class="form-control lex-chat__composer-input" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="${__("Write a message… Click B to type in bold, @username to mention, or drop files.")}"></div>
+
+							<!-- Audio Recording Bar Overlay -->
+							<div class="lex-chat__voice-bar hidden">
+								<div class="lex-voice-pulse"></div>
+								<span class="lex-voice-status">${__("Recording audio…")}</span>
+								<span class="lex-voice-timer">00:00</span>
+								<button type="button" class="btn btn-danger btn-xs lex-voice-cancel">${__("Cancel")}</button>
+								<button type="button" class="btn btn-success btn-xs lex-voice-send">${__("Send Audio")}</button>
 							</div>
-							<div class="lex-chat__send-group">
-								<span class="text-muted lex-chat__send-hint">${__("Ctrl/⌘ + Enter")}</span>
-								<button class="btn btn-primary btn-sm lex-chat__send">${__("Send")}</button>
+
+							<div class="lex-chat__composer-actions">
+								<div class="lex-chat__tools-group">
+									<button class="btn btn-default btn-sm lex-chat__emoji-picker-btn" title="${__("Emoji Picker")}">😊</button>
+									<button class="btn btn-default btn-sm lex-chat__mention" title="${__("Mention a user")}">@</button>
+									<button class="btn btn-default btn-sm lex-chat__job-mention hidden" title="${__("Mention a related Job")}">@Job</button>
+									<button class="btn btn-default btn-sm lex-chat__attach" title="${__("Attach files / images")}">${frappe.utils.icon("attachment", "sm")}</button>
+									<button class="btn btn-default btn-sm lex-chat__voice-btn" title="${__("Record Voice Note")}">🎙️</button>
+								</div>
+								<div class="lex-chat__send-group">
+									<span class="text-muted lex-chat__send-hint">${__("Enter to Send · Shift+Enter for Newline")}</span>
+									<button class="btn btn-primary btn-sm lex-chat__send">${__("Send")}</button>
+								</div>
 							</div>
 						</div>
 					</footer>
@@ -138,6 +217,7 @@ class LexocratesChatPage {
 		});
 		this.$root.find(".lex-chat__new-channel").on("click", () => this.open_channel_dialog());
 		this.$root.find(".lex-chat__new-dm").on("click", () => this.open_direct_message_dialog());
+		this.$root.find(".lex-chat__members").on("click", () => this.open_channel_members_dialog());
 		this.$root.find(".lex-chat__presence-select").on("change", (event) => {
 			this.set_manual_presence($(event.currentTarget).val());
 		});
@@ -146,27 +226,88 @@ class LexocratesChatPage {
 				frappe.set_route("Form", "Lexocrates Chat Channel", this.selected_channel);
 			}
 		});
-		this.$send.on("click", () => this.send_message());
+		this.$send.on("click", () => {
+			window.lexocratesChatSound?.unlock();
+			this.send_message();
+		});
 		this.$root.find(".lex-chat__jump-latest").on("click", () => this.scroll_to_bottom(true));
 		this.$messages.on("scroll", () => this.update_jump_to_latest());
 		this.$messages.on("keydown", (event) => this.handle_history_keydown(event));
 		this.bind_conversation_wheel();
+
+		// Live Contenteditable Input Handling
 		this.$input.on("keydown", (event) => {
-			if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+			if (event.key === "Enter" && !event.shiftKey) {
 				event.preventDefault();
+				window.lexocratesChatSound?.unlock();
 				this.send_message();
 			}
 		});
+
+		this.$input.on("input", () => {
+			this.notify_typing();
+			this.update_toolbar_active_states();
+		});
+
+		this.$input.on("keyup mouseup focus blur", () => {
+			this.update_toolbar_active_states();
+		});
+
+		document.addEventListener("selectionchange", () => {
+			if (document.activeElement === this.$input[0]) {
+				this.update_toolbar_active_states();
+			}
+		});
+
 		this.$root.on("click", ".lex-chat__reply", (event) => {
 			this.begin_reply($(event.currentTarget).attr("data-message"));
 		});
 		this.$root.on("click", ".lex-chat__edit", (event) => {
 			this.open_edit_dialog($(event.currentTarget).attr("data-message"));
 		});
+		this.$root.on("click", ".lex-chat__copy", (event) => {
+			this.copy_message_text($(event.currentTarget).attr("data-message"));
+		});
 		this.$root.find(".lex-chat__cancel-reply").on("click", () => this.clear_reply());
 		this.$root.find(".lex-chat__mention").on("click", () => this.open_mention_dialog());
 		this.$root.find(".lex-chat__job-mention").on("click", () => this.open_job_mention_dialog());
 		this.$root.find(".lex-chat__attach").on("click", () => this.open_file_uploader());
+		this.$root.find(".lex-chat__emoji-picker-btn").on("click", (e) => this.toggle_emoji_picker(e));
+		this.$root.find(".lex-chat__voice-btn").on("click", () => this.start_voice_recording());
+
+		this.$root.find(".lex-chat__sound-toggle").on("click", () => {
+			this.sound_muted = window.lexocratesChatSound?.setMuted(!this.sound_muted) ?? !this.sound_muted;
+			if (!window.lexocratesChatSound) {
+				localStorage.setItem("lex_chat_sound_muted", this.sound_muted ? "1" : "0");
+			}
+			this.update_sound_button();
+			if (!this.sound_muted) window.lexocratesChatSound?.unlock();
+			frappe.show_alert({ message: this.sound_muted ? __("Chat sound muted") : __("Chat sound enabled"), indicator: "blue" });
+		});
+		this.on_sound_preference_changed = (event) => {
+			this.sound_muted = Boolean(event.detail?.muted);
+			this.update_sound_button();
+		};
+		window.addEventListener(window.lexocratesChatSound?.CHANGE_EVENT || "lex-chat-sound-change", this.on_sound_preference_changed);
+
+		// Rich WYSIWYG Toolbar Click & Mousedown
+		this.$root.on("mousedown", ".lex-md-btn", (e) => {
+			e.preventDefault(); // Keep selection / cursor position in contenteditable
+		});
+
+		this.$root.on("click", ".lex-md-btn", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			const format = $(e.currentTarget).attr("data-format");
+			this.apply_markdown_format(format);
+		});
+
+		// Image Lightbox trigger
+		this.$root.on("click", ".lex-chat__img-thumb", (e) => {
+			const url = $(e.currentTarget).attr("data-full-url") || $(e.currentTarget).attr("src");
+			this.open_lightbox(url);
+		});
+
 		this.$root.on("click", ".lex-chat__remove-attachment", (event) => {
 			const url = $(event.currentTarget).attr("data-url");
 			this.attachments = this.attachments.filter((item) => item !== url);
@@ -194,10 +335,7 @@ class LexocratesChatPage {
 		this.$root.find(".lex-chat__pinned").on("click", () => this.open_pinned_messages());
 		this.$root.find(".lex-chat__notifications").on("click", () => this.open_notification_preferences());
 		this.$root.on("click", ".lex-chat__load-older", () => this.load_older_messages());
-		this.$input.on("input", () => {
-			this.notify_typing();
-			this.resize_composer();
-		});
+
 		$(window).on("focus.lexocrates-chat", () => {
 			this.record_presence_activity();
 			this.heartbeat_presence(true);
@@ -217,8 +355,446 @@ class LexocratesChatPage {
 		window.addEventListener("pagehide", () => this.send_presence_offline());
 	}
 
+	update_toolbar_active_states() {
+		try {
+			const isBold = document.queryCommandState("bold");
+			const isItalic = document.queryCommandState("italic");
+			const isStrike = document.queryCommandState("strikeThrough");
+			const isList = document.queryCommandState("insertUnorderedList");
+
+			this.$root.find('.lex-md-btn[data-format="bold"]').toggleClass("is-active", Boolean(isBold));
+			this.$root.find('.lex-md-btn[data-format="italic"]').toggleClass("is-active", Boolean(isItalic));
+			this.$root.find('.lex-md-btn[data-format="strike"]').toggleClass("is-active", Boolean(isStrike));
+			this.$root.find('.lex-md-btn[data-format="bullet"]').toggleClass("is-active", Boolean(isList));
+		} catch (e) {}
+	}
+
+	apply_markdown_format(type) {
+		this.$input.trigger("focus");
+
+		switch (type) {
+			case "bold":
+				document.execCommand("bold", false, null);
+				break;
+			case "italic":
+				document.execCommand("italic", false, null);
+				break;
+			case "strike":
+				document.execCommand("strikeThrough", false, null);
+				break;
+			case "bullet":
+				document.execCommand("insertUnorderedList", false, null);
+				break;
+			case "code": {
+				const sel = window.getSelection();
+				if (!sel || sel.rangeCount === 0) return;
+				const range = sel.getRangeAt(0);
+				const codeEl = document.createElement("code");
+				codeEl.className = "lex-inline-code";
+				if (range.collapsed) {
+					codeEl.textContent = "code";
+					range.insertNode(codeEl);
+				} else {
+					codeEl.appendChild(range.extractContents());
+					range.insertNode(codeEl);
+				}
+				break;
+			}
+			case "codeblock": {
+				const sel = window.getSelection();
+				if (!sel || sel.rangeCount === 0) return;
+				const range = sel.getRangeAt(0);
+				const preEl = document.createElement("pre");
+				preEl.className = "lex-code-block";
+				const codeEl = document.createElement("code");
+				if (range.collapsed) {
+					codeEl.textContent = "code block";
+				} else {
+					codeEl.appendChild(range.extractContents());
+				}
+				preEl.appendChild(codeEl);
+				range.insertNode(preEl);
+				break;
+			}
+			case "quote": {
+				const sel = window.getSelection();
+				if (!sel || sel.rangeCount === 0) return;
+				const range = sel.getRangeAt(0);
+				const bqEl = document.createElement("blockquote");
+				bqEl.className = "lex-blockquote";
+				if (range.collapsed) {
+					bqEl.textContent = "quote";
+				} else {
+					bqEl.appendChild(range.extractContents());
+				}
+				range.insertNode(bqEl);
+				break;
+			}
+			case "link": {
+				const selText = window.getSelection()?.toString() || "";
+				frappe.prompt(
+					[
+						{ fieldname: "title", fieldtype: "Data", label: __("Link Title"), default: selText },
+						{ fieldname: "url", fieldtype: "Data", label: __("URL"), reqd: 1, default: "https://" }
+					],
+					(values) => {
+						this.$input.trigger("focus");
+						const a = document.createElement("a");
+						a.href = values.url;
+						a.textContent = values.title || values.url;
+						a.target = "_blank";
+						a.rel = "noopener noreferrer";
+						a.className = "lex-chat-link";
+						const sel = window.getSelection();
+						if (sel && sel.rangeCount > 0) {
+							const range = sel.getRangeAt(0);
+							range.deleteContents();
+							range.insertNode(a);
+						}
+					},
+					__("Insert Link"),
+					__("Insert")
+				);
+				break;
+			}
+		}
+		this.update_toolbar_active_states();
+	}
+
+	insert_content(content, isHtml = false) {
+		this.$input.trigger("focus");
+		if (isHtml) {
+			document.execCommand("insertHTML", false, content);
+		} else {
+			document.execCommand("insertText", false, content);
+		}
+		this.update_toolbar_active_states();
+	}
+
+	bind_paste_and_drop() {
+		// Clipboard paste for images
+		this.$input.on("paste", (e) => {
+			const items = (e.originalEvent || e).clipboardData?.items;
+			if (!items) return;
+			for (let i = 0; i < items.length; i++) {
+				if (items[i].type.indexOf("image") !== -1) {
+					const blob = items[i].getAsFile();
+					this.upload_pasted_file(blob, `pasted-image-${Date.now()}.png`);
+					e.preventDefault();
+					break;
+				}
+			}
+		});
+
+		// Drag and drop onto messages
+		const dropZone = this.$messages[0];
+		if (dropZone) {
+			dropZone.addEventListener("dragover", (e) => {
+				e.preventDefault();
+				this.$messages.addClass("lex-drop-active");
+			});
+			dropZone.addEventListener("dragleave", () => {
+				this.$messages.removeClass("lex-drop-active");
+			});
+			dropZone.addEventListener("drop", (e) => {
+				e.preventDefault();
+				this.$messages.removeClass("lex-drop-active");
+				if (e.dataTransfer?.files?.length) {
+					for (let i = 0; i < e.dataTransfer.files.length; i++) {
+						const file = e.dataTransfer.files[i];
+						this.upload_pasted_file(file, file.name);
+					}
+				}
+			});
+		}
+	}
+
+	async upload_pasted_file(fileBlob, fileName) {
+		frappe.show_alert({ message: __("Uploading attachment…"), indicator: "blue" });
+		const formData = new FormData();
+		formData.append("file", fileBlob, fileName);
+		formData.append("is_private", "0");
+		formData.append("folder", "Home/Attachments");
+
+		try {
+			const res = await fetch("/api/method/upload_file", {
+				method: "POST",
+				body: formData,
+				headers: { "X-Frappe-CSRF-Token": frappe.csrf_token },
+			});
+			const data = await res.json();
+			const fileUrl = data.message?.file_url;
+			if (fileUrl && !this.attachments.includes(fileUrl)) {
+				this.attachments.push(fileUrl);
+				this.render_attachments();
+				frappe.show_alert({ message: __("Attachment uploaded!"), indicator: "green" });
+			}
+		} catch (err) {
+			frappe.show_alert({ message: __("Failed to upload image"), indicator: "red" });
+		}
+	}
+
+	toggle_emoji_picker(e) {
+		let $pop = $("#lex-emoji-picker-popover");
+		if ($pop.length) {
+			$pop.remove();
+			return;
+		}
+
+		const categoriesHtml = Object.entries(EMOJI_CATEGORIES).map(([cat, emojis]) => `
+			<div class="lex-emoji-cat-section">
+				<div class="lex-emoji-cat-title">${frappe.utils.escape_html(cat)}</div>
+				<div class="lex-emoji-cat-grid">
+					${emojis.map((em) => `<button type="button" class="lex-emoji-pick-btn" data-emoji="${em}">${em}</button>`).join("")}
+				</div>
+			</div>
+		`).join("");
+
+		$pop = $(`
+			<div id="lex-emoji-picker-popover" class="lex-emoji-popover">
+				<div class="lex-emoji-pop-header">
+					<input type="search" class="form-control input-xs lex-emoji-search" placeholder="${__("Search emojis…")}">
+				</div>
+				<div class="lex-emoji-pop-body">${categoriesHtml}</div>
+			</div>
+		`);
+
+		$(document.body).append($pop);
+		const rect = e.currentTarget.getBoundingClientRect();
+		$pop.css({
+			bottom: `${window.innerHeight - rect.top + 8}px`,
+			left: `${Math.max(12, rect.left - 120)}px`,
+		});
+
+		$pop.on("click", ".lex-emoji-pick-btn", (ev) => {
+			const emoji = $(ev.currentTarget).data("emoji");
+			this.insert_content(emoji);
+			$pop.remove();
+		});
+
+		$pop.find(".lex-emoji-search").on("input", (ev) => {
+			const query = ev.target.value.toLowerCase();
+			$pop.find(".lex-emoji-pick-btn").each((_, btn) => {
+				const em = $(btn).data("emoji");
+				$(btn).toggle(!query || em.includes(query));
+			});
+		});
+
+		$(document).one("click", (docEv) => {
+			if (!$(docEv.target).closest("#lex-emoji-picker-popover, .lex-chat__emoji-picker-btn").length) {
+				$("#lex-emoji-picker-popover").remove();
+			}
+		});
+	}
+
+	async start_voice_recording() {
+		if (!navigator.mediaDevices?.getUserMedia) {
+			return frappe.show_alert({ message: __("Microphone not supported on this browser"), indicator: "red" });
+		}
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+			this.media_recorder = new MediaRecorder(stream);
+			this.audio_chunks = [];
+
+			const $bar = this.$root.find(".lex-chat__voice-bar");
+			const $timer = $bar.find(".lex-voice-timer");
+			$bar.removeClass("hidden");
+
+			let seconds = 0;
+			this.recording_timer = setInterval(() => {
+				seconds++;
+				const mins = String(Math.floor(seconds / 60)).padStart(2, "0");
+				const secs = String(seconds % 60).padStart(2, "0");
+				$timer.text(`${mins}:${secs}`);
+			}, 1000);
+
+			this.media_recorder.ondataavailable = (e) => {
+				if (e.data.size > 0) this.audio_chunks.push(e.data);
+			};
+
+			this.media_recorder.onstop = async () => {
+				clearInterval(this.recording_timer);
+				$bar.addClass("hidden");
+				stream.getTracks().forEach((track) => track.stop());
+
+				if (this.send_voice_note && this.audio_chunks.length) {
+					const audioBlob = new Blob(this.audio_chunks, { type: "audio/webm" });
+					await this.upload_pasted_file(audioBlob, `voice-message-${Date.now()}.webm`);
+				}
+				this.send_voice_note = false;
+			};
+
+			$bar.find(".lex-voice-send").one("click", () => {
+				this.send_voice_note = true;
+				this.media_recorder.stop();
+			});
+
+			$bar.find(".lex-voice-cancel").one("click", () => {
+				this.send_voice_note = false;
+				this.media_recorder.stop();
+			});
+
+			this.media_recorder.start();
+		} catch (err) {
+			frappe.show_alert({ message: __("Microphone access denied"), indicator: "red" });
+		}
+	}
+
+	open_lightbox(imageUrl) {
+		let $modal = $("#lex-chat-lightbox-modal");
+		if (!$modal.length) {
+			$modal = $(`
+				<div id="lex-chat-lightbox-modal" class="lex-lightbox-modal">
+					<div class="lex-lightbox-backdrop"></div>
+					<div class="lex-lightbox-content">
+						<img class="lex-lightbox-img" src="" alt="Full view">
+						<div class="lex-lightbox-toolbar">
+							<a href="" target="_blank" download class="btn btn-default btn-xs lex-lb-dl">⬇ ${__("Download")}</a>
+							<button class="btn btn-default btn-xs lex-lb-close">✕ ${__("Close")}</button>
+						</div>
+					</div>
+				</div>
+			`).appendTo(document.body);
+
+			$modal.find(".lex-lightbox-backdrop, .lex-lb-close").on("click", () => $modal.addClass("hidden"));
+		}
+
+		$modal.find(".lex-lightbox-img").attr("src", imageUrl);
+		$modal.find(".lex-lb-dl").attr("href", imageUrl);
+		$modal.removeClass("hidden");
+	}
+
+	copy_message_text(message_name) {
+		const message = this.messages.get(message_name);
+		if (!message) return;
+		const raw = $("<div>").html(message.message_text || "").text();
+		navigator.clipboard.writeText(raw).then(() => {
+			frappe.show_alert({ message: __("Message copied to clipboard"), indicator: "green" });
+		});
+	}
+
+	format_markdown(text) {
+		if (!text) return "";
+		let str = String(text).replace(/<br\s*[\/]?>/gi, "\n");
+
+		// Code blocks
+		str = str.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]+?)```/g, (match, lang, code) => {
+			return `\n<pre class="lex-code-block"><code>${frappe.utils.escape_html(code.trim())}</code></pre>\n`;
+		});
+
+		// Inline code
+		str = str.replace(/`([^`\n]+)`/g, (match, code) => {
+			return `<code class="lex-inline-code">${frappe.utils.escape_html(code)}</code>`;
+		});
+
+		// Blockquotes
+		str = str.replace(/(?:^|\n)>\s*([^\n]+)/g, (match, quote) => {
+			return `\n<blockquote class="lex-blockquote">${quote.trim()}</blockquote>\n`;
+		});
+
+		// Bullet lists
+		str = str.replace(/(?:^|\n)(?:-|\*)\s+([^\n]+)/g, (match, item) => {
+			return `\n<div class="lex-list-item"><span class="lex-bullet">•</span> ${item.trim()}</div>\n`;
+		});
+
+		// Links
+		str = str.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (match, title, url) => {
+			return `<a href="${frappe.utils.escape_html(url)}" target="_blank" rel="noopener noreferrer" class="lex-chat-link">${frappe.utils.escape_html(title)}</a>`;
+		});
+
+		// Bold
+		str = str.replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>");
+
+		// Italic
+		str = str.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, "<em>$1</em>");
+		str = str.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, "<em>$1</em>");
+
+		// Strikethrough
+		str = str.replace(/~([^~\n]+?)~/g, "<del>$1</del>");
+
+		const parts = str.split(/(<pre[\s\S]*?<\/pre>|<blockquote[\s\S]*?<\/blockquote>|<div class="lex-list-item"[\s\S]*?<\/div>)/g);
+		return parts.map((part) => {
+			if (part.startsWith("<pre") || part.startsWith("<blockquote") || part.startsWith("<div class=\"lex-list-item\"")) {
+				return part;
+			}
+			return part.trim() ? part.replace(/\n/g, "<br>") : "";
+		}).join("");
+	}
+
+	message_markup(message) {
+		const own = message.sender === this.bootstrap.current_user ? "is-own" : "";
+		const reply = message.thread_reference ? "is-reply" : "";
+		const system = message.system_generated ? "is-system" : "";
+		const source = message.source_doctype && message.source_name
+			? `<a class="lex-chat__source" href="/app/${frappe.router.slug(message.source_doctype)}/${encodeURIComponent(message.source_name)}">${frappe.utils.escape_html(message.source_doctype)} · ${frappe.utils.escape_html(message.source_name)}</a>`
+			: "";
+
+		const attachments = (message.attachments || []).map((url) => {
+			const cleanUrl = frappe.utils.escape_html(url);
+			const fileName = cleanUrl.split("/").pop();
+			const isImg = /\.(png|jpg|jpeg|webp|gif|svg)(\?.*)?$/i.test(url);
+			const isAudio = /\.(webm|mp3|wav|ogg|m4a)(\?.*)?$/i.test(url);
+
+			if (isImg) {
+				return `<div class="lex-chat__img-card">
+					<img src="${cleanUrl}" class="lex-chat__img-thumb" data-full-url="${cleanUrl}" alt="${fileName}">
+				</div>`;
+			}
+			if (isAudio) {
+				return `<div class="lex-chat__audio-card">
+					<audio controls preload="metadata" src="${cleanUrl}"></audio>
+				</div>`;
+			}
+			return `<a class="lex-chat__file" href="${cleanUrl}" target="_blank" rel="noopener">${frappe.utils.icon("attachment", "xs")} ${fileName}</a>`;
+		}).join("");
+
+		const job_mentions = (message.job_mentions || [])
+			.map((job) => `<a class="lex-chat__job-ref" href="/app/lpo-job/${encodeURIComponent(job.name)}" title="${frappe.utils.escape_html(job.title || job.name)}">@${frappe.utils.escape_html(job.name)}<span>${frappe.utils.escape_html(job.status || "")}</span></a>`)
+			.join("");
+
+		const reactions = (message.reactions || [])
+			.map((reaction) => `<button class="lex-chat__reaction ${reaction.reacted_by_me ? "is-active" : ""}" data-message="${frappe.utils.escape_html(message.name)}" data-emoji="${frappe.utils.escape_html(reaction.emoji)}" title="${frappe.utils.escape_html((reaction.users || []).join(", "))}"><span>${reaction.emoji}</span><strong>${reaction.count}</strong></button>`)
+			.join("");
+
+		const read_by = message.read_by || [];
+		const seen = own && read_by.length
+			? `<span class="lex-chat__seen" title="${frappe.utils.escape_html(read_by.join(", "))}">✓✓ ${__("Seen by {0}", [read_by.length])}</span>`
+			: own ? `<span class="lex-chat__seen">✓ ${__("Delivered")}</span>` : "";
+
+		const footer = `${source}${message.edited_on ? `<span class="text-muted">${__("Edited")}</span>` : ""}${seen}`;
+		const formatted_body = this.format_markdown(message.message_text || "");
+		const sender_role = frappe.utils.escape_html(message.sender_role || __("System User"));
+		const role_title = frappe.utils.escape_html((message.sender_roles || []).join(", ") || message.sender_role || "");
+
+		const actions = `<div class="lex-chat__message-actions" role="toolbar" aria-label="${__("Message actions")}">
+			<button class="btn btn-link btn-xs lex-chat__react" data-message="${frappe.utils.escape_html(message.name)}" title="${__("React with emoji")}">😊 ${__("React")}</button>
+			<button class="btn btn-link btn-xs lex-chat__reply" data-message="${frappe.utils.escape_html(message.name)}" title="${__("Reply in thread")}">↩ ${__("Reply")}</button>
+			<button class="btn btn-link btn-xs lex-chat__copy" data-message="${frappe.utils.escape_html(message.name)}" title="${__("Copy text")}">📋 ${__("Copy")}</button>
+			${message.reply_count || message.thread_reference ? `<button class="btn btn-link btn-xs lex-chat__thread" data-message="${frappe.utils.escape_html(message.thread_reference || message.name)}">${message.reply_count || ""} ${__("Thread")}</button>` : ""}
+			${this.selected_channel_doc?.can_manage ? `<button class="btn btn-link btn-xs lex-chat__pin" data-message="${frappe.utils.escape_html(message.name)}">${message.is_pinned ? __("Unpin") : __("Pin")}</button>` : ""}
+			${message.can_edit ? `<button class="btn btn-link btn-xs lex-chat__edit" data-message="${frappe.utils.escape_html(message.name)}">${__("Edit")}</button>` : ""}
+		</div>`;
+
+		return `<article class="lex-chat__message ${own} ${reply} ${system}" data-message="${frappe.utils.escape_html(message.name)}" data-sender="${frappe.utils.escape_html(message.sender || "")}" data-sent-at="${frappe.utils.escape_html(message.sent_at || "")}">
+			<div class="lex-chat__avatar" title="${frappe.utils.escape_html(this.presence_title(this.presence_for(message.sender)))}">${frappe.avatar(message.sender, "avatar-medium")}${this.presence_dot(message.sender)}</div>
+			<div class="lex-chat__bubble">
+				${actions}
+				<div class="lex-chat__message-head">
+					<div class="lex-chat__sender-identity"><strong>${frappe.utils.escape_html(message.sender_full_name || message.sender)}</strong><span class="lex-chat__role-label" title="${role_title}">${sender_role}</span>${message.system_generated ? `<span class="lex-chat__system-label">${__("System")}</span>` : ""}${message.is_pinned ? `<span class="lex-chat__pinned-label">${frappe.utils.icon("pin", "xs")} ${__("Pinned")}</span>` : ""}</div>
+					<time title="${frappe.utils.escape_html(message.sent_at)}">${frappe.utils.escape_html(message.formatted_timestamp || message.sent_at)}</time>
+				</div>
+				<div class="lex-chat__message-body">${formatted_body}</div>
+				${job_mentions ? `<div class="lex-chat__job-refs">${job_mentions}</div>` : ""}
+				${attachments ? `<div class="lex-chat__files">${attachments}</div>` : ""}
+				${reactions ? `<div class="lex-chat__reactions">${reactions}</div>` : ""}
+				${footer ? `<div class="lex-chat__message-footer">${footer}</div>` : ""}
+			</div>
+		</article>`;
+	}
+
 	bind_realtime() {
 		this.on_new_message = (message) => {
+			this.play_incoming_message(message);
 			if (message.thread_reference && this.messages.has(message.thread_reference)) {
 				const root = this.messages.get(message.thread_reference);
 				root.reply_count = Number(root.reply_count || 0) + (this.messages.has(message.name) ? 0 : 1);
@@ -239,6 +815,9 @@ class LexocratesChatPage {
 			if (message.channel === this.selected_channel) this.upsert_message(message, false);
 		};
 		this.on_mention = (message) => {
+			// The shared sound key prevents the mention event and its matching
+			// message event from producing two tones.
+			this.play_incoming_message(message);
 			if (message.channel !== this.selected_channel) {
 				frappe.show_alert({
 					message: __("You were mentioned in {0}", [this.channel_label(message.channel)]),
@@ -399,44 +978,50 @@ class LexocratesChatPage {
 		this.$channel_list.html(html || `<div class="lex-chat__sidebar-empty">${__("No matching Matters or channels")}</div>`);
 	}
 
-	channel_matches_filter(channel, value) {
-		if (!value) return true;
-		return [
-			channel.channel_name,
+	channel_matches_filter(channel, filter) {
+		if (!filter) return true;
+		const haystack = [
 			channel.display_name,
-			channel.reference_name,
+			channel.channel_name,
 			channel.matter_id,
-			channel.matter_title,
-			channel.organization_id,
 			channel.organization_name,
-		].some((field) => String(field || "").toLowerCase().includes(value));
+			channel.organization_id,
+			channel.reference_name,
+			channel.direct_user,
+		]
+			.filter(Boolean)
+			.join(" ")
+			.toLowerCase();
+		return haystack.includes(filter);
 	}
 
 	channel_markup(channel) {
 		const active = channel.name === this.selected_channel ? "is-active" : "";
-		const direct_presence = channel.direct_user ? this.presence_for(channel.direct_user) : null;
-		const matter_context = [channel.matter_id, channel.organization_name || channel.organization_id]
-			.filter(Boolean)
-			.join(" · ");
-		const context = channel.is_direct_message
-			? `<span>${frappe.utils.escape_html(this.presence_summary(direct_presence, true))}</span>`
-			: channel.is_matter_channel
-			? `<span title="${frappe.utils.escape_html(matter_context)}">${frappe.utils.escape_html(matter_context)}</span>`
-			: channel.reference_name
-			? `<span>${frappe.utils.escape_html(channel.reference_name)}</span>`
-			: `<span>${channel.member_count || 0} ${__("members")}</span>`;
 		const unread = Number(channel.unread_count || 0);
-		const label = channel.matter_title || channel.display_name || channel.channel_name;
-		const symbol = channel.is_direct_message && channel.direct_user
-			? `<span class="lex-chat__channel-avatar" title="${frappe.utils.escape_html(this.presence_title(direct_presence))}">${frappe.avatar(channel.direct_user, "avatar-small")}${this.presence_dot(channel.direct_user)}</span>`
-			: `<span class="lex-chat__channel-symbol">${channel.channel_type === "Private" ? frappe.utils.icon("lock", "xs") : "#"}</span>`;
-		return `<button class="lex-chat__channel ${active}" data-channel="${frappe.utils.escape_html(channel.name)}">
-			${symbol}
-			<span class="lex-chat__channel-copy">
-				<strong>${frappe.utils.escape_html(label.replace(/^#/, ""))}</strong>
-				<small>${channel.muted ? `${frappe.utils.icon("mute", "xs")} ` : ""}${context}</small>
-			</span>
-			<span class="lex-chat__unread ${unread ? "" : "hidden"}">${unread}</span>
+		const badge = unread ? `<span class="lex-chat__unread indicator-pill red">${unread}</span>` : `<span class="lex-chat__unread indicator-pill red hidden">0</span>`;
+		const presence = channel.is_direct_message ? this.presence_dot(channel.direct_user) : "";
+		const avatar = channel.is_direct_message
+			? `<div class="lex-chat__channel-avatar">${frappe.avatar(channel.direct_user, "avatar-small")}${presence}</div>`
+			: `<span class="lex-chat__channel-hash">${channel.channel_type === "Private" ? "🔒" : "#"}</span>`;
+		const title = frappe.utils.escape_html(channel.display_name || channel.channel_name);
+		const meta = channel.matter_id
+			? `${frappe.utils.escape_html(channel.matter_id)}${channel.organization_name ? ` · ${frappe.utils.escape_html(channel.organization_name)}` : ""}`
+			: channel.is_direct_message
+			? [channel.direct_user_role, this.presence_summary(this.presence_for(channel.direct_user), true)].filter(Boolean).join(" · ")
+			: channel.system_user_only
+			? `${__("Internal team")} · ${__("{0} members", [channel.member_count || 0])}`
+			: channel.reference_name || channel.channel_type;
+
+		return `<button type="button" class="lex-chat__channel ${active}" data-channel="${frappe.utils.escape_html(channel.name)}" aria-label="${title}">
+			${avatar}
+			<div class="lex-chat__channel-copy">
+				<div class="lex-chat__channel-row">
+					<span class="lex-chat__channel-name">${title}</span>
+					${channel.muted ? `<span class="lex-chat__muted-icon" title="${__("Muted")}">${frappe.utils.icon("notification-off", "xs")}</span>` : ""}
+				</div>
+				<small class="text-muted">${frappe.utils.escape_html(meta || "")}</small>
+			</div>
+			${badge}
 		</button>`;
 	}
 
@@ -458,7 +1043,7 @@ class LexocratesChatPage {
 		this.$root.find(".lex-chat__active").removeClass("hidden");
 		this.render_channel_header(channel);
 		this.$messages.html(this.loading_markup(__("Loading conversation")));
-		this.$input.prop("disabled", !channel.can_post);
+		this.$input.attr("contenteditable", channel.can_post ? "true" : "false");
 		this.$send.prop("disabled", !channel.can_post);
 		frappe.realtime.emit("doc_subscribe", "Lexocrates Chat Channel", channel.name);
 
@@ -478,26 +1063,27 @@ class LexocratesChatPage {
 			this.scroll_to_bottom();
 		}
 		this.$messages.prepend(`<button class="btn btn-default btn-xs lex-chat__load-older ${this.has_more ? "" : "hidden"}">${__("Load older messages")}</button>`);
-		this.$channel_list.find(`[data-channel="${CSS.escape(channel_name)}"] .lex-chat__unread`).addClass("hidden").text("0");
-		channel.unread_count = 0;
-		await this.mark_read(messages.at(-1)?.name);
+		this.mark_read(messages.at(-1)?.name);
+		this.$input.trigger("focus");
 	}
 
 	render_channel_header(channel) {
-		const channel_title = channel.matter_title || channel.display_name || channel.channel_name;
-		this.$root.find(".lex-chat__channel-title").html(
-			`<h2>${frappe.utils.escape_html(channel_title)}</h2><span class="indicator-pill ${channel.status === "Active" ? "green" : "gray"}">${__(channel.status)}</span>`
-		);
-		const context = channel.is_direct_message && channel.direct_user
-			? `<span class="lex-chat__direct-presence">${this.presence_dot(channel.direct_user)} ${frappe.utils.escape_html(this.presence_summary(this.presence_for(channel.direct_user)))}</span>`
-			: channel.is_matter_channel
-			? `<a href="/app/${frappe.router.slug(channel.reference_doctype)}/${encodeURIComponent(channel.reference_name)}">${frappe.utils.escape_html(channel.matter_id || channel.reference_name)}</a>${channel.organization_name || channel.organization_id ? ` <span>· ${frappe.utils.escape_html(channel.organization_name || channel.organization_id)}</span>` : ""}`
-			: channel.reference_doctype && channel.reference_name
-			? `<a href="/app/${frappe.router.slug(channel.reference_doctype)}/${encodeURIComponent(channel.reference_name)}">${frappe.utils.escape_html(channel.reference_doctype)} · ${frappe.utils.escape_html(channel.reference_name)}</a>`
-			: `${__(channel.channel_type)} · ${channel.member_count || 0} ${__("members")}`;
-		this.$root.find(".lex-chat__channel-meta").html(context);
+		const title = frappe.utils.escape_html(channel.display_name || channel.channel_name);
+		const meta = channel.is_direct_message
+			? [frappe.utils.escape_html(channel.direct_user_role || __("System User")), this.presence_summary(this.presence_for(channel.direct_user))].filter(Boolean).join(" · ")
+			: [channel.matter_id, channel.organization_name, channel.reference_doctype, channel.reference_name, channel.description].filter(Boolean).map((item) => frappe.utils.escape_html(item)).join(" · ");
+
+		this.$root.find(".lex-chat__channel-title").html(`<h3>${title}</h3>`);
+		this.$root.find(".lex-chat__channel-meta").html(meta || __("Secure communication"));
+		this.$root.find(".lex-chat__members span").text(channel.member_count || 0);
+		this.$root.find(".lex-chat__members").attr("aria-label", __("View {0} channel members", [channel.member_count || 0]));
 		this.$root.find(".lex-chat__manage-channel").toggleClass("hidden", !channel.can_manage);
-		this.$root.find(".lex-chat__notifications").attr("title", __(channel.notification_level || "All Messages"));
+		const notification_level = channel.notification_level || "All Messages";
+		this.$root.find(".lex-chat__notifications")
+			.attr("title", __(notification_level))
+			.attr("aria-label", notification_level === "Muted" ? __("Channel notifications muted") : __("Channel notification settings"))
+			.attr("aria-pressed", notification_level === "Muted" ? "true" : "false")
+			.toggleClass("is-muted", notification_level === "Muted");
 		this.$root.find(".lex-chat__job-mention").toggleClass(
 			"hidden",
 			!["LPO Matter", "LPO Job"].includes(channel.reference_doctype)
@@ -518,55 +1104,12 @@ class LexocratesChatPage {
 		else if (!existed) this.$root.find(".lex-chat__jump-latest").removeClass("hidden");
 	}
 
-	message_markup(message) {
-		const own = message.sender === this.bootstrap.current_user ? "is-own" : "";
-		const reply = message.thread_reference ? "is-reply" : "";
-		const system = message.system_generated ? "is-system" : "";
-		const source = message.source_doctype && message.source_name
-			? `<a class="lex-chat__source" href="/app/${frappe.router.slug(message.source_doctype)}/${encodeURIComponent(message.source_name)}">${frappe.utils.escape_html(message.source_doctype)} · ${frappe.utils.escape_html(message.source_name)}</a>`
-			: "";
-		const attachments = (message.attachments || [])
-			.map((url) => `<a class="lex-chat__file" href="${frappe.utils.escape_html(url)}" target="_blank" rel="noopener">${frappe.utils.icon("attachment", "xs")} ${frappe.utils.escape_html(url.split("/").pop())}</a>`)
-			.join("");
-		const job_mentions = (message.job_mentions || [])
-			.map((job) => `<a class="lex-chat__job-ref" href="/app/lpo-job/${encodeURIComponent(job.name)}" title="${frappe.utils.escape_html(job.title || job.name)}">@${frappe.utils.escape_html(job.name)}<span>${frappe.utils.escape_html(job.status || "")}</span></a>`)
-			.join("");
-		const reactions = (message.reactions || [])
-			.map((reaction) => `<button class="lex-chat__reaction ${reaction.reacted_by_me ? "is-active" : ""}" data-message="${frappe.utils.escape_html(message.name)}" data-emoji="${frappe.utils.escape_html(reaction.emoji)}" title="${frappe.utils.escape_html((reaction.users || []).join(", "))}"><span>${reaction.emoji}</span><strong>${reaction.count}</strong></button>`)
-			.join("");
-		const read_by = message.read_by || [];
-		const seen = own && read_by.length
-			? `<span class="lex-chat__seen" title="${frappe.utils.escape_html(read_by.join(", "))}">${__("Seen by {0}", [read_by.length])}</span>`
-			: "";
-		const footer = `${source}${message.edited_on ? `<span class="text-muted">${__("Edited")}</span>` : ""}${seen}`;
-		const actions = `<div class="lex-chat__message-actions" role="toolbar" aria-label="${__("Message actions")}">
-			<button class="btn btn-link btn-xs lex-chat__react" data-message="${frappe.utils.escape_html(message.name)}">${__("React")}</button>
-			<button class="btn btn-link btn-xs lex-chat__reply" data-message="${frappe.utils.escape_html(message.name)}">${__("Reply")}</button>
-			${message.reply_count || message.thread_reference ? `<button class="btn btn-link btn-xs lex-chat__thread" data-message="${frappe.utils.escape_html(message.thread_reference || message.name)}">${message.reply_count || ""} ${__("Thread")}</button>` : ""}
-			${this.selected_channel_doc?.can_manage ? `<button class="btn btn-link btn-xs lex-chat__pin" data-message="${frappe.utils.escape_html(message.name)}">${message.is_pinned ? __("Unpin") : __("Pin")}</button>` : ""}
-			${message.can_edit ? `<button class="btn btn-link btn-xs lex-chat__edit" data-message="${frappe.utils.escape_html(message.name)}">${__("Edit")}</button>` : ""}
-		</div>`;
-		return `<article class="lex-chat__message ${own} ${reply} ${system}" data-message="${frappe.utils.escape_html(message.name)}" data-sender="${frappe.utils.escape_html(message.sender || "")}" data-sent-at="${frappe.utils.escape_html(message.sent_at || "")}">
-			<div class="lex-chat__avatar" title="${frappe.utils.escape_html(this.presence_title(this.presence_for(message.sender)))}">${frappe.avatar(message.sender, "avatar-medium")}${this.presence_dot(message.sender)}</div>
-			<div class="lex-chat__bubble">
-				${actions}
-				<div class="lex-chat__message-head">
-					<div><strong>${frappe.utils.escape_html(message.sender_full_name || message.sender)}</strong>${message.system_generated ? `<span class="lex-chat__system-label">${__("System")}</span>` : ""}${message.is_pinned ? `<span class="lex-chat__pinned-label">${frappe.utils.icon("pin", "xs")} ${__("Pinned")}</span>` : ""}</div>
-					<time title="${frappe.utils.escape_html(message.sent_at)}">${frappe.utils.escape_html(message.formatted_timestamp || message.sent_at)}</time>
-				</div>
-				<div class="lex-chat__message-body">${message.message_text || ""}</div>
-				${job_mentions ? `<div class="lex-chat__job-refs">${job_mentions}</div>` : ""}
-				${attachments ? `<div class="lex-chat__files">${attachments}</div>` : ""}
-				${reactions ? `<div class="lex-chat__reactions">${reactions}</div>` : ""}
-				${footer ? `<div class="lex-chat__message-footer">${footer}</div>` : ""}
-			</div>
-		</article>`;
-	}
-
 	async send_message() {
-		const text = this.$input.val().trim();
-		if (!text || !this.selected_channel || this.$send.prop("disabled")) return;
-		const message_text = frappe.utils.escape_html(text).replace(/\n/g, "<br>");
+		const html_content = this.$input.html().trim();
+		const plain_text = this.$input.text().trim();
+		if ((!plain_text && !this.attachments.length) || !this.selected_channel || this.$send.prop("disabled")) return;
+
+		const message_text = plain_text ? html_content : "📎 [Attachment]";
 		this.$send.prop("disabled", true);
 		try {
 			const response = await frappe.call({
@@ -578,9 +1121,12 @@ class LexocratesChatPage {
 					attachments: this.attachments,
 				},
 			});
-			if (response.message) this.upsert_message(response.message, true);
-			this.$input.val("");
-			this.resize_composer();
+			if (response.message) {
+				this.upsert_message(response.message, true);
+				this.play_chat_sound("sent", `sent:${response.message.name}`);
+			}
+			this.$input.empty();
+			this.update_toolbar_active_states();
 			this.publish_typing(false);
 			this.attachments = [];
 			this.render_attachments();
@@ -626,8 +1172,7 @@ class LexocratesChatPage {
 			fields: [{ fieldname: "user", fieldtype: "Link", options: "User", label: __("User"), reqd: 1, get_query: () => ({ filters: { enabled: 1, user_type: "System User" } }) }],
 			primary_action_label: __("Insert mention"),
 			primary_action: (values) => {
-				const current = this.$input.val();
-				this.$input.val(`${current}${current && !/\s$/.test(current) ? " " : ""}@${values.user} `).trigger("focus");
+				this.insert_content(`@${values.user} `);
 				dialog.hide();
 			},
 		});
@@ -659,8 +1204,7 @@ class LexocratesChatPage {
 			],
 			primary_action_label: __("Insert Job mention"),
 			primary_action: (values) => {
-				const current = this.$input.val();
-				this.$input.val(`${current}${current && !/\s$/.test(current) ? " " : ""}@${values.job} `).trigger("focus");
+				this.insert_content(`@${values.job} `);
 				dialog.hide();
 			},
 		});
@@ -771,17 +1315,6 @@ class LexocratesChatPage {
 		}).format(start_date);
 	}
 
-	resize_composer() {
-		const input = this.$input?.[0];
-		if (!input) return;
-		input.style.setProperty("height", "auto", "important");
-		input.style.setProperty(
-			"height",
-			`${Math.min(Math.max(input.scrollHeight, 46), 140)}px`,
-			"important"
-		);
-	}
-
 	bind_conversation_wheel() {
 		const conversation = this.$root.find(".lex-chat__conversation")[0];
 		if (!conversation) return;
@@ -791,7 +1324,7 @@ class LexocratesChatPage {
 				if (!this.selected_channel || event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
 				if (event.target.closest(".lex-chat__messages")) return;
 
-				const nested_scroll = event.target.closest("textarea");
+				const nested_scroll = event.target.closest(".lex-chat__composer-input");
 				if (nested_scroll && nested_scroll.scrollHeight > nested_scroll.clientHeight) {
 					const nested_max = nested_scroll.scrollHeight - nested_scroll.clientHeight;
 					if ((event.deltaY < 0 && nested_scroll.scrollTop > 0) || (event.deltaY > 0 && nested_scroll.scrollTop < nested_max)) return;
@@ -931,6 +1464,7 @@ class LexocratesChatPage {
 			`${frappe.avatar(this.bootstrap.current_user, "avatar-medium")}${this.presence_dot(this.bootstrap.current_user)}`
 		).attr("title", this.presence_title(presence));
 		this.$root.find(".lex-chat__self-name").text(this.bootstrap.current_user_full_name || this.bootstrap.current_user);
+		this.$root.find(".lex-chat__self-role").text(this.bootstrap.current_user_identity?.primary_role || __("System User"));
 		this.$root.find(".lex-chat__self-status").text(this.presence_summary(presence));
 		this.$root.find(".lex-chat__presence-select").val(presence.preferred_status || "Online");
 	}
@@ -1027,12 +1561,25 @@ class LexocratesChatPage {
 	}
 
 	open_reaction_menu(message_name) {
-		frappe.prompt(
-			[{ fieldname: "emoji", fieldtype: "Select", label: __("Reaction"), options: ["👍", "❤️", "✅", "👀", "🎉", "🙏"], reqd: 1 }],
-			(values) => this.toggle_reaction(message_name, values.emoji),
-			__("React to message"),
-			__("React")
-		);
+		const emojis = EMOJI_CATEGORIES["Reactions"];
+		const buttons = emojis.map((em) => `<button type="button" class="btn btn-default btn-sm lex-quick-react-btn" data-emoji="${em}">${em}</button>`).join(" ");
+
+		const dialog = new frappe.ui.Dialog({
+			title: __("Quick Reaction"),
+			fields: [{ fieldname: "react_area", fieldtype: "HTML" }],
+		});
+
+		dialog.fields_dict.react_area.$wrapper.html(`
+			<div class="lex-quick-react-tray">${buttons}</div>
+		`);
+
+		dialog.$wrapper.on("click", ".lex-quick-react-btn", (e) => {
+			const emoji = $(e.currentTarget).data("emoji");
+			this.toggle_reaction(message_name, emoji);
+			dialog.hide();
+		});
+
+		dialog.show();
 	}
 
 	async toggle_reaction(message_name, emoji) {
@@ -1074,11 +1621,59 @@ class LexocratesChatPage {
 				await frappe.call({ method: `${this.api}.set_channel_preferences`, args: { channel: this.selected_channel, notification_level: values.notification_level } });
 				this.selected_channel_doc.notification_level = values.notification_level;
 				this.selected_channel_doc.muted = values.notification_level === "Muted";
+				const channel = this.channels.find((item) => item.name === this.selected_channel);
+				if (channel) {
+					channel.notification_level = values.notification_level;
+					channel.muted = values.notification_level === "Muted";
+				}
+				window.dispatchEvent(new CustomEvent("lex-chat-channel-notification-change", {
+					detail: { channel: this.selected_channel, notification_level: values.notification_level },
+				}));
 				this.render_channels(this.$root.find(".lex-chat__channel-filter").val());
 				this.render_channel_header(this.selected_channel_doc);
 				dialog.hide();
 			},
 		});
+		dialog.show();
+	}
+
+	async open_channel_members_dialog() {
+		if (!this.selected_channel) return;
+		const response = await frappe.call({
+			method: `${this.api}.get_channel_members`,
+			args: { channel: this.selected_channel },
+		});
+		const members = response.message || [];
+		const member_markup = members.map((member) => {
+			const presence = this.presence_for(member.name);
+			const status = this.presence_summary(presence);
+			return `<article class="lex-chat__member-row">
+				<div class="lex-chat__member-avatar">${frappe.avatar(member.name, "avatar-medium")}${this.presence_dot(member.name)}</div>
+				<div class="lex-chat__member-copy">
+					<strong>${frappe.utils.escape_html(member.full_name || member.name)}</strong>
+					<span>${frappe.utils.escape_html(member.primary_role || __("System User"))} · ${frappe.utils.escape_html(member.name)}</span>
+					<small>${frappe.utils.escape_html(status)}</small>
+				</div>
+				<div class="lex-chat__member-access">
+					<span class="lex-chat__channel-role">${frappe.utils.escape_html(member.channel_role || __("Member"))}</span>
+					<small>${member.can_post_messages ? __("Can post") : __("Read only")}</small>
+				</div>
+			</article>`;
+		}).join("");
+		const can_manage = Boolean(this.selected_channel_doc?.can_manage);
+		const dialog = new frappe.ui.Dialog({
+			title: __("Channel members ({0})", [members.length]),
+			size: "large",
+			fields: [{ fieldname: "member_list", fieldtype: "HTML" }],
+			primary_action_label: can_manage ? __("Manage Members & Roles") : __("Close"),
+			primary_action: () => {
+				dialog.hide();
+				if (can_manage) frappe.set_route("Form", "Lexocrates Chat Channel", this.selected_channel);
+			},
+		});
+		dialog.fields_dict.member_list.$wrapper.html(
+			`<div class="lex-chat__member-list">${member_markup || `<div class="text-muted">${__("No members found")}</div>`}</div>`
+		);
 		dialog.show();
 	}
 
@@ -1088,7 +1683,7 @@ class LexocratesChatPage {
 		if (!users.length) return frappe.show_alert({ message: __("No eligible chat users found"), indicator: "orange" });
 		const dialog = new frappe.ui.Dialog({
 			title: __("New direct message"),
-			fields: [{ fieldname: "other_user", fieldtype: "Autocomplete", label: __("User"), options: users.map((user) => ({ label: `${user.full_name || user.name} · ${user.name}`, value: user.name })), reqd: 1 }],
+			fields: [{ fieldname: "other_user", fieldtype: "Autocomplete", label: __("System User"), options: users.map((user) => ({ label: `${user.full_name || user.name} · ${user.primary_role || __("System User")} · ${user.name}`, value: user.name, description: user.primary_role || __("System User") })), reqd: 1, description: __("Direct messages are private and available only between enabled System Users.") }],
 			primary_action_label: __("Start conversation"),
 			primary_action: async (values) => {
 				const created = await frappe.call({ method: `${this.api}.get_or_create_direct_channel`, args: { other_user: values.other_user } });
@@ -1129,7 +1724,7 @@ class LexocratesChatPage {
 	render_thread_messages(messages) {
 		if (!this.thread_dialog) return;
 		this.thread_dialog.fields_dict.thread_messages.$wrapper.html(
-			`<div class="lex-chat__thread-list">${messages.map((message, index) => `<article class="lex-chat__thread-item ${index ? "is-reply" : "is-root"}"><div><strong>${frappe.utils.escape_html(message.sender_full_name || message.sender)}</strong><time>${frappe.utils.escape_html(message.formatted_timestamp || message.sent_at)}</time></div><div>${message.message_text}</div></article>`).join("")}</div>`
+			`<div class="lex-chat__thread-list">${messages.map((message, index) => `<article class="lex-chat__thread-item ${index ? "is-reply" : "is-root"}"><div><span><strong>${frappe.utils.escape_html(message.sender_full_name || message.sender)}</strong><small class="lex-chat__role-label">${frappe.utils.escape_html(message.sender_role || __("System User"))}</small></span><time>${frappe.utils.escape_html(message.formatted_timestamp || message.sent_at)}</time></div><div>${message.message_text}</div></article>`).join("")}</div>`
 		);
 	}
 
@@ -1141,13 +1736,40 @@ class LexocratesChatPage {
 				{ fieldname: "channel_name", fieldtype: "Data", label: __("Channel Name"), reqd: 1, description: __("Example: #legal-research") },
 				{ fieldname: "channel_type", fieldtype: "Select", label: __("Channel Type"), options: ["Public", "Private", "Contextual"], default: "Public", reqd: 1 },
 				{ fieldname: "description", fieldtype: "Small Text", label: __("Description") },
+				{ fieldname: "members_section", fieldtype: "Section Break", label: __("Internal Team Members"), depends_on: "eval:doc.channel_type != 'Contextual'" },
+				{
+					fieldname: "members",
+					fieldtype: "MultiSelectPills",
+					label: __("Add System Users"),
+					depends_on: "eval:doc.channel_type != 'Contextual'",
+					description: __("The creator is Owner. Selected users join as Members; channel roles can be changed from Manage."),
+					get_data: async (text) => {
+						const response = await frappe.call({ method: `${this.api}.search_users`, args: { search_text: text || "" } });
+						return (response.message || []).map((user) => ({
+							value: user.name,
+							label: `${user.full_name || user.name} · ${user.primary_role || __("System User")}`,
+							description: user.name,
+						}));
+					},
+				},
 				{ fieldname: "reference_section", fieldtype: "Section Break", label: __("ERP Record Context"), depends_on: "eval:doc.channel_type == 'Contextual'" },
 				{ fieldname: "reference_doctype", fieldtype: "Select", label: __("Reference DocType"), options: context_doctypes, depends_on: "eval:doc.channel_type == 'Contextual'", mandatory_depends_on: "eval:doc.channel_type == 'Contextual'" },
 				{ fieldname: "reference_name", fieldtype: "Dynamic Link", label: __("Reference Name"), options: "reference_doctype", depends_on: "eval:doc.channel_type == 'Contextual'", mandatory_depends_on: "eval:doc.channel_type == 'Contextual'" },
 			],
 			primary_action_label: __("Create"),
 			primary_action: async (values) => {
-				const response = await frappe.call({ method: `${this.api}.create_channel`, args: values });
+				const internal_channel = values.channel_type !== "Contextual";
+				const members = internal_channel
+					? (values.members || []).map((user) => ({ user, channel_role: "Member", can_post_messages: 1, can_invite_members: 0 }))
+					: [];
+				const response = await frappe.call({
+					method: `${this.api}.create_channel`,
+					args: {
+						...values,
+						members: JSON.stringify(members),
+						system_user_only: internal_channel ? 1 : 0,
+					},
+				});
 				dialog.hide();
 				await this.refresh();
 				if (response.message?.name) await this.open_channel(response.message.name);

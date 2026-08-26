@@ -13,7 +13,7 @@ LOCKED_AFTER_FUNDING = {
 	"client", "portal_user", "submitted_by", "service_type", "jurisdiction", "priority",
 	"preliminary_details", "detailed_instructions", "expected_outcome", "sla_terms_snapshot", "sla_snapshot_hash",
 	"quoted_amount", "currency", "required_lexpoints", "scope_summary", "delivery_timeline_hours",
-	"funding_route", "matter", "job",
+	"funding_route", "matter", "job", "ai_document_estimate",
 }
 
 

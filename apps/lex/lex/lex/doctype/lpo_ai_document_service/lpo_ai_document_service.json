@@ -1,0 +1,180 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "field:service_code",
+ "creation": "2026-08-24 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "service_name",
+  "service_code",
+  "category",
+  "is_active",
+  "description",
+  "icon",
+  "prompt_config_section",
+  "system_directive",
+  "prompt_template",
+  "output_format",
+  "model_config_section",
+  "default_provider",
+  "default_model",
+  "max_tokens",
+  "temperature"
+ ],
+ "fields": [
+  {
+   "fieldname": "service_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Service Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Service Code",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "Summarization",
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Category",
+   "options": "Summarization\nRisk Analysis\nEntity & Data Extraction\nRedrafting & Polishing\nTranslation\nCompliance & SOP\nCustom Prompt",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "default": "file-text",
+   "fieldname": "icon",
+   "fieldtype": "Data",
+   "label": "Icon"
+  },
+  {
+   "fieldname": "prompt_config_section",
+   "fieldtype": "Section Break",
+   "label": "AI Prompt Configuration"
+  },
+  {
+   "fieldname": "system_directive",
+   "fieldtype": "Long Text",
+   "label": "System Directive"
+  },
+  {
+   "fieldname": "prompt_template",
+   "fieldtype": "Long Text",
+   "label": "Prompt Template",
+   "reqd": 1
+  },
+  {
+   "default": "Markdown",
+   "fieldname": "output_format",
+   "fieldtype": "Select",
+   "label": "Output Format",
+   "options": "Markdown\nStructured JSON\nBullet Points\nPlain Text\nRedlined Diff"
+  },
+  {
+   "fieldname": "model_config_section",
+   "fieldtype": "Section Break",
+   "label": "Model & Execution Defaults"
+  },
+  {
+   "default": "OpenAI",
+   "fieldname": "default_provider",
+   "fieldtype": "Select",
+   "label": "Default Provider",
+   "options": "OpenAI\nAnthropic\nGoogle Gemini"
+  },
+  {
+   "fieldname": "default_model",
+   "fieldtype": "Data",
+   "label": "Default Model"
+  },
+  {
+   "default": "600",
+   "fieldname": "max_tokens",
+   "fieldtype": "Int",
+   "label": "Max Tokens"
+  },
+  {
+   "default": "0.2",
+   "fieldname": "temperature",
+   "fieldtype": "Float",
+   "label": "Temperature"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-08-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO AI Document Service",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Analyst",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
