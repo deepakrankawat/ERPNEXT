@@ -1,5 +1,22 @@
 {% extends "templates/web.html" %}
 {% block title %}Register a Client Organization{% endblock %}
+{% block head_include %}
+	{{ super() }}
+	<script>
+	(function () {
+		var root = document.documentElement;
+		var applyLightTheme = function () {
+			if (root.getAttribute("data-theme") !== "light") root.setAttribute("data-theme", "light");
+			root.style.colorScheme = "light";
+		};
+		applyLightTheme();
+		new MutationObserver(applyLightTheme).observe(root, {
+			attributes: true,
+			attributeFilter: ["data-theme"]
+		});
+	})();
+	</script>
+{% endblock %}
 {% block page_content %}
 <link rel="stylesheet" href="/assets/lex/css/lexocrates_auth_pages.css?v=20260818-1">
 <section class="lex-frappe-page">

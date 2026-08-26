@@ -92,6 +92,14 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("enforceLoginLightTheme", enhancer)
 		self.assertIn("attributeFilter: ['data-theme']", enhancer)
 
+	def test_client_registration_page_is_light_only(self):
+		app_path = Path(frappe.get_app_path("lex"))
+		template = (app_path / "www" / "client-registration.html").read_text(encoding="utf-8")
+
+		self.assertIn('setAttribute("data-theme", "light")', template)
+		self.assertIn('root.style.colorScheme = "light"', template)
+		self.assertIn('attributeFilter: ["data-theme"]', template)
+
 	def test_compliance_approved_registration_creates_company_admin_and_wallet(self):
 		country = frappe.db.get_value("Country", {}, "name")
 		suffix = frappe.generate_hash(length=8).lower()
