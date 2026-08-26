@@ -230,13 +230,13 @@
 		<!-- 3 Login Mode Selector Tabs: Client Login | Login with Email | Staff Login -->
 		<div class="lex-login-tabs" role="tablist" aria-label="Login Options">
 			<button id="tab-client" class="lex-login-tab active" role="tab" aria-selected="true" type="button" onclick="switchLoginMode('client')">
-				🏢 Client
+				Client
 			</button>
 			<button id="tab-email" class="lex-login-tab" role="tab" aria-selected="false" type="button" onclick="switchLoginMode('email')">
-				✉️ Email Link
+				Email Link
 			</button>
 			<button id="tab-system" class="lex-login-tab" role="tab" aria-selected="false" type="button" onclick="switchLoginMode('system')">
-				⚡ Staff
+				Staff
 			</button>
 		</div>
 
@@ -376,7 +376,7 @@
 			pwdGroup.style.display = 'none';
 			rememberGroup.style.display = 'none';
 			pwdInput.required = false;
-			submitBtn.innerHTML = 'Send Secure Login Link to Email ✉️';
+			submitBtn.innerHTML = 'Send Secure Login Link to Email';
 			redirectInput.value = '/client-portal';
 		} else {
 			systemTab.classList.add('active');

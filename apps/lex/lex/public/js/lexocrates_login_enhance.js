@@ -23,13 +23,13 @@
 				const tabsHtml = `
 					<div class="lex-login-tabs" role="tablist" style="display: grid; grid-template-columns: 1fr 1fr 1fr; background: #f1f5f9; padding: 4px; border-radius: 10px; margin-bottom: 20px; gap: 4px;">
 						<button id="tab-client" class="lex-login-tab active" type="button" onclick="window.lexSwitchLogin('client')" style="border:none; background:#fff; padding:9px 8px; font-size:12px; font-weight:600; color:#0f172a; border-radius:8px; cursor:pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-							🏢 Client
+							Client
 						</button>
 						<button id="tab-email" class="lex-login-tab" type="button" onclick="window.lexSwitchLogin('email')" style="border:none; background:transparent; padding:9px 8px; font-size:12px; font-weight:600; color:#64748b; border-radius:8px; cursor:pointer;">
-							✉️ Email Link
+							Email Link
 						</button>
 						<button id="tab-system" class="lex-login-tab" type="button" onclick="window.lexSwitchLogin('system')" style="border:none; background:transparent; padding:9px 8px; font-size:12px; font-weight:600; color:#64748b; border-radius:8px; cursor:pointer;">
-							⚡ Staff
+							Staff
 						</button>
 					</div>
 					<div class="lex-register-banner" id="register-banner" style="background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
@@ -160,7 +160,7 @@
 
 		if (submitBtn) {
 			if (mode === 'client') submitBtn.innerHTML = 'Sign in to Client Portal';
-			else if (mode === 'email') submitBtn.innerHTML = 'Send Secure Login Link to Email ✉️';
+			else if (mode === 'email') submitBtn.innerHTML = 'Send Secure Login Link to Email';
 			else submitBtn.innerHTML = 'Sign in to Legal Desk (/app)';
 		}
 
