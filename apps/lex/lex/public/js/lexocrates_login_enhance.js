@@ -1,6 +1,21 @@
 // Lexocrates Login Page Enhancer
 (function () {
 	'use strict';
+	let loginThemeObserver = null;
+
+	function enforceLoginLightTheme() {
+		const root = document.documentElement;
+		if (root.getAttribute('data-theme') !== 'light') root.setAttribute('data-theme', 'light');
+		root.style.colorScheme = 'light';
+		if (!loginThemeObserver) {
+			loginThemeObserver = new MutationObserver(() => {
+				if (root.getAttribute('data-theme') !== 'light') root.setAttribute('data-theme', 'light');
+			});
+			loginThemeObserver.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+		}
+	}
+
+	if (window.location.pathname === '/login') enforceLoginLightTheme();
 
 	function initLoginEnhancements() {
 		const isLoginPage = window.location.pathname === '/login' ||
@@ -9,6 +24,7 @@
 			document.querySelector('#page-login');
 
 		if (!isLoginPage) return;
+		enforceLoginLightTheme();
 
 		// Ensure body has login class
 		document.body.classList.add('for-login', 'lex-custom-login');

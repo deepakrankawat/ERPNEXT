@@ -35,7 +35,7 @@ app_include_js = [
 
 # include js, css files in header of web template
 web_include_css = "/assets/lex/css/lexocrates_branding.css?v=20260818-1"
-web_include_js = "/assets/lex/js/lexocrates_login_enhance.js?v=20260814-1"
+web_include_js = "/assets/lex/js/lexocrates_login_enhance.js?v=20260826-2"
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "lex/public/scss/website"

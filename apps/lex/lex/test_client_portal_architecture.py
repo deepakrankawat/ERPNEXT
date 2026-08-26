@@ -80,6 +80,18 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("@media (max-width: 480px)", styles)
 		self.assertIn("100dvh", styles)
 
+	def test_login_page_is_light_only(self):
+		app_path = Path(frappe.get_app_path("lex"))
+		template = (app_path / "www" / "login.html").read_text(encoding="utf-8")
+		enhancer = (app_path / "public" / "js" / "lexocrates_login_enhance.js").read_text(
+			encoding="utf-8"
+		)
+
+		self.assertIn('setAttribute("data-theme", "light")', template)
+		self.assertNotIn('data-theme="dark"', template)
+		self.assertIn("enforceLoginLightTheme", enhancer)
+		self.assertIn("attributeFilter: ['data-theme']", enhancer)
+
 	def test_compliance_approved_registration_creates_company_admin_and_wallet(self):
 		country = frappe.db.get_value("Country", {}, "name")
 		suffix = frappe.generate_hash(length=8).lower()

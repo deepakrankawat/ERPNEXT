@@ -1,5 +1,22 @@
 {% extends "templates/web.html" %}
 {% block title %}{{ title }}{% endblock %}
+{% block head_include %}
+	{{ super() }}
+	<script>
+	(function () {
+		var root = document.documentElement;
+		var applyLightTheme = function () {
+			if (root.getAttribute("data-theme") !== "light") root.setAttribute("data-theme", "light");
+			root.style.colorScheme = "light";
+		};
+		applyLightTheme();
+		new MutationObserver(applyLightTheme).observe(root, {
+			attributes: true,
+			attributeFilter: ["data-theme"]
+		});
+	})();
+	</script>
+{% endblock %}
 {% block page_content %}
 <link rel="stylesheet" href="/assets/lex/css/lexocrates_auth_pages.css?v=20260818-1">
 <style>
@@ -153,66 +170,6 @@
 		text-align: center;
 		font-size: 12px;
 		color: #94a3b8;
-	}
-
-	/* Dark mode overrides for Login page */
-	html[data-theme="dark"] .lex-login-wrapper,
-	[data-theme="dark"] .lex-login-wrapper {
-		background: radial-gradient(circle at 50% 20%, rgba(127, 168, 217, 0.12), transparent 70%);
-	}
-	html[data-theme="dark"] .lex-login-card,
-	[data-theme="dark"] .lex-login-card {
-		background: var(--lex-surface, #121a29);
-		border-color: var(--lex-border, #263248);
-		box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.4);
-	}
-	html[data-theme="dark"] .lex-login-brand,
-	[data-theme="dark"] .lex-login-brand {
-		color: var(--lex-ink, #eaeef4);
-	}
-	html[data-theme="dark"] .lex-login-sub,
-	[data-theme="dark"] .lex-login-sub {
-		color: var(--lex-ink-muted, #9db0c6);
-	}
-	html[data-theme="dark"] .lex-login-tabs,
-	[data-theme="dark"] .lex-login-tabs {
-		background: var(--lex-surface-2, #182335);
-	}
-	html[data-theme="dark"] .lex-login-tab,
-	[data-theme="dark"] .lex-login-tab {
-		color: var(--lex-ink-muted, #9db0c6);
-	}
-	html[data-theme="dark"] .lex-login-tab.active,
-	[data-theme="dark"] .lex-login-tab.active {
-		background: var(--lex-surface, #121a29);
-		color: var(--lex-ink, #eaeef4);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-	}
-	html[data-theme="dark"] .lex-register-banner,
-	[data-theme="dark"] .lex-register-banner {
-		background: linear-gradient(135deg, #0f2942 0%, #163654 100%);
-		border-color: #1d4ed8;
-	}
-	html[data-theme="dark"] .lex-register-text h4,
-	[data-theme="dark"] .lex-register-text h4 {
-		color: #38bdf8;
-	}
-	html[data-theme="dark"] .lex-register-text p,
-	[data-theme="dark"] .lex-register-text p {
-		color: #bae6fd;
-	}
-	html[data-theme="dark"] .btn-toggle-password,
-	[data-theme="dark"] .btn-toggle-password {
-		color: var(--lex-ink-muted, #9db0c6);
-	}
-	html[data-theme="dark"] .btn-toggle-password:hover,
-	[data-theme="dark"] .btn-toggle-password:hover {
-		color: #38bdf8;
-		background: var(--lex-surface-2, #182335);
-	}
-	html[data-theme="dark"] .lex-login-footer,
-	[data-theme="dark"] .lex-login-footer {
-		color: var(--lex-ink-faint, #71839b);
 	}
 </style>
 
