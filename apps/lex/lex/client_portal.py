@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-import base64
-import binascii
-import os
-
 import frappe
 from frappe import _
 from frappe.utils import add_days, cint, get_datetime, now_datetime, nowdate
-from frappe.utils.file_manager import save_file
 
 from lex.client_access import (
 	get_portal_user,
@@ -17,16 +12,8 @@ from lex.client_access import (
 from lex.pdf_watermark import (
 	add_secure_download_url,
 	secure_download_url_for_file_url,
-	secure_pdf_download_url,
 )
 from lex.portal_audit import create_portal_audit_event
-
-
-ALLOWED_UPLOAD_EXTENSIONS = {
-	".csv", ".doc", ".docx", ".jpeg", ".jpg", ".pdf", ".png", ".ppt", ".pptx",
-	".txt", ".xls", ".xlsx",
-}
-MAX_PORTAL_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 @frappe.whitelist()
@@ -40,7 +27,8 @@ def get_portal_dashboard():
 		"LPO Matter",
 		fields=[
 			"name", "matter_title", "status", "practice_area", "billing_method", "end_date",
-			"modified", "confidentiality_level",
+			"modified", "confidentiality_level", "matter_nature", "represented_party_name",
+			"our_side_role", "counterparty_name", "counterparty_role", "opposing_counsel",
 		],
 		order_by="modified desc",
 		limit_page_length=100,
@@ -50,6 +38,8 @@ def get_portal_dashboard():
 		fields=[
 			"name", "job_title", "engagement", "job_status", "priority", "due_date", "modified",
 			"job_type", "delivery_document", "client_approval_status", "client_approved_on",
+			"work_intake", "estimate_status", "quote_version", "required_lexpoints", "quoted_amount",
+			"currency", "funding_route", "funding_status", "sla_started_on", "delivery_due_on",
 		],
 		order_by="due_date asc",
 		limit_page_length=100,
@@ -202,8 +192,9 @@ def _documents(matters, jobs, intakes=None, portal_user=None):
 		"attached_to_doctype", "attached_to_name", "modified",
 	]
 	for doctype, names in (
+		("LPO Job", [row.name for row in jobs]),
+		# Historical compatibility only. New uploads are attached exclusively to Jobs.
 		("Lexocrates Work Intake", [row.get("name") for row in (intakes or [])]),
-		("LPO Matter", [row.name for row in matters]),
 	):
 		if not names:
 			continue
@@ -326,7 +317,7 @@ def create_matter(
 ):
 	_require_portal_user()
 	frappe.throw(
-		_("Use Submit New Work. A Matter is created only after SLA acceptance, clean document analysis, quote approval and successful funding."),
+		_("Use Submit New Work. Select or create the Matter first; its Draft Job is activated only after SLA acceptance, clean Job-document analysis, quote approval and successful funding."),
 		frappe.ValidationError,
 	)
 
@@ -349,45 +340,11 @@ def create_work_request(
 
 @frappe.whitelist()
 def upload_matter_document(matter: str, filename: str, content: str):
-	portal_user = _require_portal_user()
-	if not portal_user.can_upload_documents or not has_matter_access(matter, "upload"):
-		frappe.throw(_("You are not authorized to upload documents to this Matter."), frappe.PermissionError)
-	filename = os.path.basename((filename or "").strip())
-	extension = os.path.splitext(filename)[1].lower()
-	if not filename or extension not in ALLOWED_UPLOAD_EXTENSIONS:
-		frappe.throw(_("This file type is not allowed."), frappe.ValidationError)
-	try:
-		encoded = content.split(",", 1)[-1]
-		decoded = base64.b64decode(encoded, validate=True)
-	except (ValueError, binascii.Error):
-		frappe.throw(_("The uploaded file is not valid."), frappe.ValidationError)
-	if not decoded or len(decoded) > MAX_PORTAL_UPLOAD_BYTES:
-		frappe.throw(_("Upload a non-empty file no larger than 10 MB."), frappe.ValidationError)
-	file_doc = save_file(filename, decoded, "LPO Matter", matter, is_private=1)
-	from lex.file_quarantine import scan_and_validate_inbound_file
-
-	scan = scan_and_validate_inbound_file(file_doc.name)
-	create_portal_audit_event(
-		client=portal_user.client,
-		portal_user=portal_user.name,
-		matter=matter,
-		action="Document Uploaded",
-		object_type="File",
-		object_id=file_doc.name,
-		new_value={"file_name": file_doc.file_name, "file_size": file_doc.file_size},
+	_require_portal_user()
+	frappe.throw(
+		_("Matter-level uploads are disabled. Open Submit New Work and upload the document to its Draft Job."),
+		frappe.ValidationError,
 	)
-	return {
-		"name": file_doc.name,
-		"file_name": file_doc.file_name,
-		"file_url": file_doc.file_url,
-		"download_url": secure_pdf_download_url(file_doc.name) if extension == ".pdf" else file_doc.file_url,
-		"file_size": file_doc.file_size,
-		"attached_to_doctype": "LPO Matter",
-		"attached_to_name": matter,
-		"modified": file_doc.modified,
-		"scan_status": scan["status"],
-		"quarantine_passed": scan["quarantine_passed"],
-	}
 
 
 @frappe.whitelist()

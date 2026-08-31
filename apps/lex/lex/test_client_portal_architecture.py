@@ -161,7 +161,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertTrue(invitee.lexpack_view_access)
 		self.assertFalse(invitee.can_upload_documents)
 
-	def test_portal_starts_scoped_intake_before_matter_and_job(self):
+	def test_portal_starts_scoped_matter_and_draft_job_before_funding(self):
 		client = _make_client()
 		user = _make_user()
 		_make_portal_user(user.name, client, "Client Administrator")
@@ -177,8 +177,11 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		intake = frappe.get_doc("Lexocrates Work Intake", result["name"])
 		self.assertEqual(intake.client, client)
 		self.assertEqual(intake.status, "SLA Pending")
-		self.assertFalse(intake.matter)
-		self.assertFalse(intake.job)
+		self.assertTrue(intake.matter)
+		self.assertTrue(intake.job)
+		self.assertEqual(frappe.db.get_value("LPO Matter", intake.matter, "billing_method"), "Job Based")
+		self.assertEqual(frappe.db.get_value("LPO Matter", intake.matter, "status"), "Active")
+		self.assertEqual(frappe.db.get_value("LPO Job", intake.job, "job_status"), "Draft")
 
 	def test_matter_access_and_cross_client_isolation(self):
 		client_a = _make_client()

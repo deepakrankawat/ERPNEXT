@@ -5,7 +5,7 @@ import hashlib
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import get_datetime, now_datetime
+from frappe.utils import flt, get_datetime, now_datetime
 
 from lex.client_access import (
 	has_matter_access,
@@ -57,6 +57,7 @@ class LPOJob(Document):
 		self._validate_status_transition()
 		self._validate_matter_activation()
 		self._validate_execution_snapshots()
+		self._validate_job_documents()
 		self._capture_document_lineage()
 		self._validate_schedule()
 		self._validate_assignment()
@@ -134,10 +135,39 @@ class LPOJob(Document):
 		matter = self._lex_matter_context
 		if matter.status != "Active":
 			frappe.throw(_("The parent Matter must be Active before operational work begins."), frappe.ValidationError)
+		if matter.billing_method == "Job Based":
+			if self.funding_status != "Funded":
+				frappe.throw(_("This Job must be funded before operational work begins."), frappe.ValidationError)
+			if not self.work_intake or self.estimate_status != "Accepted" or flt(self.quote_version) <= 0:
+				frappe.throw(_("A current accepted Job estimate is required before activation."), frappe.ValidationError)
+			if self.job_billing_method == "LexPack" and (
+				flt(self.required_lexpoints) <= 0 or not self.wallet_reservation
+			):
+				frappe.throw(_("Reserved LexPoints are required before activating this Job."), frappe.ValidationError)
+			if self.job_billing_method == "Direct Quote" and (
+				flt(self.quoted_amount) <= 0 or not self.sales_invoice or not self.payment_entry
+			):
+				frappe.throw(_("A paid Direct Quote is required before activating this Job."), frappe.ValidationError)
 		if matter.billing_method == "Quoted Price" and matter.quote_status != "Approved":
 			frappe.throw(_("The parent Matter quote has not been approved."), frappe.ValidationError)
 		if matter.billing_method == "LexPack" and matter.funding_status != "Funded":
 			frappe.throw(_("The parent Matter is not funded with reserved LexPoints."), frappe.ValidationError)
+
+	def _validate_job_documents(self):
+		for row in self.job_documents:
+			file_row = frappe.db.get_value(
+				"File",
+				row.file,
+				["name", "file_name", "file_url", "attached_to_doctype", "attached_to_name", "custom_lex_scan_status", "custom_lex_checksum"],
+				as_dict=True,
+			)
+			if not file_row or file_row.attached_to_doctype != "LPO Job" or file_row.attached_to_name != self.name:
+				frappe.throw(_("Every Job Document must be attached to this Job."), frappe.ValidationError)
+			row.file_name = file_row.file_name
+			row.scan_status = file_row.custom_lex_scan_status or "Pending"
+			row.checksum = file_row.custom_lex_checksum
+			if self.job_status != "Draft" and row.scan_status != "Clean":
+				frappe.throw(_("All Job Documents must pass security scanning before activation."), frappe.ValidationError)
 
 	def _validate_execution_snapshots(self):
 		# Funding activates the job and starts its SLA before an analyst is assigned.

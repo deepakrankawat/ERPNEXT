@@ -1,0 +1,71 @@
+{
+ "actions": [],
+ "creation": "2026-08-31 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "party_name",
+  "party_type",
+  "party_role",
+  "side",
+  "represented_by",
+  "is_adverse"
+ ],
+ "fields": [
+  {
+   "fieldname": "party_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Party Name",
+   "reqd": 1
+  },
+  {
+   "default": "Organization",
+   "fieldname": "party_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Party Type",
+   "options": "Organization\nIndividual\nGovernment / Regulator\nOther",
+   "reqd": 1
+  },
+  {
+   "fieldname": "party_role",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Legal Role"
+  },
+  {
+   "default": "Other",
+   "fieldname": "side",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Side",
+   "options": "Represented\nAdverse\nNeutral / Third Party\nOther",
+   "reqd": 1
+  },
+  {
+   "fieldname": "represented_by",
+   "fieldtype": "Data",
+   "label": "Represented By"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_adverse",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Adverse Party"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-08-31 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO Matter Party",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

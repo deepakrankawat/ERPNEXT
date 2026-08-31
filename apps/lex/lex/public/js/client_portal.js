@@ -289,8 +289,17 @@
 	function workIntakeSection(data) {
 		if (!data.permissions.can_create_matters) return "";
 		const services = ["Contract Review", "Legal Research", "Document Review", "Due Diligence", "Compliance Review", "Litigation Support", "Drafting", "Summarization", "Other"];
-		const form = formCard("1. Preliminary work details", "No purchase is required now. SLA review and document upload happen before any quote or payment.", "lex-new-intake", `
-			<label class="wide">Work title<input name="intake_title" required maxlength="140" placeholder="Example: Vendor contract review"></label>
+		const matterOptions = `<option value="">Create a new Matter</option>${(data.matters || []).filter((row) => !["On Hold", "Completed", "Closed"].includes(row.status)).map((row) => `<option value="${escapeHTML(row.name)}">${escapeHTML(row.matter_title)} · ${escapeHTML(row.name)}</option>`).join("")}`;
+		const form = formCard("1. Matter context and preliminary work", "The Matter and a Draft Job are created now. No purchase is required until Job documents have been scanned and estimated.", "lex-new-intake", `
+			<label class="wide">Matter<select name="matter" data-matter-select>${matterOptions}</select></label>
+			<label class="wide" data-new-matter-field>Matter title<input name="matter_title" required maxlength="140" placeholder="Example: Acme vendor contracting programme"></label>
+			<label data-new-matter-field>Matter nature<select name="matter_nature"><option>Advisory</option><option>Contract / Transaction</option><option>Litigation / Dispute</option><option>Regulatory / Compliance</option><option>Due Diligence</option><option>Other</option></select></label>
+			<label data-new-matter-field>Represented party<input name="represented_party_name" placeholder="Client or entity represented"></label>
+			<label data-new-matter-field>Represented party role<input name="our_side_role" placeholder="Buyer, petitioner, employer..."></label>
+			<label data-new-matter-field>Counterparty / opposing party<input name="counterparty_name" placeholder="Second or adverse party"></label>
+			<label data-new-matter-field>Counterparty role<input name="counterparty_role" placeholder="Seller, respondent, employee..."></label>
+			<label class="wide" data-new-matter-field>Opposing counsel / law firm<input name="opposing_counsel" placeholder="If known"></label>
+			<label class="wide">Job / work title<input name="intake_title" required maxlength="140" placeholder="Example: Review vendor master agreement"></label>
 			<label>Service type<select name="service_type" required>${services.map((item) => `<option>${item}</option>`).join("")}</select></label>
 			<label>Priority<select name="priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Urgent</option></select></label>
 			<label>Jurisdiction<input name="jurisdiction" required placeholder="India, Delhi High Court, UK law..."></label>
@@ -298,9 +307,13 @@
 			<label class="wide">Expected outcome<textarea name="expected_outcome" required placeholder="Describe the deliverable you need"></textarea></label>
 			<label class="wide">Preliminary instructions<textarea name="preliminary_details" required placeholder="Do not upload documents yet. Add background, parties and initial instructions."></textarea></label>
 			<label>Confidentiality<select name="confidentiality_level"><option>Standard</option><option selected>Confidential</option><option>Highly Confidential</option><option>Restricted</option></select></label>
-			<div class="wide lex-button-row"><button class="lex-button btn btn-primary btn-sm" type="submit">Continue to SLA review</button><span class="lex-form-note text-muted">Matter and Job are created only after successful funding.</span></div>`);
+			<div class="wide lex-button-row"><button class="lex-button btn btn-primary btn-sm" type="submit">Create Draft Job and review SLA</button><span class="lex-form-note text-muted">Documents attach only to the Draft Job. Funding activates operational work and starts its SLA.</span></div>`);
 		const intakeCards = (data.intakes || []).map((intake) => intakeCard(intake, data)).join("");
-		return `<section class="lex-section" data-panel="new-matter">${sectionHeader("Submit New Work", "SLA → documents → cost estimate → quote → funding → activated Matter and Job")}${form}${intakeCards || card("Current intake", "No intake submitted", empty("Submit preliminary details to begin."))}</section>`;
+		return `<section class="lex-section" data-panel="new-matter">${sectionHeader("Submit New Work", "Matter + Draft Job → SLA → Job documents → estimate → funding → Job activation")}${form}${intakeCards || card("Current intake", "No intake submitted", empty("Submit preliminary details to begin."))}</section>`;
+	}
+
+	function additionalJobDocuments(intake, docs) {
+		return `<details class="lex-intake-action"><summary>Add or update Draft Job documents</summary><p class="text-muted">Any pre-funding change supersedes the previous estimate and creates a new version automatically.</p><form class="lex-form lex-intake-instructions" data-intake-instructions="${escapeHTML(intake.name)}"><label class="wide">Detailed instructions<textarea name="detailed_instructions" required>${escapeHTML(intake.detailed_instructions || "")}</textarea></label><div class="wide"><button class="lex-button secondary btn btn-default btn-sm" type="submit">Save and re-estimate</button></div></form><form class="lex-form lex-intake-upload" data-intake-upload="${escapeHTML(intake.name)}"><label class="wide">Job document<input class="lex-file-input" name="file" type="file" accept=".pdf,.doc,.docx,.txt,.csv,.png,.jpg,.jpeg" required></label><div class="wide"><button class="lex-button btn btn-primary btn-sm" type="submit">Upload, scan and estimate</button></div></form>${docs ? `<ul class="lex-intake-files">${docs}</ul>` : empty("No Job documents uploaded yet.")}</details>`;
 	}
 
 	function intakeCard(intake, data) {
@@ -309,17 +322,18 @@
 		if (intake.status === "SLA Pending") {
 			action = `<div class="lex-intake-action"><h4>2. Review and accept SLA Document</h4>${intake.sla_document_snapshot ? `<a class="lex-button secondary btn btn-default btn-sm" href="${escapeHTML(intake.sla_download_url || intake.sla_document_snapshot)}" target="_blank" rel="noopener">Download protected SLA PDF</a>` : ""}<div class="lex-sla-document">${escapeHTML(intake.sla_terms_snapshot).replace(/\n/g, "<br>")}</div><label class="lex-check"><input type="checkbox" data-sla-check="${escapeHTML(intake.name)}"> I reviewed SLA ${escapeHTML(intake.sla_version)} and agree to this exact snapshot (SHA-256 ${escapeHTML(intake.sla_snapshot_hash.slice(0, 12))}…).</label><button class="lex-button btn btn-primary btn-sm" type="button" data-accept-sla="${escapeHTML(intake.name)}">Accept SLA and unlock upload</button></div>`;
 		} else if (["Documents Pending", "Security Review", "Analysis Pending"].includes(intake.status)) {
-			action = `<div class="lex-intake-action"><h4>3. Upload documents and request cost estimate</h4><p class="text-muted">Upload unlocked ${intake.sla_accepted_on ? `after acceptance on ${escapeHTML(fmtDate(intake.sla_accepted_on))}` : ""}. Every file remains quarantined until its security scan is clean.</p><form class="lex-form lex-intake-instructions" data-intake-instructions="${escapeHTML(intake.name)}"><label class="wide">Detailed instructions<textarea name="detailed_instructions" required placeholder="Add document-specific instructions, exclusions, counterparties and expected format.">${escapeHTML(intake.detailed_instructions || "")}</textarea></label><div class="wide"><button class="lex-button secondary btn btn-default btn-sm" type="submit">Save detailed instructions</button></div></form><form class="lex-form lex-intake-upload" data-intake-upload="${escapeHTML(intake.name)}"><label class="wide">Document<input class="lex-file-input" name="file" type="file" accept=".pdf,.doc,.docx,.txt,.csv,.png,.jpg,.jpeg" required></label><div class="wide lex-button-row"><button class="lex-button btn btn-primary btn-sm" type="submit">Upload and scan</button>${intake.document_count && intake.detailed_instructions ? `<button class="lex-button secondary btn btn-default btn-sm" type="button" data-analyze-intake="${escapeHTML(intake.name)}">Request cost estimate</button>` : ""}</div></form><p class="text-muted">Client access is limited to cost estimation. AI chat, legal analysis, prompts, models and internal AI output are not available in this workspace.</p>${docs ? `<ul class="lex-intake-files">${docs}</ul>` : empty("No documents uploaded yet.")}</div>`;
+			action = `<div class="lex-intake-action"><h4>3. Add Job documents and detailed instructions</h4><p class="text-muted">Every Job document remains quarantined until its security scan is clean. Once documents and instructions are ready, the governed cost estimate runs automatically.</p></div>${additionalJobDocuments(intake, docs)}<p class="text-muted">Client access is limited to cost estimation. AI chat, legal analysis, prompts, models and internal AI output are not available in this workspace.</p>`;
 		} else if (intake.status === "Operations Review") {
-			action = `<div class="lex-intake-action lex-review-state"><h4>4. Cost estimate under review</h4><p>Legal Operations is validating scope, LexPoints, price and delivery before the estimate is released.</p></div>`;
+			action = `<div class="lex-intake-action lex-review-state"><h4>4. Cost estimate under review</h4><p>Legal Operations is validating scope, LexPoints, price and delivery before the estimate is released.</p></div>${additionalJobDocuments(intake, docs)}`;
 		} else if (intake.status === "Pending CEO Approval") {
 			action = `<div class="lex-intake-action lex-review-state"><h4>5. Awaiting internal pricing approval</h4><div class="lex-quote-summary"><span><small>Estimated price</small><strong>${escapeHTML(fmtMoney(intake.quoted_amount, intake.currency))}</strong></span><span><small>Required</small><strong>${fmtNumber(intake.required_lexpoints)} LexPoints</strong></span><span><small>Delivery</small><strong>${fmtNumber(intake.delivery_timeline_hours)} hours after funding</strong></span></div><p>This price is awaiting internal approval before payment opens. No action is needed from you — we'll notify you as soon as it's approved.</p></div>`;
 		} else if (["Quote Ready", "Funding Pending"].includes(intake.status)) {
-			action = fundingOptions(intake, data);
+			action = fundingOptions(intake, data) + (intake.status === "Quote Ready" ? additionalJobDocuments(intake, docs) : "");
 		} else if (["Funded", "Matter Confirmed"].includes(intake.status)) {
 			action = `<div class="lex-intake-action lex-funded-state"><h4>Work funded and activated</h4><div class="lex-confirm-grid"><span><small>Funding</small><strong>${escapeHTML(intake.funding_route)}</strong></span><span><small>Matter</small><strong>${escapeHTML(intake.matter || "Confirming...")}</strong></span><span><small>Job</small><strong>${escapeHTML(intake.job || "Activating...")}</strong></span><span><small>SLA started</small><strong>${escapeHTML(fmtDate(intake.sla_started_on))}</strong></span><span><small>Delivery due</small><strong>${escapeHTML(fmtDate(intake.delivery_due_on))}</strong></span></div></div>`;
 		}
-		return `<article class="lex-card lex-intake-card"><div class="lex-card-head widget-head"><div><h3>${escapeHTML(intake.intake_title)}</h3><small>${escapeHTML(intake.name)} · ${escapeHTML(intake.service_type)} · Created ${escapeHTML(fmtDate(intake.created_on))}</small></div><span class="indicator-pill ${indicatorColor(intake.status)} ${statusClass(intake.status)}">${escapeHTML(intake.status)}</span></div><div class="lex-intake-steps"><span class="${intake.sla_accepted ? "done" : ""}">SLA</span><span class="${intake.document_count ? "done" : ""}">Documents</span><span class="${["Under Review", "Ready"].includes(intake.cost_estimate_status) ? "done" : ""}">Estimate</span><span class="${["Ready", "Accepted"].includes(intake.quote_status) ? "done" : ""}">Quote</span><span class="${intake.funding_status === "Funded" ? "done" : ""}">Funding</span><span class="${intake.matter && intake.job ? "done" : ""}">Activated</span></div>${action}</article>`;
+		if (intake.status === "Pending CEO Approval") action += additionalJobDocuments(intake, docs);
+		return `<article class="lex-card lex-intake-card"><div class="lex-card-head widget-head"><div><h3>${escapeHTML(intake.intake_title)}</h3><small>${escapeHTML(intake.matter || "Matter pending")} · ${escapeHTML(intake.job || "Draft Job pending")} · ${escapeHTML(intake.name)}</small></div><span class="indicator-pill ${indicatorColor(intake.status)} ${statusClass(intake.status)}">${escapeHTML(intake.status)}</span></div><div class="lex-intake-steps"><span class="${intake.matter ? "done" : ""}">Matter</span><span class="${intake.job ? "done" : ""}">Draft Job</span><span class="${intake.sla_accepted ? "done" : ""}">SLA</span><span class="${intake.document_count ? "done" : ""}">Documents</span><span class="${["Under Review", "Ready"].includes(intake.cost_estimate_status) ? "done" : ""}">Estimate</span><span class="${["Ready", "Accepted"].includes(intake.quote_status) ? "done" : ""}">Quote</span><span class="${intake.funding_status === "Funded" ? "done" : ""}">Funding</span><span class="${intake.status === "Matter Confirmed" ? "done" : ""}">Activated</span></div>${action}</article>`;
 	}
 
 	function fundingOptions(intake, data) {
@@ -339,7 +353,7 @@
 
 	function workRequestsSection(data) {
 		if (!data.permissions.can_create_matters) return "";
-		return `<section class="lex-section" data-panel="work-requests">${sectionHeader("Work Status", "Funded and activated legal work")}<article class="lex-commercial-note"><strong>New work always starts with Submit New Work.</strong><span>This prevents Matter or Job creation before SLA acceptance, secure documents, confirmed quote and funding.</span><button class="lex-button btn btn-primary btn-sm" type="button" data-go="new-matter">Submit new work</button></article>${card("Activated work", `${data.jobs.length} visible items`, jobTable(data.jobs))}</section>`;
+		return `<section class="lex-section" data-panel="work-requests">${sectionHeader("Work Status", "Draft, funded and active Job work")}<article class="lex-commercial-note"><strong>New work always starts with Submit New Work.</strong><span>The Matter and Draft Job provide context first; secure Job documents, estimate and funding are required before operations begin.</span><button class="lex-button btn btn-primary btn-sm" type="button" data-go="new-matter">Submit new work</button></article>${card("Visible Jobs", `${data.jobs.length} visible items`, jobTable(data.jobs))}</section>`;
 	}
 
 	function documentsSection(data) {
@@ -493,7 +507,16 @@
 	}
 
 	function bindForms(root, data) {
-		bindSubmit("lex-new-intake", "lex.work_intake.create_work_intake", "Work Intake created", "Could not start Work Intake");
+		const matterSelect = root.querySelector("[data-matter-select]");
+		const toggleMatterFields = () => {
+			const existing = Boolean(matterSelect?.value);
+			root.querySelectorAll("[data-new-matter-field]").forEach((field) => { field.hidden = existing; });
+			const title = root.querySelector('[name="matter_title"]');
+			if (title) title.required = !existing;
+		};
+		matterSelect?.addEventListener("change", toggleMatterFields);
+		toggleMatterFields();
+		bindSubmit("lex-new-intake", "lex.work_intake.create_work_intake", "Matter and Draft Job created", "Could not start work");
 		root.querySelectorAll("[data-accept-sla]").forEach((button) => button.addEventListener("click", async () => {
 			const intake = button.dataset.acceptSla;
 			const checked = root.querySelector(`[data-sla-check="${CSS.escape(intake)}"]`)?.checked;
@@ -512,7 +535,8 @@
 			try {
 				const content = await readFile(file);
 				const response = await call("lex.work_intake.upload_document", { intake: upload.dataset.intakeUpload, filename: file.name, content });
-				if (response.quarantine_passed) notify("Document passed security scanning");
+				if (response.estimate) notify("Document scanned and Job cost estimate updated");
+				else if (response.quarantine_passed) notify("Document passed security scanning. Add detailed instructions to run the estimate.");
 				else notify(`Document remains quarantined: ${response.scan_status}`, "orange");
 				reloadSection("new-matter");
 			} catch (error) { showError("Upload failed", error); button.disabled = false; }
@@ -522,11 +546,11 @@
 			const button = form.querySelector("button[type=submit]");
 			button.disabled = true;
 			try {
-				await call("lex.work_intake.save_detailed_instructions", {
+				const response = await call("lex.work_intake.save_detailed_instructions", {
 					intake: form.dataset.intakeInstructions,
 					detailed_instructions: form.elements.detailed_instructions.value,
 				});
-				notify("Detailed instructions saved");
+				notify(response.cost_estimate_status ? "Instructions saved and Job cost estimate updated" : "Detailed instructions saved");
 				reloadSection("new-matter");
 			} catch (error) { showError("Instructions could not be saved", error); button.disabled = false; }
 		}));

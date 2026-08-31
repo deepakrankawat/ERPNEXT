@@ -64,6 +64,8 @@ def scan_and_validate_inbound_file(file_doc_name: str) -> dict:
 
 def enqueue_lpo_job_file_scan(doc, method=None):
 	"""Queue a malware scan after a Desk attachment is committed to an LPO Job."""
+	if getattr(frappe.flags, "lexocrates_intake_service", False):
+		return
 	if doc.attached_to_doctype != "LPO Job" or not doc.attached_to_name:
 		return
 	frappe.enqueue(
@@ -227,6 +229,30 @@ def _verify_scan_permission(doc):
 			return
 	if doc.attached_to_doctype == "LPO Matter" and has_matter_access(doc.attached_to_name, "upload"):
 		return
+	if doc.attached_to_doctype == "LPO Job":
+		actor = get_portal_user()
+		job = frappe.db.get_value(
+			"LPO Job",
+			doc.attached_to_name,
+			["customer", "engagement", "job_status", "work_intake"],
+			as_dict=True,
+		)
+		intake = (
+			frappe.db.get_value("Lexocrates Work Intake", job.work_intake, ["sla_accepted", "portal_user"], as_dict=True)
+			if job and job.work_intake else None
+		)
+		if (
+			actor
+			and actor.can_upload_documents
+			and job
+			and job.customer == actor.client
+			and job.job_status == "Draft"
+			and intake
+			and intake.sla_accepted
+			and (actor.matter_access_scope == "All Client Matters" or intake.portal_user == actor.name)
+			and has_matter_access(job.engagement, "upload")
+		):
+			return
 	if doc.attached_to_doctype == "Lexocrates Work Intake":
 		actor = get_portal_user()
 		intake = frappe.db.get_value(

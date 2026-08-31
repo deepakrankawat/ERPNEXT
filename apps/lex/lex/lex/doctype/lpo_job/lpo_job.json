@@ -10,6 +10,7 @@
   "job_overview_section",
   "job_title",
   "engagement",
+  "work_intake",
   "job_type",
   "overview_column_break",
   "job_status",
@@ -34,6 +35,7 @@
   "workflow_version_snapshot",
   "sop_version_snapshot",
   "documents_section",
+  "job_documents",
   "source_document",
   "source_document_checksum",
   "source_document_version",
@@ -42,6 +44,21 @@
   "delivery_document_version",
   "intake_estimate_doctype",
   "intake_estimate",
+  "job_commercial_section",
+  "job_billing_method",
+  "estimate_status",
+  "quote_version",
+  "required_lexpoints",
+  "quoted_amount",
+  "currency",
+  "commercial_column_break",
+  "funding_route",
+  "funding_status",
+  "wallet_reservation",
+  "sales_invoice",
+  "payment_entry",
+  "sla_started_on",
+  "delivery_due_on",
   "ai_governance_section",
   "ai_processing_allowed",
   "ai_token_budget",
@@ -99,6 +116,14 @@
    "search_index": 1
   },
   {
+   "fieldname": "work_intake",
+   "fieldtype": "Link",
+   "label": "Commercial Work Intake",
+   "options": "Lexocrates Work Intake",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
    "fieldname": "job_type",
    "fieldtype": "Select",
    "label": "Job Type",
@@ -133,6 +158,7 @@
    "in_list_view": 1,
    "label": "Assigned Analyst",
    "options": "User",
+   "permlevel": 1,
    "search_index": 1
   },
   {
@@ -250,7 +276,14 @@
   {
    "fieldname": "documents_section",
    "fieldtype": "Section Break",
-   "label": "Documents"
+   "label": "Job Documents"
+  },
+  {
+   "description": "All client source documents are attached to this Job. Matter records do not accept direct document uploads.",
+   "fieldname": "job_documents",
+   "fieldtype": "Table",
+   "label": "Source Documents",
+   "options": "LPO Job Document"
   },
   {
    "fieldname": "source_document",
@@ -305,6 +338,111 @@
    "permlevel": 1,
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "job_commercial_section",
+   "fieldtype": "Section Break",
+   "label": "Job Estimate and Funding"
+  },
+  {
+   "fieldname": "job_billing_method",
+   "fieldtype": "Select",
+   "label": "Billing Method",
+   "options": "\nLexPack\nDirect Quote",
+   "read_only": 1
+  },
+  {
+   "default": "Not Requested",
+   "fieldname": "estimate_status",
+   "fieldtype": "Select",
+   "label": "Estimate Status",
+   "options": "Not Requested\nPending\nOperations Review\nPending CEO Approval\nReady\nAccepted\nSuperseded",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "quote_version",
+   "fieldtype": "Int",
+   "label": "Quote Version",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "required_lexpoints",
+   "fieldtype": "Int",
+   "label": "Required LexPoints",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "quoted_amount",
+   "fieldtype": "Currency",
+   "label": "Fixed Quote",
+   "non_negative": 1,
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "default": "USD",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "commercial_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Not Selected",
+   "fieldname": "funding_route",
+   "fieldtype": "Select",
+   "label": "Funding Route",
+   "options": "Not Selected\nExisting LexPoints\nRecommended LexPack\nDirect Quote",
+   "read_only": 1
+  },
+  {
+   "default": "Not Started",
+   "fieldname": "funding_status",
+   "fieldtype": "Select",
+   "label": "Funding Status",
+   "options": "Not Started\nPayment Pending\nFunded\nFailed\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "wallet_reservation",
+   "fieldtype": "Link",
+   "label": "LexPoint Reservation",
+   "options": "Lexocrates Wallet Transaction",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sla_started_on",
+   "fieldtype": "Datetime",
+   "label": "Operational SLA Started On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_due_on",
+   "fieldtype": "Datetime",
+   "label": "Delivery Due On",
+   "read_only": 1
   },
   {
    "fieldname": "ai_governance_section",
@@ -416,7 +554,8 @@
    "fieldname": "qa_reviewer",
    "fieldtype": "Link",
    "label": "QA Reviewer",
-   "options": "User"
+   "options": "User",
+   "permlevel": 1
   },
   {
    "depends_on": "eval:doc.qa_required",
@@ -587,7 +726,7 @@
    "write": 1
   }
  ],
- "search_fields": "job_title,engagement,customer,customer_name,assigned_analyst",
+ "search_fields": "job_title,engagement,customer,customer_name,matter,work_intake",
  "show_title_field_in_link": 1,
  "sort_field": "due_date",
  "sort_order": "ASC",

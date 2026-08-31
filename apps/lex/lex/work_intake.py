@@ -15,7 +15,7 @@ from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 from frappe.utils.file_manager import save_file
 
-from lex.client_access import get_portal_user, has_portal_capability
+from lex.client_access import get_portal_user, has_matter_access, has_portal_capability
 from lex.pdf_watermark import add_secure_download_url, secure_download_url_for_file_url
 from lex.portal_audit import create_portal_audit_event
 
@@ -67,6 +67,14 @@ def create_work_intake(
 	preliminary_details: str,
 	requested_delivery_date: str | None = None,
 	confidentiality_level: str = "Confidential",
+	matter: str | None = None,
+	matter_title: str | None = None,
+	matter_nature: str = "Advisory",
+	represented_party_name: str | None = None,
+	our_side_role: str | None = None,
+	counterparty_name: str | None = None,
+	counterparty_role: str | None = None,
+	opposing_counsel: str | None = None,
 ):
 	actor = _require_portal_user()
 	if not has_portal_capability("can_create_matters"):
@@ -99,10 +107,119 @@ def create_work_intake(
 		frappe.throw(_("Choose a supported Service Type."), frappe.ValidationError)
 	if priority not in {"Low", "Medium", "High", "Urgent"}:
 		frappe.throw(_("Choose a valid priority."), frappe.ValidationError)
-	with _service_writes():
+	parent = _resolve_intake_matter(
+		actor,
+		matter=matter,
+		matter_title=matter_title or intake_title,
+		matter_nature=matter_nature,
+		represented_party_name=represented_party_name,
+		our_side_role=our_side_role,
+		counterparty_name=counterparty_name,
+		counterparty_role=counterparty_role,
+		opposing_counsel=opposing_counsel,
+		service_type=service_type,
+		jurisdiction=jurisdiction,
+		preliminary_details=preliminary_details,
+		confidentiality_level=confidentiality_level,
+	)
+	values["matter"] = parent.name
+	with _service_writes(), _portal_service_writes():
 		doc = frappe.get_doc(values).insert(ignore_permissions=True)
-	_audit(doc, "Work Intake Created", {"service_type": service_type, "status": doc.status})
-	return {"name": doc.name, "status": doc.status, "route": "/client-portal#new-matter"}
+		draft_due = (
+			get_datetime(requested_delivery_date)
+			if requested_delivery_date
+			else now_datetime() + timedelta(hours=BASE_HOURS[service_type])
+		)
+		job = frappe.get_doc({
+			"doctype": "LPO Job",
+			"job_title": (intake_title or "").strip(),
+			"engagement": parent.name,
+			"work_intake": doc.name,
+			"job_type": service_type,
+			"job_status": "Draft",
+			"priority": priority,
+			"task_description": (
+				f"Expected outcome:\n{(expected_outcome or '').strip()}\n\n"
+				f"Preliminary details:\n{(preliminary_details or '').strip()}"
+			),
+			"received_at": now_datetime(),
+			"due_date": draft_due,
+			"job_billing_method": None,
+			"estimate_status": "Not Requested",
+			"funding_status": "Not Started",
+			"qa_required": 1,
+		}).insert(ignore_permissions=True)
+		doc.job = job.name
+		doc.save(ignore_permissions=True)
+	_audit(
+		doc,
+		"Draft Job Intake Created",
+		{"service_type": service_type, "status": doc.status, "matter": parent.name, "job": job.name},
+	)
+	return {
+		"name": doc.name,
+		"status": doc.status,
+		"matter": parent.name,
+		"job": job.name,
+		"route": "/client-portal#new-matter",
+	}
+
+
+def _resolve_intake_matter(actor, **values):
+	matter_name = (values.get("matter") or "").strip()
+	if matter_name:
+		parent = frappe.get_doc("LPO Matter", matter_name)
+		if parent.customer != actor.client or not has_matter_access(parent.name, "view"):
+			frappe.throw(_("You cannot submit work under this Matter."), frappe.PermissionError)
+		if parent.status in {"On Hold", "Completed", "Closed"}:
+			frappe.throw(
+				_("New work cannot be submitted while Matter {0} is {1}.").format(parent.name, parent.status),
+				frappe.ValidationError,
+			)
+		return parent
+
+	matter_title = (values.get("matter_title") or "").strip()
+	if not matter_title:
+		frappe.throw(_("Matter Title is required when creating a new Matter."), frappe.MandatoryError)
+	customer_name = frappe.db.get_value("Customer", actor.client, "customer_name") or actor.client
+	portal_permissions = frappe.db.get_value(
+		"Lexocrates Portal User",
+		actor.name,
+		["can_upload_documents", "can_comment", "approval_authority", "billing_access"],
+		as_dict=True,
+	) or frappe._dict()
+	with _portal_service_writes():
+		return frappe.get_doc({
+			"doctype": "LPO Matter",
+			"matter_title": matter_title,
+			"customer": actor.client,
+			"status": "Active",
+			"matter_model": "Project",
+			"matter_manager": "Administrator",
+			"matter_nature": values.get("matter_nature") or "Advisory",
+			"represented_party_name": (values.get("represented_party_name") or customer_name).strip(),
+			"our_side_role": (values.get("our_side_role") or "").strip(),
+			"counterparty_name": (values.get("counterparty_name") or "").strip(),
+			"counterparty_role": (values.get("counterparty_role") or "").strip(),
+			"opposing_counsel": (values.get("opposing_counsel") or "").strip(),
+			"billing_method": "Job Based",
+			"practice_area": _practice_area(values.get("service_type")),
+			"jurisdictions": (values.get("jurisdiction") or "").strip(),
+			"description": (values.get("preliminary_details") or "").strip(),
+			"start_date": nowdate(),
+			"standard_turnaround_hours": BASE_HOURS.get(values.get("service_type"), 72),
+			"sla_warning_hours": 8,
+			"confidentiality_level": values.get("confidentiality_level") or "Confidential",
+			"authorized_portal_users": [{
+				"portal_user": actor.name,
+				"user": actor.user,
+				"can_view": 1,
+				"can_upload": cint(portal_permissions.can_upload_documents),
+				"can_comment": cint(portal_permissions.can_comment),
+				"can_approve": cint(portal_permissions.approval_authority not in {None, "", "None"}),
+				"can_view_billing": cint(portal_permissions.billing_access),
+			}],
+		}).insert(ignore_permissions=True)
 
 
 @frappe.whitelist()
@@ -130,30 +247,75 @@ def upload_document(intake: str, filename: str, content: str):
 		frappe.throw(_("Your client role cannot upload documents."), frappe.PermissionError)
 	if not doc.sla_accepted:
 		frappe.throw(_("Review and accept the SLA Document before uploading files."), frappe.PermissionError)
-	if doc.status not in {"Documents Pending", "Security Review", "Analysis Pending", "Operations Review"}:
-		frappe.throw(_("Documents are locked after the quote is issued."), frappe.PermissionError)
+	if doc.funding_status in {"Payment Pending", "Funded"} or doc.status in {"Funding Pending", "Funded", "Matter Confirmed"}:
+		frappe.throw(
+			_("This funded scope is locked. Create a new Draft Job under the same Matter for additional documents or scope."),
+			frappe.PermissionError,
+		)
+	if not doc.job or not frappe.db.exists("LPO Job", doc.job):
+		frappe.throw(_("A Draft Job is required before documents can be uploaded."), frappe.ValidationError)
+	job = frappe.get_doc("LPO Job", doc.job)
+	if job.job_status != "Draft":
+		frappe.throw(_("Documents can only be added while the Job is in Draft."), frappe.PermissionError)
 	filename = os.path.basename((filename or "").strip())
 	extension = os.path.splitext(filename)[1].lower()
 	if not filename or extension not in ALLOWED_UPLOAD_EXTENSIONS:
 		frappe.throw(_("This file type is not allowed."), frappe.ValidationError)
 	decoded = _decode_upload(content)
-	file_doc = save_file(filename, decoded, "Lexocrates Work Intake", doc.name, is_private=1)
+	# This controlled endpoint performs the scan synchronously so quote state can
+	# be updated atomically. Suppress the generic after-commit scanner to avoid a
+	# second worker overwriting the just-completed result.
+	is_primary = not bool(job.source_document)
+	with _service_writes():
+		file_doc = save_file(
+			filename,
+			decoded,
+			"LPO Job",
+			job.name,
+			is_private=1,
+			df="source_document" if is_primary else None,
+		)
 	from lex.file_quarantine import scan_and_validate_inbound_file
 
 	scan = scan_and_validate_inbound_file(file_doc.name)
+	file_doc.reload()
+	with _portal_service_writes():
+		job.reload()
+		job.append("job_documents", {
+			"file": file_doc.name,
+			"file_name": file_doc.file_name,
+			"document_role": "Source" if is_primary else "Supporting",
+			"scan_status": scan["status"],
+			"checksum": file_doc.get("custom_lex_checksum"),
+			"document_version": 1,
+			"included_in_estimate": 1,
+			"uploaded_by": frappe.session.user,
+			"uploaded_on": now_datetime(),
+		})
+		if scan["status"] == "Clean" and is_primary:
+			job.source_document = file_doc.file_url
+		job.save(ignore_permissions=True)
+	_invalidate_unfunded_estimate(doc)
 	_refresh_document_state(doc)
 	_audit(
 		doc,
 		"Work Intake Document Uploaded",
 		{"file": file_doc.name, "file_name": file_doc.file_name, "scan_status": scan["status"]},
 	)
-	return {
+	result = {
 		"name": file_doc.name,
 		"file_name": file_doc.file_name,
 		"scan_status": scan["status"],
 		"quarantine_passed": scan["quarantine_passed"],
 		"intake_status": doc.status,
 	}
+	if scan["status"] == "Clean" and len(frappe.utils.strip_html(doc.detailed_instructions or "")) >= 20:
+		try:
+			result["estimate"] = _process_documents(doc, actor, estimate_only=True)
+		except Exception as exc:
+			frappe.log_error(frappe.get_traceback(), f"Automatic Job estimate {doc.name}")
+			result["estimate_error"] = str(exc)[:300]
+	return result
 
 
 @frappe.whitelist()
@@ -161,16 +323,20 @@ def save_detailed_instructions(intake: str, detailed_instructions: str):
 	doc, actor = _require_intake_access(intake)
 	if not doc.sla_accepted:
 		frappe.throw(_("Accept the SLA before adding detailed instructions."), frappe.PermissionError)
-	if doc.status not in {"Documents Pending", "Security Review", "Analysis Pending", "Operations Review"}:
-		frappe.throw(_("Detailed instructions are locked after quote issue."), frappe.PermissionError)
+	if doc.funding_status in {"Payment Pending", "Funded"} or doc.status in {"Funding Pending", "Funded", "Matter Confirmed"}:
+		frappe.throw(_("Detailed instructions are locked after funding starts."), frappe.PermissionError)
 	text = (detailed_instructions or "").strip()
 	if len(frappe.utils.strip_html(text)) < 20:
 		frappe.throw(_("Provide enough detail for scope and quote analysis."), frappe.ValidationError)
 	with _service_writes():
 		doc.detailed_instructions = text
 		doc.save(ignore_permissions=True)
+	_invalidate_unfunded_estimate(doc)
 	_audit(doc, "Work Intake Detailed Instructions Updated", {"characters": len(text)})
-	return {"name": doc.name, "status": doc.status}
+	files = _intake_files(doc.name)
+	if files and all((row.custom_lex_scan_status or "Pending") == "Clean" for row in files):
+		return _process_documents(doc, actor, estimate_only=True)
+	return {"name": doc.name, "status": doc.status, "estimate_pending_documents": True}
 
 
 @frappe.whitelist()
@@ -323,6 +489,7 @@ def _process_documents(doc, actor, *, estimate_only: bool):
 		doc.ai_estimate_reference_doctype = "LPO AI Document Estimate"
 		doc.ai_document_estimate = estimate.name
 		doc.save(ignore_permissions=True)
+	_sync_job_commercial(doc)
 	if auto_approved:
 		_audit(
 			doc,
@@ -384,6 +551,7 @@ def issue_quote(
 		_route_quote_for_approval(doc)
 		doc.save(ignore_permissions=True)
 	_sync_estimate_after_quote(doc)
+	_sync_job_commercial(doc)
 	_notify_ceo_of_pending_pricing(doc)
 	_audit(doc, "Work Intake Quote Issued", {"quote_version": doc.quote_version, "required_lexpoints": doc.required_lexpoints})
 	return {"name": doc.name, "status": doc.status, "quote_status": doc.quote_status}
@@ -415,6 +583,7 @@ def approve_quote_pricing(intake: str, decision: str, notes: str | None = None):
 			doc.status = "Operations Review"
 		doc.save(ignore_permissions=True)
 	_sync_estimate_approval(doc, decision, notes)
+	_sync_job_commercial(doc)
 	_audit(
 		doc,
 		"Matter Pricing Approval Decision",
@@ -461,6 +630,7 @@ def prepare_lexpack_purchase(intake: str, plan: str, actor=None):
 		doc.status = "Funding Pending"
 		doc.failure_reason = None
 		doc.save(ignore_permissions=True)
+	_sync_job_commercial(doc)
 	return doc, actor
 
 
@@ -493,6 +663,7 @@ def complete_lexpack_funding(purchase_doc):
 			doc.status = "Funded"
 			doc.failure_reason = None
 			doc.save(ignore_permissions=True)
+		_sync_job_commercial(doc)
 		result = _confirm_funded_intake(doc)
 		frappe.db.release_savepoint("lexpack_intake_activation")
 		return result
@@ -522,7 +693,7 @@ def reconcile_funded_intakes(limit: int = 50):
 	results = []
 	for name in names:
 		doc = frappe.get_doc("Lexocrates Work Intake", name)
-		if doc.matter and doc.job:
+		if doc.status == "Matter Confirmed" and doc.job:
 			continue
 		try:
 			frappe.db.savepoint("funded_intake_recovery")
@@ -561,6 +732,7 @@ def create_direct_quote_order(intake: str):
 		doc.exchange_rate = exchange_rate
 		doc.failure_reason = None
 		doc.save(ignore_permissions=True)
+	_sync_job_commercial(doc)
 	try:
 		order = lexpack._razorpay_request("POST", "/orders", settings, payload)
 		lexpack._validate_order_response(order, payload)
@@ -687,108 +859,110 @@ def portal_intakes(actor=None):
 def _confirm_funded_intake(doc):
 	frappe.db.sql("select name from `tabLexocrates Work Intake` where name=%s for update", doc.name)
 	doc.reload()
-	if doc.matter and doc.job:
-		return _funding_result(doc, duplicate=True)
 	if doc.funding_status != "Funded":
-		frappe.throw(_("Funding must be successful before Matter confirmation."), frappe.ValidationError)
-	start = now_datetime()
-	due = start + timedelta(hours=cint(doc.delivery_timeline_hours))
-	practice_area = _practice_area(doc.service_type)
-	from lex.execution_policies import get_execution_policy_snapshots
-
-	workflow_version, sop_version = get_execution_policy_snapshots()
-	portal_permissions = frappe.db.get_value(
-		"Lexocrates Portal User",
-		doc.portal_user,
-		["can_upload_documents", "can_comment", "approval_authority", "billing_access"],
-		as_dict=True,
-	) or frappe._dict()
-	matter_values = {
-		"doctype": "LPO Matter",
-		"matter_title": doc.intake_title,
-		"customer": doc.client,
-		"status": "Draft" if doc.funding_route != "Direct Quote" else "Active",
-		"matter_model": "Fixed Fee" if doc.funding_route == "Direct Quote" else "Project",
-		"matter_manager": "Administrator",
-		"billing_method": "Quoted Price" if doc.funding_route == "Direct Quote" else "LexPack",
-		"quoted_amount": doc.quoted_amount if doc.funding_route == "Direct Quote" else 0,
-		"quote_status": "Approved" if doc.funding_route == "Direct Quote" else "Not Required",
-		"quote_approved_by": doc.submitted_by if doc.funding_route == "Direct Quote" else None,
-		"quote_approved_on": doc.funded_on if doc.funding_route == "Direct Quote" else None,
-		"lexpoints_estimated": doc.required_lexpoints if doc.funding_route != "Direct Quote" else 0,
-		"practice_area": practice_area,
-		"jurisdictions": doc.jurisdiction,
-		"description": doc.scope_summary,
-		"start_date": getdate(start),
-		"end_date": getdate(due),
-		"standard_turnaround_hours": doc.delivery_timeline_hours,
-		"sla_warning_hours": max(1, min(8, cint(doc.delivery_timeline_hours / 6))),
-		"confidentiality_level": doc.confidentiality_level,
-		"workflow_version_snapshot": workflow_version,
-		"sop_version_snapshot": sop_version,
-		"authorized_portal_users": [{
-			"portal_user": doc.portal_user,
-			"user": doc.submitted_by,
-			"can_view": 1,
-			"can_upload": cint(portal_permissions.can_upload_documents),
-			"can_comment": cint(portal_permissions.can_comment),
-			"can_approve": cint(portal_permissions.approval_authority not in {None, "", "None"}),
-			"can_view_billing": cint(portal_permissions.billing_access),
-		}],
-	}
-	previous_portal_flag = getattr(frappe.flags, "lexocrates_portal_service", False)
-	frappe.flags.lexocrates_portal_service = True
-	try:
-		matter = frappe.get_doc(matter_values).insert(ignore_permissions=True)
-		reservation = None
-		if doc.funding_route != "Direct Quote":
-			from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import _post_transaction
-
-			reservation = _post_transaction(
-				client=doc.client,
-				transaction_type="Reservation",
-				points=doc.required_lexpoints,
-				idempotency_key=f"work-intake-reservation:{doc.name}",
-				matter=matter.name,
-				reference_doctype="Lexocrates Work Intake",
-				reference_name=doc.name,
-				description=f"Funding reserved for {doc.intake_title}",
-			)
-			matter.funding_status = "Funded"
-			matter.funding_transaction = reservation.name
-			matter.lexpoints_reserved = doc.required_lexpoints
+		frappe.throw(_("Funding must be successful before Job activation."), frappe.ValidationError)
+	if doc.status == "Matter Confirmed" and doc.job:
+		return _funding_result(doc, duplicate=True)
+	if not doc.matter or not frappe.db.exists("LPO Matter", doc.matter):
+		actor = frappe.get_doc("Lexocrates Portal User", doc.portal_user)
+		matter = _resolve_intake_matter(
+			actor,
+			matter=None,
+			matter_title=doc.intake_title,
+			matter_nature="Advisory",
+			represented_party_name=None,
+			our_side_role=None,
+			counterparty_name=None,
+			counterparty_role=None,
+			opposing_counsel=None,
+			service_type=doc.service_type,
+			jurisdiction=doc.jurisdiction,
+			preliminary_details=doc.preliminary_details,
+			confidentiality_level=doc.confidentiality_level,
+		)
+		with _service_writes():
+			doc.matter = matter.name
+			doc.save(ignore_permissions=True)
+	else:
+		matter = frappe.get_doc("LPO Matter", doc.matter)
+	if matter.customer != doc.client or matter.status in {"On Hold", "Completed", "Closed"}:
+		frappe.throw(_("The selected Matter cannot accept this Job."), frappe.ValidationError)
+	if matter.status == "Draft" and matter.billing_method == "Job Based":
+		with _portal_service_writes():
 			matter.status = "Active"
 			matter.save(ignore_permissions=True)
-		files = _intake_files(doc.name)
-		primary = next((row.file_url for row in files if row.custom_lex_scan_status == "Clean"), None)
-		job = frappe.get_doc({
-			"doctype": "LPO Job",
-			"job_title": doc.intake_title,
-			"engagement": matter.name,
-			"job_type": doc.service_type,
-			"job_status": "Activated",
-			"priority": doc.priority,
-			"task_description": f"{doc.expected_outcome}\n\nPreliminary details:\n{doc.preliminary_details}\n\nDetailed instructions:\n{doc.detailed_instructions}\n\nConfirmed scope:\n{doc.scope_summary}",
-			"received_at": start,
-			"due_date": due,
-			"source_document": primary,
-			"intake_estimate_doctype": "LPO AI Document Estimate",
-			"intake_estimate": doc.ai_document_estimate,
-			"qa_required": 1,
-			"workflow_version_snapshot": workflow_version,
-			"sop_version_snapshot": sop_version,
-		}).insert(ignore_permissions=True)
-	finally:
-		frappe.flags.lexocrates_portal_service = previous_portal_flag
+	if not doc.job or not frappe.db.exists("LPO Job", doc.job):
+		with _portal_service_writes():
+			job = frappe.get_doc({
+				"doctype": "LPO Job",
+				"job_title": doc.intake_title,
+				"engagement": matter.name,
+				"work_intake": doc.name,
+				"job_type": doc.service_type,
+				"job_status": "Draft",
+				"priority": doc.priority,
+				"task_description": doc.preliminary_details,
+				"received_at": now_datetime(),
+				"due_date": now_datetime() + timedelta(hours=max(1, cint(doc.delivery_timeline_hours))),
+				"qa_required": 1,
+			}).insert(ignore_permissions=True)
+		with _service_writes():
+			doc.job = job.name
+			doc.save(ignore_permissions=True)
+	else:
+		job = frappe.get_doc("LPO Job", doc.job)
+	if job.engagement != matter.name or job.work_intake != doc.name:
+		frappe.throw(_("The Draft Job does not belong to this Matter and Work Intake."), frappe.ValidationError)
+	if job.job_status != "Draft":
+		frappe.throw(_("Only a Draft Job can be activated by funding."), frappe.ValidationError)
+
+	start = now_datetime()
+	due = start + timedelta(hours=cint(doc.delivery_timeline_hours))
+	reservation = None
+	if doc.funding_route != "Direct Quote":
+		from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import _post_transaction
+
+		reservation = _post_transaction(
+			client=doc.client,
+			transaction_type="Reservation",
+			points=doc.required_lexpoints,
+			idempotency_key=f"job-funding:{job.name}",
+			matter=matter.name,
+			reference_doctype="LPO Job",
+			reference_name=job.name,
+			description=f"Job funding reservation for {doc.intake_title}",
+		)
 	with _service_writes():
 		doc.reload()
 		doc.wallet_reservation = reservation.name if reservation else None
-		doc.matter = matter.name
-		doc.job = job.name
 		doc.sla_started_on = start
 		doc.delivery_due_on = due
 		doc.status = "Matter Confirmed"
 		doc.save(ignore_permissions=True)
+	files = _intake_files(doc.name)
+	primary = next((row.file_url for row in files if row.custom_lex_scan_status == "Clean"), None)
+	job.reload()
+	job.task_description = f"{doc.expected_outcome}\n\nPreliminary details:\n{doc.preliminary_details}\n\nDetailed instructions:\n{doc.detailed_instructions}\n\nConfirmed scope:\n{doc.scope_summary}"
+	job.received_at = start
+	job.due_date = due
+	job.source_document = primary
+	job.intake_estimate = doc.ai_document_estimate
+	job.job_billing_method = "Direct Quote" if doc.funding_route == "Direct Quote" else "LexPack"
+	job.estimate_status = "Accepted"
+	job.quote_version = doc.quote_version
+	job.required_lexpoints = doc.required_lexpoints
+	job.quoted_amount = doc.quoted_amount
+	job.currency = doc.currency
+	job.funding_route = doc.funding_route
+	job.funding_status = "Funded"
+	job.wallet_reservation = doc.wallet_reservation
+	job.sales_invoice = doc.sales_invoice
+	job.payment_entry = doc.payment_entry
+	job.sla_started_on = start
+	job.delivery_due_on = due
+	job.job_status = "Activated"
+	with _portal_service_writes():
+		job.save(ignore_permissions=True)
 	_activate_document_estimate(doc, matter.name, job.name)
 	_audit(
 		doc,
@@ -799,13 +973,7 @@ def _confirm_funded_intake(doc):
 
 
 def _intake_row(doc, actor):
-	documents = frappe.get_all(
-		"File",
-		filters={"attached_to_doctype": "Lexocrates Work Intake", "attached_to_name": doc.name, "is_folder": 0},
-		fields=["name", "file_name", "file_url", "file_size", "modified", "custom_lex_scan_status"],
-		order_by="creation asc",
-		limit_page_length=100,
-	)
+	documents = _intake_files(doc.name)
 	plan = None
 	if doc.get("recommended_plan"):
 		plan = frappe.db.get_value(
@@ -869,10 +1037,97 @@ def _refresh_document_state(doc, files=None):
 		doc.security_status = security
 		doc.status = status
 		doc.save(ignore_permissions=True)
+	_sync_job_commercial(doc)
+
+
+def _invalidate_unfunded_estimate(doc):
+	doc.reload()
+	if doc.funding_status in {"Payment Pending", "Funded"}:
+		return
+	if doc.ai_document_estimate and frappe.db.exists("LPO AI Document Estimate", doc.ai_document_estimate):
+		estimate = frappe.get_doc("LPO AI Document Estimate", doc.ai_document_estimate)
+		if estimate.status != "Activated":
+			with _estimate_service_writes():
+				estimate.status = "Superseded"
+				estimate.save(ignore_permissions=True)
+	with _service_writes():
+		doc.analysis_status = "Not Started"
+		doc.extraction_status = "Not Started"
+		doc.analysis_confidence = 0
+		doc.low_confidence = 0
+		doc.quote_status = "Not Generated"
+		doc.quoted_amount = 0
+		doc.required_lexpoints = 0
+		doc.scope_summary = None
+		doc.delivery_timeline_hours = 0
+		doc.quote_valid_until = None
+		doc.recommended_plan = None
+		doc.pricing_approval_status = "Not Required"
+		doc.funding_route = "Not Selected"
+		doc.funding_status = "Not Started"
+		doc.ai_document_estimate = None
+		doc.save(ignore_permissions=True)
+	_sync_job_commercial(doc, estimate_status="Superseded" if doc.quote_version else "Not Requested")
+
+
+def _job_estimate_status(doc):
+	if doc.funding_status == "Funded" or doc.quote_status == "Accepted":
+		return "Accepted"
+	if doc.quote_status == "Ready":
+		return "Ready"
+	if doc.status == "Pending CEO Approval" or doc.quote_status == "Pending CEO Approval":
+		return "Pending CEO Approval"
+	if doc.status == "Operations Review" or doc.quote_status == "Operations Review":
+		return "Operations Review"
+	if doc.document_count:
+		return "Pending"
+	return "Not Requested"
+
+
+def _sync_job_commercial(doc, *, estimate_status=None):
+	if not doc.get("job") or not frappe.db.exists("LPO Job", doc.job):
+		return
+	job = frappe.get_doc("LPO Job", doc.job)
+	if job.job_status != "Draft":
+		return
+	funding_route = doc.funding_route or "Not Selected"
+	job.job_billing_method = (
+		"Direct Quote" if funding_route == "Direct Quote"
+		else "LexPack" if funding_route in {"Existing LexPoints", "Recommended LexPack"}
+		else None
+	)
+	job.estimate_status = estimate_status or _job_estimate_status(doc)
+	job.quote_version = doc.quote_version
+	job.required_lexpoints = doc.required_lexpoints
+	job.quoted_amount = doc.quoted_amount
+	job.currency = doc.currency
+	job.funding_route = funding_route
+	job.funding_status = doc.funding_status
+	job.wallet_reservation = doc.wallet_reservation
+	job.sales_invoice = doc.sales_invoice
+	job.payment_entry = doc.payment_entry
+	job.sla_started_on = doc.sla_started_on
+	job.delivery_due_on = doc.delivery_due_on
+	job.intake_estimate = doc.ai_document_estimate
+	with _portal_service_writes():
+		job.save(ignore_permissions=True)
 
 
 def _intake_files(intake):
-	fields = ["name", "file_name", "file_url", "file_size", "custom_lex_scan_status"]
+	fields = ["name", "file_name", "file_url", "file_size", "modified", "custom_lex_scan_status"]
+	job = frappe.db.get_value("Lexocrates Work Intake", intake, "job")
+	if job:
+		rows = frappe.get_all(
+			"File",
+			filters={"attached_to_doctype": "LPO Job", "attached_to_name": job, "is_folder": 0},
+			fields=fields,
+			order_by="creation asc",
+			limit_page_length=100,
+		)
+		if rows:
+			return rows
+	# Backward-compatible read path for intake documents created before the
+	# Job-document architecture migration.
 	return frappe.get_all(
 		"File",
 		filters={"attached_to_doctype": "Lexocrates Work Intake", "attached_to_name": intake, "is_folder": 0},
@@ -1614,6 +1869,17 @@ class _service_writes:
 		frappe.flags.lexocrates_intake_service = self.previous
 
 
+class _portal_service_writes:
+	"""Allow the intake service to update portal-protected Matter and Job records."""
+
+	def __enter__(self):
+		self.previous = getattr(frappe.flags, "lexocrates_portal_service", False)
+		frappe.flags.lexocrates_portal_service = True
+
+	def __exit__(self, exc_type, exc_value, traceback):
+		frappe.flags.lexocrates_portal_service = self.previous
+
+
 class _cost_estimation_gateway_call:
 	"""Unforgeable request-local capability used only by the intake service."""
 
@@ -1629,6 +1895,7 @@ def _set_values(doc, **values):
 	with _service_writes():
 		doc.update(values)
 		doc.save(ignore_permissions=True)
+	_sync_job_commercial(doc)
 
 
 def _audit(doc, action, value):

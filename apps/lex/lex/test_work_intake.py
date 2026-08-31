@@ -7,6 +7,7 @@ import frappe
 from frappe.client import get as get_client_document
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime
+from frappe.utils.file_manager import save_file
 
 from lex import ai_gateway, install, work_intake
 from lex.lexpoint_estimation import ensure_default_lexpoint_rules
@@ -62,7 +63,31 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		doc = frappe.get_doc("Lexocrates Work Intake", intake["name"])
 		self.assertFalse(doc.sla_accepted)
 		self.assertEqual(doc.document_count, 0)
-		self.assertFalse(doc.matter)
+		self.assertTrue(doc.matter)
+		self.assertTrue(doc.job)
+		self.assertEqual(frappe.db.get_value("LPO Matter", doc.matter, "status"), "Active")
+		self.assertEqual(frappe.db.get_value("LPO Matter", doc.matter, "billing_method"), "Job Based")
+		self.assertEqual(frappe.db.get_value("LPO Job", doc.job, "job_status"), "Draft")
+		self.assertEqual(frappe.db.get_value("LPO Matter", doc.matter, "counterparty_name"), "Test Supplier Ltd.")
+		portal_matter = get_client_document("LPO Matter", doc.matter)
+		self.assertIsNone(portal_matter.get("matter_manager"))
+		frappe.db.set_value(
+			"LPO Job",
+			doc.job,
+			{"assigned_analyst": "Administrator", "qa_reviewer": "Administrator"},
+			update_modified=False,
+		)
+		portal_job = get_client_document("LPO Job", doc.job)
+		self.assertIsNone(portal_job.get("assigned_analyst"))
+		self.assertIsNone(portal_job.get("qa_reviewer"))
+		with self.assertRaises(frappe.ValidationError):
+			save_file(
+				f"blocked-{frappe.generate_hash(length=6)}.txt",
+				b"Matter-level uploads are forbidden.",
+				"LPO Matter",
+				doc.matter,
+				is_private=1,
+			)
 
 	def test_client_ai_access_is_limited_to_cost_estimation(self):
 		intake = _new_intake()
@@ -108,7 +133,9 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		row = next(item for item in rows if item["name"] == intake["name"])
 		self.assertEqual(row["status"], "SLA Pending")
 		self.assertEqual(row["documents"], [])
-		self.assertFalse(row["matter"])
+		self.assertTrue(row["matter"])
+		self.assertTrue(row["job"])
+		self.assertEqual(frappe.db.get_value("LPO Job", row["job"], "job_status"), "Draft")
 
 	def test_existing_balance_confirms_matter_and_activates_job(self):
 		intake = _new_intake()
@@ -124,6 +151,22 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 				intake["name"], "agreement.txt", _text_upload(content)
 			)
 		self.assertTrue(uploaded["quarantine_passed"])
+		self.assertEqual(frappe.db.get_value("File", uploaded["name"], "custom_lex_scan_status"), "Clean")
+		intake_files = work_intake._intake_files(intake["name"])
+		self.assertEqual(len(intake_files), 1)
+		self.assertEqual(intake_files[0].custom_lex_scan_status, "Clean")
+		self.assertEqual(frappe.db.get_value("Lexocrates Work Intake", intake["name"], "security_status"), "Clean")
+		draft_links = frappe.db.get_value(
+			"Lexocrates Work Intake", intake["name"], ["matter", "job"], as_dict=True
+		)
+		self.assertEqual(frappe.db.get_value("File", uploaded["name"], "attached_to_doctype"), "LPO Job")
+		self.assertEqual(frappe.db.get_value("File", uploaded["name"], "attached_to_name"), draft_links.job)
+		self.assertFalse(frappe.db.exists("File", {"attached_to_doctype": "LPO Matter", "attached_to_name": draft_links.matter}))
+		job_document = frappe.db.get_value(
+			"LPO Job Document", {"parent": draft_links.job, "file": uploaded["name"]}, ["scan_status", "included_in_estimate"], as_dict=True
+		)
+		self.assertEqual(job_document.scan_status, "Clean")
+		self.assertTrue(job_document.included_in_estimate)
 		analysis = work_intake.request_cost_estimate(intake["name"])
 		# AI intake analysis is disabled by default (LexPack Settings), so the
 		# deterministic formula estimates the price, and it must still wait for
@@ -150,7 +193,12 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		self.assertEqual(estimate.recommended_service, "STANDARD_CONTRACT_REVIEW")
 		self.assertTrue(estimate.factor_breakdown_json)
 		self.assertTrue(estimate.explanation)
-		self.assertFalse(frappe.db.get_value("Lexocrates Work Intake", intake["name"], "matter"))
+		pre_funding = frappe.db.get_value(
+			"Lexocrates Work Intake", intake["name"], ["matter", "job"], as_dict=True
+		)
+		self.assertTrue(pre_funding.matter)
+		self.assertTrue(pre_funding.job)
+		self.assertEqual(frappe.db.get_value("LPO Job", pre_funding.job, "job_status"), "Draft")
 
 		frappe.set_user("Administrator")
 		_post_transaction(
@@ -169,6 +217,8 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 
 		frappe.set_user(self.user.name)
 		result = work_intake.fund_with_existing_lexpoints(intake["name"])
+		self.assertEqual(result["matter"], pre_funding.matter)
+		self.assertEqual(result["job"], pre_funding.job)
 		self.assertEqual(result["funding_route"], "Existing LexPoints")
 		self.assertTrue(result["wallet_reservation"])
 		self.assertTrue(result["sla_started_on"])
@@ -442,6 +492,12 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 
 def _new_intake():
 	return work_intake.create_work_intake(
+		matter_title="Test Supplier Contracting Matter",
+		matter_nature="Contract / Transaction",
+		represented_party_name="Test Client Organization",
+		our_side_role="Buyer",
+		counterparty_name="Test Supplier Ltd.",
+		counterparty_role="Seller",
 		intake_title="Test Supplier Agreement Review",
 		service_type="Contract Review",
 		jurisdiction="India",

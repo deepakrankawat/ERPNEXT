@@ -1,0 +1,96 @@
+{
+ "actions": [],
+ "creation": "2026-08-31 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "file",
+  "file_name",
+  "document_role",
+  "scan_status",
+  "checksum",
+  "document_version",
+  "included_in_estimate",
+  "uploaded_by",
+  "uploaded_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "file",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "File",
+   "options": "File",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "file_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Document",
+   "read_only": 1
+  },
+  {
+   "default": "Source",
+   "fieldname": "document_role",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Document Role",
+   "options": "Source\nSupporting\nReference\nClient Instruction\nOther"
+  },
+  {
+   "fieldname": "scan_status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Security Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "checksum",
+   "fieldtype": "Data",
+   "label": "SHA-256",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "document_version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "included_in_estimate",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Included in Current Estimate",
+   "read_only": 1
+  },
+  {
+   "fieldname": "uploaded_by",
+   "fieldtype": "Link",
+   "label": "Uploaded By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "uploaded_on",
+   "fieldtype": "Datetime",
+   "label": "Uploaded On",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-08-31 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO Job Document",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

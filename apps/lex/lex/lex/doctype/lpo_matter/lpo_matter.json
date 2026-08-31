@@ -15,6 +15,15 @@
   "status",
   "matter_model",
   "matter_manager",
+  "party_section",
+  "matter_nature",
+  "represented_party_name",
+  "our_side_role",
+  "party_column_break",
+  "counterparty_name",
+  "counterparty_role",
+  "opposing_counsel",
+  "additional_parties",
   "billing_section",
   "billing_method",
   "quoted_amount",
@@ -112,8 +121,64 @@
    "in_list_view": 1,
    "label": "Matter Manager",
    "options": "User",
+   "permlevel": 1,
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "description": "Matter parties are legal-context metadata. Documents belong only to Jobs created under this Matter.",
+   "fieldname": "party_section",
+   "fieldtype": "Section Break",
+   "label": "Matter Parties"
+  },
+  {
+   "default": "Advisory",
+   "fieldname": "matter_nature",
+   "fieldtype": "Select",
+   "label": "Matter Nature",
+   "options": "Advisory\nContract / Transaction\nLitigation / Dispute\nRegulatory / Compliance\nDue Diligence\nOther",
+   "reqd": 1
+  },
+  {
+   "description": "The organization or individual represented by the instructing Customer/Law Firm.",
+   "fieldname": "represented_party_name",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "label": "Represented Party",
+   "search_index": 1
+  },
+  {
+   "fieldname": "our_side_role",
+   "fieldtype": "Data",
+   "label": "Represented Party Role"
+  },
+  {
+   "fieldname": "party_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The principal counterparty, adverse party, respondent, buyer/seller or other second party.",
+   "fieldname": "counterparty_name",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "label": "Counterparty / Opposing Party",
+   "search_index": 1
+  },
+  {
+   "fieldname": "counterparty_role",
+   "fieldtype": "Data",
+   "label": "Counterparty Role"
+  },
+  {
+   "fieldname": "opposing_counsel",
+   "fieldtype": "Data",
+   "label": "Opposing Counsel / Law Firm"
+  },
+  {
+   "fieldname": "additional_parties",
+   "fieldtype": "Table",
+   "label": "Additional Parties",
+   "options": "LPO Matter Party"
   },
   {
    "fieldname": "billing_section",
@@ -126,7 +191,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Billing Method",
-   "options": "Quoted Price\nLexPack",
+   "options": "Job Based\nQuoted Price\nLexPack",
    "reqd": 1
   },
   {
@@ -436,7 +501,7 @@
    "write": 1
   }
  ],
- "search_fields": "matter_title,customer,customer_name,practice_area,matter_manager",
+ "search_fields": "matter_title,customer,customer_name,practice_area,represented_party_name,counterparty_name",
  "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",

@@ -212,7 +212,10 @@ has_permission = {
 
 doc_events = {
 	"File": {
-		"before_validate": "lex.pdf_watermark.enforce_pdf_private_storage",
+		"before_validate": [
+			"lex.pdf_watermark.enforce_pdf_private_storage",
+			"lex.document_policy.block_matter_attachment",
+		],
 		"after_insert": "lex.file_quarantine.enqueue_lpo_job_file_scan",
 	},
 	"User": {

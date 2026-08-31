@@ -48,8 +48,8 @@ class TestSRSAcceptanceScenarios(FrappeTestCase):
 		client_id = activated["client"]
 		self.assertTrue(activated["portal_user"])
 
-		# Step 5: Upload-first Work Intake. No Matter is created before SLA,
-		# documents, analysis, quote and funding complete.
+		# Step 5: Matter context and Draft Job exist before SLA/documents/payment;
+		# operational Job work remains blocked until funding succeeds.
 		frappe.set_user(email)
 		result = work_intake.create_work_intake(
 			intake_title="Scenario A Acquisition Matter",
@@ -62,14 +62,18 @@ class TestSRSAcceptanceScenarios(FrappeTestCase):
 		intake = frappe.get_doc("Lexocrates Work Intake", result["name"])
 		self.assertEqual(intake.client, client_id)
 		self.assertEqual(intake.status, "SLA Pending")
-		self.assertFalse(intake.matter)
+		self.assertTrue(intake.matter)
+		self.assertTrue(intake.job)
+		self.assertEqual(frappe.db.get_value("LPO Matter", intake.matter, "billing_method"), "Job Based")
+		self.assertEqual(frappe.db.get_value("LPO Job", intake.job, "job_status"), "Draft")
 
-		# Step 6: SLA acceptance unlocks documents, but still does not create a Matter.
+		# Step 6: SLA acceptance unlocks Job documents without activating operations.
 		work_intake.accept_sla(intake.name, 1)
 		intake.reload()
 		self.assertEqual(intake.status, "Documents Pending")
 		self.assertTrue(intake.sla_accepted)
-		self.assertFalse(intake.matter)
+		self.assertTrue(intake.matter)
+		self.assertEqual(frappe.db.get_value("LPO Job", intake.job, "job_status"), "Draft")
 
 	def test_scenario_b_existing_client_wallet_matter(self):
 		"""Scenario B: Existing Client, Wallet Matter (SRS Section 21.2)."""

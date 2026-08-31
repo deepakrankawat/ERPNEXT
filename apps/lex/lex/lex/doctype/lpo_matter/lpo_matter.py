@@ -29,6 +29,7 @@ ACTIVE_JOB_STATUSES = (
 class LPOMatter(Document):
 	def validate(self):
 		self._protect_client_submission()
+		self._validate_parties()
 		self._validate_dates()
 		self._validate_billing()
 		self._validate_activation_gates()
@@ -107,8 +108,32 @@ class LPOMatter(Document):
 		if self.end_date and getdate(self.end_date) < getdate(self.start_date):
 			frappe.throw(_("End Date cannot be before Start Date."), frappe.ValidationError)
 
+	def _validate_parties(self):
+		# A Matter is the legal context/container.  Uploaded evidence and working
+		# documents deliberately live on its child Jobs, never on the Matter.
+		self.represented_party_name = (self.represented_party_name or self.customer_name or self.customer or "").strip()
+		self.counterparty_name = (self.counterparty_name or "").strip() or None
+		seen = set()
+		for row in self.additional_parties:
+			key = (row.party_name or "").strip().casefold()
+			if not key:
+				frappe.throw(_("Every Additional Party must have a Party Name."), frappe.ValidationError)
+			if key in seen:
+				frappe.throw(_("The same Additional Party cannot be added twice."), frappe.ValidationError)
+			seen.add(key)
+
 	def _validate_billing(self):
-		if self.billing_method == "Quoted Price":
+		if self.billing_method == "Job Based":
+			self.quoted_amount = 0
+			self.quote_status = "Not Required"
+			self.quote_approved_by = None
+			self.quote_approved_on = None
+			self.lexpoints_estimated = 0
+			self.lexpoints_reserved = 0
+			self.lexpoints_consumed = 0
+			self.funding_status = "Not Required"
+			self.funding_transaction = None
+		elif self.billing_method == "Quoted Price":
 			self.lexpoints_estimated = 0
 			self.lexpoints_reserved = 0
 			self.lexpoints_consumed = 0
