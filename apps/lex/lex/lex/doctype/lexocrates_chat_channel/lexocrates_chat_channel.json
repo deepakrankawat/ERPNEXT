@@ -19,6 +19,7 @@
   "reference_doctype",
   "reference_name",
   "activity_section",
+  "last_message_sequence",
   "last_message_at",
   "members_section",
   "members"
@@ -120,6 +121,14 @@
    "fieldname": "activity_section",
    "fieldtype": "Section Break",
    "label": "Activity"
+  },
+  {
+   "default": "0",
+   "description": "Authoritative high-water mark for reliable realtime message recovery.",
+   "fieldname": "last_message_sequence",
+   "fieldtype": "Int",
+   "label": "Last Message Sequence",
+   "read_only": 1
   },
   {
    "fieldname": "last_message_at",

@@ -8,6 +8,8 @@
  "field_order": [
   "message_context_section",
   "channel",
+  "channel_sequence",
+  "client_message_id",
   "sender",
   "sent_at",
   "system_generated",
@@ -41,6 +43,25 @@
    "options": "Lexocrates Chat Channel",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "default": "0",
+   "description": "Server-assigned, monotonically increasing sequence within the channel.",
+   "fieldname": "channel_sequence",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Channel Sequence",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "description": "Client-generated idempotency key used to safely retry message delivery.",
+   "fieldname": "client_message_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Client Message ID",
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "sender",

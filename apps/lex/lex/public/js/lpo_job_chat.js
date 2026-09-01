@@ -114,8 +114,10 @@ frappe.provide("lex.ai");
 	}
 
 	function deactivate_chat() {
-		if (chat.channel) frappe.realtime.doc_unsubscribe("Lexocrates Chat Channel", chat.channel);
-		if (chat.listener) frappe.realtime.off("new_chat_message", chat.listener);
+		chat.realtime_unsubscribe?.();
+		chat.realtime_unsubscribe = null;
+		if (chat.channel && !window.lexocratesReliableChat) frappe.realtime.doc_unsubscribe("Lexocrates Chat Channel", chat.channel);
+		if (chat.listener && !window.lexocratesReliableChat) frappe.realtime.off("new_chat_message", chat.listener);
 		chat.channel = null;
 		chat.listener = null;
 		chat.frm = null;
@@ -160,9 +162,6 @@ frappe.provide("lex.ai");
 					frappe.call({ method: `${API_ROOT}.mark_channel_read`, args: { channel: chat.channel, message_name: data.name }, freeze: false }).catch(() => {});
 				}
 			};
-			frappe.realtime.on("new_chat_message", chat.listener);
-			frappe.realtime.emit("doc_subscribe", "Lexocrates Chat Channel", channel.name);
-
 			const history_response = await frappe.call({
 				method: `${API_ROOT}.get_messages`,
 				args: { channel: channel.name },
@@ -175,6 +174,16 @@ frappe.provide("lex.ai");
 			} else {
 				messages.forEach((message) => render_chat_message($history, message));
 			}
+			const latest_sequence = Math.max(0, ...messages.map((message) => Number(message.channel_sequence || 0)));
+			if (window.lexocratesReliableChat) {
+				chat.realtime_unsubscribe = window.lexocratesReliableChat.subscribe(channel.name, {
+					afterSequence: latest_sequence,
+					onMessage: chat.listener,
+				});
+			} else {
+				frappe.realtime.on("new_chat_message", chat.listener);
+				frappe.realtime.emit("doc_subscribe", "Lexocrates Chat Channel", channel.name);
+			}
 			frappe.call({ method: `${API_ROOT}.mark_channel_read`, args: { channel: channel.name, message_name: messages.at(-1)?.name }, freeze: false }).catch(() => {});
 
 			const send = async () => {
@@ -183,11 +192,11 @@ frappe.provide("lex.ai");
 				const safe_html = frappe.utils.escape_html(content).replace(/\n/g, "<br>");
 				$send.prop("disabled", true);
 				try {
-					const res = await frappe.call({
-						method: `${API_ROOT}.send_message`,
-						args: { channel: channel.name, message_text: safe_html },
-					});
-					if (res.message) render_chat_message($history, res.message);
+					const args = { channel: channel.name, message_text: safe_html };
+					const message = window.lexocratesReliableChat
+						? await window.lexocratesReliableChat.send({ method: `${API_ROOT}.send_message`, args })
+						: (await frappe.call({ method: `${API_ROOT}.send_message`, args })).message;
+					if (message) render_chat_message($history, message);
 					$input.val("");
 				} finally {
 					$send.prop("disabled", false);

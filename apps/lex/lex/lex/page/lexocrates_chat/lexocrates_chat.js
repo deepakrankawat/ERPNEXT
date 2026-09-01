@@ -25,6 +25,7 @@ class LexocratesChatPage {
 		this.reply_to = null;
 		this.has_more = false;
 		this.oldest_message_at = null;
+		this.oldest_sequence = null;
 		this.typing_timer = null;
 		this.typing_stop_timer = null;
 		this.typing_users = new Map();
@@ -34,6 +35,10 @@ class LexocratesChatPage {
 		this.last_presence_activity = Date.now();
 		this.last_presence_activity_event = 0;
 		this.realtime_connected = Boolean(frappe.realtime?.socket?.connected);
+		this.realtime_unsubscribe = null;
+		this.read_timer = null;
+		this.read_inflight = false;
+		this.pending_read_message = null;
 		this.loaded = false;
 		this.sound_muted = window.lexocratesChatSound?.isMuted()
 			?? localStorage.getItem("lex_chat_sound_muted") === "1";
@@ -230,8 +235,14 @@ class LexocratesChatPage {
 			window.lexocratesChatSound?.unlock();
 			this.send_message();
 		});
-		this.$root.find(".lex-chat__jump-latest").on("click", () => this.scroll_to_bottom(true));
-		this.$messages.on("scroll", () => this.update_jump_to_latest());
+		this.$root.find(".lex-chat__jump-latest").on("click", () => {
+			this.scroll_to_bottom(true);
+			this.mark_read(this.latest_message_name());
+		});
+		this.$messages.on("scroll", () => {
+			this.update_jump_to_latest();
+			if (this.is_near_bottom()) this.mark_read(this.latest_message_name());
+		});
 		this.$messages.on("keydown", (event) => this.handle_history_keydown(event));
 		this.bind_conversation_wheel();
 
@@ -795,14 +806,15 @@ class LexocratesChatPage {
 	bind_realtime() {
 		this.on_new_message = (message) => {
 			this.play_incoming_message(message);
+			const was_near_bottom = this.is_near_bottom();
 			if (message.thread_reference && this.messages.has(message.thread_reference)) {
 				const root = this.messages.get(message.thread_reference);
 				root.reply_count = Number(root.reply_count || 0) + (this.messages.has(message.name) ? 0 : 1);
 				this.upsert_message(root, false);
 			}
 			if (message.channel === this.selected_channel) {
-				this.upsert_message(message, true);
-				this.mark_read(message.name);
+				this.upsert_message(message, false);
+				if (was_near_bottom) this.mark_read(message.name);
 			} else {
 				this.bump_channel(message.channel);
 				this.notify_new_message(message);
@@ -850,7 +862,11 @@ class LexocratesChatPage {
 			for (const message of this.messages.values()) {
 				if (
 					message.sender === this.bootstrap?.current_user &&
-					new Date(message.sent_at) <= new Date(payload.last_read_at) &&
+					(
+						payload.last_read_sequence
+							? Number(message.channel_sequence || 0) <= Number(payload.last_read_sequence)
+							: new Date(message.sent_at) <= new Date(payload.last_read_at)
+					) &&
 					!(message.read_by || []).includes(payload.user)
 				) {
 					message.read_by = [...(message.read_by || []), payload.user];
@@ -873,11 +889,15 @@ class LexocratesChatPage {
 		};
 		this.on_presence_changed = (payload) => this.apply_presence(payload);
 		this.on_socket_connect = () => {
-			this.set_realtime_status(true);
+			if (!window.lexocratesReliableChat) this.set_realtime_status(true);
 			this.heartbeat_presence(!document.hidden);
 		};
-		this.on_socket_disconnect = () => this.set_realtime_status(false);
-		frappe.realtime.on("new_chat_message", this.on_new_message);
+		this.on_socket_disconnect = () => {
+			if (!window.lexocratesReliableChat) this.set_realtime_status(false);
+		};
+		if (!window.lexocratesReliableChat) {
+			frappe.realtime.on("new_chat_message", this.on_new_message);
+		}
 		frappe.realtime.on("chat_message_updated", this.on_message_updated);
 		frappe.realtime.on("chat_mention", this.on_mention);
 		frappe.realtime.on("chat_job_mention", this.on_job_mention);
@@ -1028,9 +1048,8 @@ class LexocratesChatPage {
 	async open_channel(channel_name) {
 		const channel = this.channels.find((item) => item.name === channel_name);
 		if (!channel) return;
-		if (this.selected_channel && this.selected_channel !== channel_name) {
-			frappe.realtime.doc_unsubscribe("Lexocrates Chat Channel", this.selected_channel);
-		}
+		this.realtime_unsubscribe?.();
+		this.realtime_unsubscribe = null;
 		this.selected_channel = channel_name;
 		this.selected_channel_doc = channel;
 		this.messages.clear();
@@ -1045,8 +1064,6 @@ class LexocratesChatPage {
 		this.$messages.html(this.loading_markup(__("Loading conversation")));
 		this.$input.attr("contenteditable", channel.can_post ? "true" : "false");
 		this.$send.prop("disabled", !channel.can_post);
-		frappe.realtime.emit("doc_subscribe", "Lexocrates Chat Channel", channel.name);
-
 		const response = await frappe.call({
 			method: `${this.api}.get_messages`,
 			args: { channel: channel.name, limit: 100 },
@@ -1056,11 +1073,22 @@ class LexocratesChatPage {
 		const messages = response.message || [];
 		this.has_more = messages.length === 100;
 		this.oldest_message_at = messages[0]?.sent_at || null;
+		this.oldest_sequence = messages[0]?.channel_sequence ?? null;
 		if (!messages.length) {
 			this.$messages.html(`<div class="lex-chat__no-messages"><h4>${__("No messages yet")}</h4><p>${__("Start the secure conversation below.")}</p></div>`);
 		} else {
 			messages.forEach((message) => this.upsert_message(message, false));
 			this.scroll_to_bottom();
+		}
+		const latest_sequence = Math.max(0, ...messages.map((message) => Number(message.channel_sequence || 0)));
+		if (window.lexocratesReliableChat) {
+			this.realtime_unsubscribe = window.lexocratesReliableChat.subscribe(channel.name, {
+				afterSequence: latest_sequence,
+				onMessage: this.on_new_message,
+				onState: ({ state }) => this.set_realtime_transport_state(state),
+			});
+		} else {
+			frappe.realtime.emit("doc_subscribe", "Lexocrates Chat Channel", channel.name);
 		}
 		this.$messages.prepend(`<button class="btn btn-default btn-xs lex-chat__load-older ${this.has_more ? "" : "hidden"}">${__("Load older messages")}</button>`);
 		this.mark_read(messages.at(-1)?.name);
@@ -1097,8 +1125,17 @@ class LexocratesChatPage {
 		this.$messages.find(".lex-chat__no-messages").remove();
 		const $markup = $(this.message_markup(message));
 		const $existing = this.$messages.find(`[data-message="${CSS.escape(message.name)}"]`);
-		if ($existing.length) $existing.replaceWith($markup);
-		else this.$messages.append($markup);
+		if ($existing.length) {
+			$existing.replaceWith($markup);
+		} else {
+			const sequence = Number(message.channel_sequence || 0);
+			const next = [...this.messages.values()]
+				.filter((item) => item.name !== message.name && Number(item.channel_sequence || 0) > sequence)
+				.sort((left, right) => Number(left.channel_sequence || 0) - Number(right.channel_sequence || 0))[0];
+			const $next = next ? this.$messages.find(`[data-message="${CSS.escape(next.name)}"]`) : $();
+			if ($next.length) $markup.insertBefore($next);
+			else this.$messages.append($markup);
+		}
 		this.decorate_message_flow();
 		if (scroll || (!existed && was_near_bottom)) this.scroll_to_bottom();
 		else if (!existed) this.$root.find(".lex-chat__jump-latest").removeClass("hidden");
@@ -1112,18 +1149,18 @@ class LexocratesChatPage {
 		const message_text = plain_text ? html_content : "📎 [Attachment]";
 		this.$send.prop("disabled", true);
 		try {
-			const response = await frappe.call({
-				method: `${this.api}.send_message`,
-				args: {
+			const args = {
 					channel: this.selected_channel,
 					message_text,
 					thread_reference: this.reply_to,
 					attachments: this.attachments,
-				},
-			});
-			if (response.message) {
-				this.upsert_message(response.message, true);
-				this.play_chat_sound("sent", `sent:${response.message.name}`);
+				};
+			const message = window.lexocratesReliableChat
+				? await window.lexocratesReliableChat.send({ method: `${this.api}.send_message`, args })
+				: (await frappe.call({ method: `${this.api}.send_message`, args })).message;
+			if (message) {
+				this.upsert_message(message, true);
+				this.play_chat_sound("sent", `sent:${message.name}`);
 			}
 			this.$input.empty();
 			this.update_toolbar_active_states();
@@ -1233,23 +1270,24 @@ class LexocratesChatPage {
 	}
 
 	async load_older_messages() {
-		if (!this.selected_channel || !this.has_more || !this.oldest_message_at) return;
+		if (!this.selected_channel || !this.has_more || this.oldest_sequence == null) return;
 		const previous_height = this.$messages[0]?.scrollHeight || 0;
 		const response = await frappe.call({
 			method: `${this.api}.get_messages`,
-			args: { channel: this.selected_channel, before: this.oldest_message_at, limit: 100 },
+			args: { channel: this.selected_channel, before_sequence: this.oldest_sequence, limit: 100 },
 		});
 		const older = response.message || [];
 		older.forEach((message) => this.messages.set(message.name, message));
 		this.has_more = older.length === 100;
 		this.oldest_message_at = older[0]?.sent_at || this.oldest_message_at;
+		this.oldest_sequence = older[0]?.channel_sequence ?? this.oldest_sequence;
 		this.render_message_collection();
 		this.$messages.scrollTop((this.$messages[0]?.scrollHeight || 0) - previous_height);
 	}
 
 	render_message_collection() {
 		const messages = [...this.messages.values()].sort(
-			(a, b) => new Date(a.sent_at) - new Date(b.sent_at)
+			(a, b) => Number(a.channel_sequence || 0) - Number(b.channel_sequence || 0)
 		);
 		this.$messages.empty().append(
 			`<button class="btn btn-default btn-xs lex-chat__load-older ${this.has_more ? "" : "hidden"}">${__("Load older messages")}</button>`
@@ -1367,16 +1405,36 @@ class LexocratesChatPage {
 		this.$root.find(".lex-chat__jump-latest").toggleClass("hidden", this.is_near_bottom());
 	}
 
-	async mark_read(message_name = null) {
+	latest_message_name() {
+		return [...this.messages.values()]
+			.sort((left, right) => Number(left.channel_sequence || 0) - Number(right.channel_sequence || 0))
+			.at(-1)?.name || null;
+	}
+
+	mark_read(message_name = null) {
 		if (!this.selected_channel || document.hidden) return;
+		if (message_name) this.pending_read_message = message_name;
+		window.clearTimeout(this.read_timer);
+		this.read_timer = window.setTimeout(() => this.flush_read_state(), 250);
+	}
+
+	async flush_read_state() {
+		if (!this.selected_channel || document.hidden || this.read_inflight) return;
+		const channel = this.selected_channel;
+		const message_name = this.pending_read_message;
+		this.pending_read_message = null;
+		this.read_inflight = true;
 		try {
 			await frappe.call({
 				method: `${this.api}.mark_channel_read`,
-				args: { channel: this.selected_channel, message_name },
+				args: { channel, message_name },
 				freeze: false,
 			});
 		} catch (error) {
 			console.warn("Could not persist chat read state", error);
+		} finally {
+			this.read_inflight = false;
+			if (this.pending_read_message && channel === this.selected_channel) this.mark_read(this.pending_read_message);
 		}
 	}
 
@@ -1418,9 +1476,25 @@ class LexocratesChatPage {
 			.toggleClass("green", connected)
 			.toggleClass("gray", !connected)
 			.text(connected ? __("Live") : __("Reconnecting"));
-		if (connected && !was_connected && this.selected_channel) {
+		if (connected && !was_connected && this.selected_channel && !window.lexocratesReliableChat) {
 			frappe.realtime.emit("doc_subscribe", "Lexocrates Chat Channel", this.selected_channel);
 		}
+	}
+
+	set_realtime_transport_state(state) {
+		const live = state === "live";
+		this.realtime_connected = live;
+		const labels = {
+			live: __("Live"),
+			recovering: __("Syncing"),
+			reconnecting: __("Reconnecting"),
+			degraded: __("Recovering"),
+			offline: __("Offline"),
+		};
+		this.$root.find(".lex-chat__live-status")
+			.toggleClass("green", live)
+			.toggleClass("gray", !live)
+			.text(labels[state] || labels.offline);
 	}
 
 	presence_for(user) {

@@ -750,6 +750,14 @@
 		if (!channelBox || !messageBox || !form) return;
 		bindChatWheel(messageBox.closest(".lex-chat-main"), messageBox);
 		let selected = null;
+		let realtimeUnsubscribe = null;
+		let channelGeneration = 0;
+		const onRealtimeMessage = (message) => {
+			if (selected && message.channel === selected.name) {
+				appendMessage(message, messageBox);
+				call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.mark_channel_read", { channel: selected.name, message_name: message.name }).catch(() => {});
+			}
+		};
 		await refreshPresence().catch(() => []);
 		const channels = await call("lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel.get_channels");
 		const channelRows = channels.map((channel) => {
@@ -770,12 +778,24 @@
 			});
 		});
 		for (const button of channelBox.querySelectorAll("[data-channel]")) button.addEventListener("click", async () => {
+			const generation = ++channelGeneration;
+			realtimeUnsubscribe?.();
+			realtimeUnsubscribe = null;
 			selected = channels.find((item) => item.name === button.dataset.channel); if (!selected) return;
 			channelBox.querySelectorAll("[data-channel]").forEach((item) => item.classList.remove("active")); button.classList.add("active"); button.querySelector(".lex-nav-badge")?.remove();
 			header.innerHTML = `<strong>${escapeHTML(selected.display_name || selected.channel_name)}</strong><span>${escapeHTML(selected.description || selected.reference_name || "Secure conversation")}</span>`;
-			frappe.realtime?.emit("doc_subscribe", "Lexocrates Chat Channel", selected.name);
 			const messages = await call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.get_messages", { channel: selected.name, limit: 100 });
+			if (generation !== channelGeneration) return;
 			renderMessages(messages, messageBox);
+			const latestSequence = Math.max(0, ...messages.map((message) => Number(message.channel_sequence || 0)));
+			if (window.lexocratesReliableChat) {
+				realtimeUnsubscribe = window.lexocratesReliableChat.subscribe(selected.name, {
+					afterSequence: latestSequence,
+					onMessage: onRealtimeMessage,
+				});
+			} else {
+				frappe.realtime?.emit("doc_subscribe", "Lexocrates Chat Channel", selected.name);
+			}
 			const jobPicker = form.elements.job_mention;
 			const jobs = ["LPO Matter", "LPO Job"].includes(selected.reference_doctype)
 				? await call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.get_channel_jobs", { channel: selected.name, limit: 100 }).catch(() => [])
@@ -796,13 +816,17 @@
 		channelBox.querySelector("[data-channel]")?.click();
 		form.addEventListener("submit", async (event) => {
 			event.preventDefault(); const text = form.elements.message.value.trim(); if (!selected || !text) return; const button = form.querySelector("button"); button.disabled = true;
-			try { const message = await call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.send_message", { channel: selected.name, message_text: text, attachments: "[]" }); appendMessage(message, messageBox); form.reset(); }
+			try {
+				const args = { channel: selected.name, message_text: text, attachments: "[]" };
+				const message = window.lexocratesReliableChat
+					? await window.lexocratesReliableChat.send({ method: "lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.send_message", args })
+					: await call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.send_message", args);
+				appendMessage(message, messageBox); form.reset();
+			}
 			catch (error) { showError("Message not sent", error); }
 			finally { button.disabled = !selected.can_post; }
 		});
-		frappe.realtime?.on("new_chat_message", (message) => {
-			if (selected && message.channel === selected.name) { appendMessage(message, messageBox); call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.mark_channel_read", { channel: selected.name, message_name: message.name }).catch(() => {}); }
-		});
+		if (!window.lexocratesReliableChat) frappe.realtime?.on("new_chat_message", onRealtimeMessage);
 	}
 
 	function renderMessages(messages, box) { box.innerHTML = ""; messages.forEach((message) => appendMessage(message, box)); if (!messages.length) box.innerHTML = empty("No messages yet. Start the conversation."); }

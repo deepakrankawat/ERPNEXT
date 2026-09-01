@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Any
 
 import frappe
@@ -21,6 +22,8 @@ from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 MESSAGE_EDIT_WINDOW_MINUTES = 15
 MAX_MESSAGE_LENGTH = 10_000
 MAX_ATTACHMENTS = 10
+CHAT_PROTOCOL_VERSION = 1
+CLIENT_MESSAGE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{8,64}$")
 ALLOWED_REACTIONS = {
 	"👍", "❤️", "✅", "👀", "🎉", "🙏", "🔥", "🚀", "💡", "👏", "💯", "📌", "😂", "🤝", "⚡", "🎯"
 }
@@ -37,6 +40,7 @@ class LexocratesChatMessage(Document):
 		if is_import:
 			self.sender = self.sender or "Administrator"
 			self.sent_at = self.sent_at or now_datetime()
+			self._assign_delivery_identity()
 			return
 
 		self.sent_at = now_datetime()
@@ -49,6 +53,11 @@ class LexocratesChatMessage(Document):
 			self.source_doctype = None
 			self.source_name = None
 			self.automation_key = None
+		self._assign_delivery_identity()
+
+	def _assign_delivery_identity(self):
+		self.client_message_id = normalize_client_message_id(self.client_message_id)
+		self.channel_sequence = allocate_channel_sequence(self.channel)
 
 	def validate(self):
 		channel = frappe.get_doc("Lexocrates Chat Channel", self.channel)
@@ -112,6 +121,8 @@ class LexocratesChatMessage(Document):
 			return
 		protected = {
 			"channel",
+			"channel_sequence",
+			"client_message_id",
 			"sender",
 			"sent_at",
 			"thread_reference",
@@ -220,6 +231,53 @@ def on_doctype_update():
 		["channel", "thread_reference", "sent_at"],
 		index_name="lexocrates_chat_thread_sent_at",
 	)
+	frappe.db.add_index(
+		"Lexocrates Chat Message",
+		["channel", "channel_sequence"],
+		index_name="lexocrates_chat_channel_sequence",
+	)
+
+
+def normalize_client_message_id(value: str | None) -> str:
+	value = (value or "").strip()
+	if not value:
+		return str(uuid.uuid4())
+	if not CLIENT_MESSAGE_ID_PATTERN.fullmatch(value):
+		frappe.throw(
+			_("Client Message ID must be 8-64 URL-safe characters."),
+			frappe.ValidationError,
+		)
+	return value
+
+
+def allocate_channel_sequence(channel: str) -> int:
+	"""Allocate one channel sequence under a row lock.
+
+	The lock serializes concurrent HTTP workers for a channel. The counter update
+	and message insert share the request transaction, so a failed insert cannot
+	leave a permanent hole and an emitted event can never precede its commit.
+	"""
+	rows = frappe.db.sql(
+		"""
+		select coalesce(last_message_sequence, 0) as last_message_sequence
+		from `tabLexocrates Chat Channel`
+		where name = %s
+		for update
+		""",
+		channel,
+		as_dict=True,
+	)
+	if not rows:
+		frappe.throw(_("Chat channel {0} does not exist.").format(channel), frappe.DoesNotExistError)
+	sequence = int(rows[0].last_message_sequence or 0) + 1
+	frappe.db.set_value(
+		"Lexocrates Chat Channel",
+		channel,
+		"last_message_sequence",
+		sequence,
+		update_modified=False,
+	)
+	return sequence
 
 
 def is_within_edit_window(sent_at) -> bool:
@@ -346,8 +404,13 @@ def serialize_message(
 		sender_full_name = sender_identity.get("full_name")
 	timestamp = get("sent_at")
 	return {
+		"protocol_version": CHAT_PROTOCOL_VERSION,
+		"event_id": f"chat-message:{get('name')}:{get('edited_on') or 'created'}",
+		"event_type": "message.updated" if get("edited_on") else "message.created",
 		"name": get("name"),
 		"channel": get("channel"),
+		"channel_sequence": int(get("channel_sequence") or 0),
+		"client_message_id": get("client_message_id"),
 		"sender": get("sender"),
 		"sender_full_name": sender_full_name or get("sender"),
 		"sender_role": sender_identity.get("primary_role"),
@@ -357,6 +420,7 @@ def serialize_message(
 		"message_text": get("message_text"),
 		"sent_at": str(timestamp),
 		"formatted_timestamp": format_datetime(timestamp),
+		"server_time": str(now_datetime()),
 		"thread_reference": get("thread_reference"),
 		"mentions": parse_json_list(get("mentions")),
 		"job_mentions": parse_json_list(get("job_mentions")),
@@ -420,16 +484,46 @@ def send_message(
 	message_text: str,
 	thread_reference: str | None = None,
 	attachments=None,
+	client_message_id: str | None = None,
 ) -> dict:
-	doc = frappe.get_doc(
-		{
-			"doctype": "Lexocrates Chat Message",
-			"channel": channel,
-			"message_text": message_text,
-			"thread_reference": thread_reference,
-			"attachments": json.dumps(parse_json_list(attachments)),
-		}
-	).insert()
+	client_message_id = normalize_client_message_id(client_message_id)
+	existing = frappe.db.get_value(
+		"Lexocrates Chat Message",
+		{"client_message_id": client_message_id},
+		["name", "channel", "sender"],
+		as_dict=True,
+	)
+	if existing:
+		if existing.channel != channel or existing.sender != frappe.session.user:
+			frappe.throw(_("This message delivery key is already in use."), frappe.PermissionError)
+		return serialize_message(existing.name)
+	savepoint = "lexocrates_chat_idempotent_send"
+	frappe.db.savepoint(savepoint)
+	try:
+		doc = frappe.get_doc(
+			{
+				"doctype": "Lexocrates Chat Message",
+				"channel": channel,
+				"message_text": message_text,
+				"thread_reference": thread_reference,
+				"attachments": json.dumps(parse_json_list(attachments)),
+				"client_message_id": client_message_id,
+			}
+		).insert()
+		frappe.db.release_savepoint(savepoint)
+	except (frappe.DuplicateEntryError, frappe.UniqueValidationError):
+		# Two retries can race before either transaction sees the idempotency row.
+		# Roll back the losing sequence allocation, then return the winner.
+		frappe.db.rollback(save_point=savepoint)
+		existing = frappe.db.get_value(
+			"Lexocrates Chat Message",
+			{"client_message_id": client_message_id},
+			["name", "channel", "sender"],
+			as_dict=True,
+		)
+		if not existing or existing.channel != channel or existing.sender != frappe.session.user:
+			raise
+		return serialize_message(existing.name)
 	return serialize_message(doc)
 
 
@@ -476,11 +570,18 @@ def edit_message(message_name: str, message_text: str) -> dict:
 
 
 @frappe.whitelist()
-def get_messages(channel: str, before: str | None = None, limit: int = 100) -> list[dict]:
+def get_messages(
+	channel: str,
+	before: str | None = None,
+	before_sequence: int | None = None,
+	limit: int = 100,
+) -> list[dict]:
 	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
 	limit = min(max(int(limit or 100), 1), 200)
 	filters: dict[str, Any] = {"channel": channel}
-	if before:
+	if before_sequence is not None:
+		filters["channel_sequence"] = ["<", max(int(before_sequence or 0), 0)]
+	elif before:
 		filters["sent_at"] = ["<", get_datetime(before)]
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
@@ -488,6 +589,8 @@ def get_messages(channel: str, before: str | None = None, limit: int = 100) -> l
 		fields=[
 			"name",
 			"channel",
+			"channel_sequence",
+			"client_message_id",
 			"sender",
 			"message_text",
 			"sent_at",
@@ -503,7 +606,7 @@ def get_messages(channel: str, before: str | None = None, limit: int = 100) -> l
 			"pinned_by",
 			"pinned_at",
 		],
-		order_by="sent_at desc, creation desc",
+		order_by="channel_sequence desc",
 		limit_page_length=limit,
 	)
 	rows.reverse()
@@ -511,6 +614,49 @@ def get_messages(channel: str, before: str | None = None, limit: int = 100) -> l
 	return _enrich_messages(
 		[serialize_message(row, sender_identity=identities.get(row.sender)) for row in rows]
 	)
+
+
+@frappe.whitelist()
+def sync_messages(channel: str, after_sequence: int = 0, limit: int = 200) -> dict:
+	"""Return committed messages after a client high-water mark.
+
+	This HTTP recovery path complements Socket.IO. It is intentionally safe to
+	call on every reconnect and periodically while online.
+	"""
+	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
+	after_sequence = max(int(after_sequence or 0), 0)
+	limit = min(max(int(limit or 200), 1), 500)
+	rows = frappe.get_all(
+		"Lexocrates Chat Message",
+		filters={"channel": channel, "channel_sequence": [">", after_sequence]},
+		fields=[
+			"name", "channel", "channel_sequence", "client_message_id", "sender",
+			"message_text", "sent_at", "thread_reference", "mentions", "job_mentions",
+			"attachments", "system_generated", "source_doctype", "source_name", "edited_on",
+			"is_pinned", "pinned_by", "pinned_at",
+		],
+		order_by="channel_sequence asc",
+		limit_page_length=limit + 1,
+	)
+	has_more = len(rows) > limit
+	rows = rows[:limit]
+	identities = _sender_identities(rows)
+	messages = _enrich_messages(
+		[serialize_message(row, sender_identity=identities.get(row.sender)) for row in rows]
+	)
+	high_watermark = int(
+		frappe.db.get_value("Lexocrates Chat Channel", channel, "last_message_sequence") or 0
+	)
+	return {
+		"protocol_version": CHAT_PROTOCOL_VERSION,
+		"channel": channel,
+		"after_sequence": after_sequence,
+		"next_sequence": int(messages[-1]["channel_sequence"] if messages else after_sequence),
+		"high_watermark": high_watermark,
+		"has_more": has_more,
+		"messages": messages,
+		"server_time": str(now_datetime()),
+	}
 
 
 @frappe.whitelist()
@@ -528,6 +674,8 @@ def search_messages(search_text: str, channel: str | None = None, limit: int = 5
 		fields=[
 			"name",
 			"channel",
+			"channel_sequence",
+			"client_message_id",
 			"sender",
 			"message_text",
 			"sent_at",
@@ -582,7 +730,7 @@ def _enrich_messages(messages: list[dict]) -> list[dict]:
 	states = frappe.get_all(
 		"Lexocrates Chat User State",
 		filters={"channel": ["in", channel_names], "last_read_at": ["is", "set"]},
-		fields=["channel", "user", "last_read_at"],
+		fields=["channel", "user", "last_read_at", "last_read_sequence"],
 		limit_page_length=0,
 	)
 	read_state: dict[str, list] = {}
@@ -604,7 +752,7 @@ def _enrich_messages(messages: list[dict]) -> list[dict]:
 			state.user
 			for state in read_state.get(message["channel"], [])
 			if state.user != message["sender"]
-			and get_datetime(state.last_read_at) >= get_datetime(message["sent_at"])
+			and int(state.last_read_sequence or 0) >= int(message["channel_sequence"] or 0)
 		]
 	return messages
 
@@ -619,11 +767,11 @@ def get_thread(message_name: str) -> dict:
 		"Lexocrates Chat Message",
 		filters={"thread_reference": root_name},
 		fields=[
-			"name", "channel", "sender", "message_text", "sent_at", "thread_reference",
+			"name", "channel", "channel_sequence", "client_message_id", "sender", "message_text", "sent_at", "thread_reference",
 			"mentions", "job_mentions", "attachments", "system_generated", "source_doctype", "source_name",
 			"edited_on", "is_pinned", "pinned_by", "pinned_at",
 		],
-		order_by="sent_at asc, creation asc",
+		order_by="channel_sequence asc",
 		limit_page_length=200,
 	)
 	all_rows = [root.as_dict()] + rows
@@ -641,7 +789,7 @@ def mark_channel_read(channel: str, message_name: str | None = None) -> dict:
 	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
 	if message_name:
 		message = frappe.db.get_value(
-			"Lexocrates Chat Message", message_name, ["channel", "sent_at"], as_dict=True
+			"Lexocrates Chat Message", message_name, ["channel", "sent_at", "channel_sequence"], as_dict=True
 		)
 		if not message or message.channel != channel:
 			frappe.throw(_("The read marker must belong to this channel."), frappe.ValidationError)
@@ -649,36 +797,66 @@ def mark_channel_read(channel: str, message_name: str | None = None) -> dict:
 		message = frappe.db.get_value(
 			"Lexocrates Chat Message",
 			{"channel": channel},
-			["name", "channel", "sent_at"],
-			order_by="sent_at desc, creation desc",
+			["name", "channel", "sent_at", "channel_sequence"],
+			order_by="channel_sequence desc",
 			as_dict=True,
 		)
 		message_name = message.name if message else None
 	read_at = now_datetime()
-	state_name = frappe.db.get_value(
-		"Lexocrates Chat User State", {"channel": channel, "user": frappe.session.user}, "name"
+	state_rows = frappe.db.sql(
+		"""
+		select name, last_read_message, last_read_sequence, last_read_at
+		from `tabLexocrates Chat User State`
+		where channel = %s and user = %s
+		for update
+		""",
+		(channel, frappe.session.user),
+		as_dict=True,
 	)
+	state_row = state_rows[0] if state_rows else None
+	state_name = state_row.name if state_row else None
+	read_sequence = int(message.channel_sequence or 0) if message else 0
+	current_sequence = int(state_row.last_read_sequence or 0) if state_row else 0
+	if state_row and current_sequence >= read_sequence:
+		return {
+			"name": state_name,
+			"channel": channel,
+			"user": frappe.session.user,
+			"last_read_message": state_row.last_read_message,
+			"last_read_sequence": current_sequence,
+			"last_read_at": str(state_row.last_read_at),
+		}
 	values = {
 		"last_read_message": message_name,
+		"last_read_sequence": read_sequence,
 		"last_read_at": read_at,
 	}
 	if state_name:
 		frappe.db.set_value("Lexocrates Chat User State", state_name, values, update_modified=True)
 	else:
-		state = frappe.get_doc(
-			{
-				"doctype": "Lexocrates Chat User State",
-				"channel": channel,
-				"user": frappe.session.user,
-				"notification_level": "All Messages",
-				**values,
-			}
-		).insert(ignore_permissions=True)
-		state_name = state.name
+		savepoint = "lexocrates_chat_read_state"
+		frappe.db.savepoint(savepoint)
+		try:
+			state = frappe.get_doc(
+				{
+					"doctype": "Lexocrates Chat User State",
+					"channel": channel,
+					"user": frappe.session.user,
+					"notification_level": "All Messages",
+					**values,
+				}
+			).insert(ignore_permissions=True)
+			state_name = state.name
+			frappe.db.release_savepoint(savepoint)
+		except (frappe.DuplicateEntryError, frappe.UniqueValidationError):
+			frappe.db.rollback(save_point=savepoint)
+			# Another tab created the one-row-per-user state while this request waited.
+			return mark_channel_read(channel, message_name)
 	payload = {
 		"channel": channel,
 		"user": frappe.session.user,
 		"last_read_message": message_name,
+		"last_read_sequence": read_sequence,
 		"last_read_at": str(read_at),
 	}
 	frappe.publish_realtime(
@@ -813,7 +991,7 @@ def get_pinned_messages(channel: str) -> list[dict]:
 		"Lexocrates Chat Message",
 		filters={"channel": channel, "is_pinned": 1},
 		fields=[
-			"name", "channel", "sender", "message_text", "sent_at", "thread_reference",
+			"name", "channel", "channel_sequence", "client_message_id", "sender", "message_text", "sent_at", "thread_reference",
 			"mentions", "job_mentions", "attachments", "system_generated", "source_doctype", "source_name",
 			"edited_on", "is_pinned", "pinned_by", "pinned_at",
 		],

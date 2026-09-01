@@ -23,6 +23,7 @@ from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import (
 	get_channel_jobs as _get_channel_jobs,
 	get_thread as _get_thread,
 	get_messages as _get_messages,
+	sync_messages as _sync_messages,
 	mark_channel_read as _mark_channel_read,
 	publish_typing as _publish_typing,
 	search_messages as _search_messages,
@@ -97,8 +98,23 @@ def get_channel_members(channel: str):
 
 
 @frappe.whitelist()
-def get_messages(channel: str, before: str | None = None, limit: int = 100):
-	return _get_messages(channel=channel, before=before, limit=limit)
+def get_messages(
+	channel: str,
+	before: str | None = None,
+	before_sequence: int | None = None,
+	limit: int = 100,
+):
+	return _get_messages(
+		channel=channel,
+		before=before,
+		before_sequence=before_sequence,
+		limit=limit,
+	)
+
+
+@frappe.whitelist()
+def sync_messages(channel: str, after_sequence: int = 0, limit: int = 200):
+	return _sync_messages(channel=channel, after_sequence=after_sequence, limit=limit)
 
 
 @frappe.whitelist()
@@ -112,12 +128,14 @@ def send_message(
 	message_text: str,
 	thread_reference: str | None = None,
 	attachments=None,
+	client_message_id: str | None = None,
 ):
 	return _send_message(
 		channel=channel,
 		message_text=message_text,
 		thread_reference=thread_reference,
 		attachments=attachments,
+		client_message_id=client_message_id,
 	)
 
 

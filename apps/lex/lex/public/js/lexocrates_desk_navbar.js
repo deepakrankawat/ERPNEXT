@@ -39,6 +39,8 @@
 	let quick_chat_open = false;
 	let active_quick_channel = null;
 	let quick_messages = [];
+	let quick_realtime_unsubscribe = null;
+	let quick_reload_timer = null;
 	let chat_summary = { total_unread: 0, channels: [], all_channels: [] };
 	function update_sound_button() {
 		const soundBtn = document.getElementById("lex-floating-sound-toggle");
@@ -360,16 +362,15 @@
 			input.value = "";
 			input.focus();
 			try {
-				const response = await frappe.call({
-					method: `${API_ROOT}.send_message`,
-					args: {
+				const args = {
 						channel: active_quick_channel,
 						message_text: frappe.utils.escape_html(text).replace(/\n/g, "<br>"),
-					},
-					freeze: false,
-				});
-				if (response.message?.name) {
-					play_chat_sound("sent", `sent:${response.message.name}`);
+					};
+				const message = window.lexocratesReliableChat
+					? await window.lexocratesReliableChat.send({ method: `${API_ROOT}.send_message`, args })
+					: (await frappe.call({ method: `${API_ROOT}.send_message`, args, freeze: false })).message;
+				if (message?.name) {
+					play_chat_sound("sent", `sent:${message.name}`);
 				}
 				load_quick_messages(active_quick_channel);
 			} catch (err) {
@@ -431,6 +432,8 @@
 	}
 
 	async function select_quick_channel(channel_name) {
+		quick_realtime_unsubscribe?.();
+		quick_realtime_unsubscribe = null;
 		active_quick_channel = channel_name;
 		render_quick_channel_list();
 
@@ -443,11 +446,20 @@
 		if (input) input.disabled = false;
 		if (sendBtn) sendBtn.disabled = false;
 
-		if (window.frappe?.realtime) {
+		const messages = await load_quick_messages(channel_name);
+		if (active_quick_channel !== channel_name) return;
+		if (window.lexocratesReliableChat) {
+			const latestSequence = Math.max(0, ...(messages || []).map((message) => Number(message.channel_sequence || 0)));
+			quick_realtime_unsubscribe = window.lexocratesReliableChat.subscribe(channel_name, {
+				afterSequence: latestSequence,
+				onMessage: () => {
+					window.clearTimeout(quick_reload_timer);
+					quick_reload_timer = window.setTimeout(() => load_quick_messages(channel_name), 120);
+				},
+			});
+		} else if (window.frappe?.realtime) {
 			frappe.realtime.emit("doc_subscribe", "Lexocrates Chat Channel", channel_name);
 		}
-
-		await load_quick_messages(channel_name);
 		input?.focus();
 	}
 
@@ -464,7 +476,7 @@
 			quick_messages = messages;
 			if (!messages.length) {
 				box.innerHTML = `<div class="lex-floating-empty">${__("No messages yet. Send a hello!")}</div>`;
-				return;
+				return messages;
 			}
 			box.innerHTML = messages.map((m) => {
 				const isOwn = m.sender === frappe.session.user;
@@ -480,7 +492,8 @@
 				`;
 			}).join("");
 			box.scrollTop = box.scrollHeight;
-		} catch (e) {}
+			return messages;
+		} catch (e) { return []; }
 	}
 
 	let realtime_bound = false;
@@ -495,7 +508,7 @@
 			}
 			fetch_unread_summary();
 
-			if (quick_chat_open && message.channel === active_quick_channel) {
+			if (quick_chat_open && message.channel === active_quick_channel && !window.lexocratesReliableChat) {
 				load_quick_messages(active_quick_channel);
 			} else if (!quick_chat_open && should_notify) {
 				const channel = (chat_summary.all_channels || []).find((c) => c.name === message.channel);

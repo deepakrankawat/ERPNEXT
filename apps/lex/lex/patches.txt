@@ -8,3 +8,4 @@ lex.patches.rename_lpo_engagement_to_matter
 lex.patches.complete_lpo_matter_migration
 lex.patches.correct_migrated_matter_models
 lex.patches.archive_non_system_direct_messages
+lex.patches.backfill_reliable_chat_sequences

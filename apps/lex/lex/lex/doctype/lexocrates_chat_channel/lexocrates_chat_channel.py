@@ -748,7 +748,7 @@ def _decorate_channel_states(channels: list[dict], user: str | None = None) -> l
 	states = frappe.get_all(
 		"Lexocrates Chat User State",
 		filters={"user": user, "channel": ["in", channel_names]},
-		fields=["channel", "last_read_at", "muted", "notification_level"],
+		fields=["channel", "last_read_at", "last_read_sequence", "muted", "notification_level"],
 		limit_page_length=0,
 	)
 	state_map = {state.channel: state for state in states}
@@ -761,7 +761,7 @@ def _decorate_channel_states(channels: list[dict], user: str | None = None) -> l
 			on state.channel = message.channel and state.user = %s
 		where message.channel in ({placeholders})
 			and message.sender != %s
-			and (state.last_read_at is null or message.sent_at > state.last_read_at)
+			and message.channel_sequence > coalesce(state.last_read_sequence, 0)
 		group by message.channel
 		""",
 		[user, *channel_names, user],
@@ -772,6 +772,7 @@ def _decorate_channel_states(channels: list[dict], user: str | None = None) -> l
 		state = state_map.get(channel["name"])
 		channel["unread_count"] = unread_map.get(channel["name"], 0)
 		channel["last_read_at"] = str(state.last_read_at) if state and state.last_read_at else None
+		channel["last_read_sequence"] = int(state.last_read_sequence or 0) if state else 0
 		channel["notification_level"] = (
 			state.notification_level if state else "All Messages"
 		)

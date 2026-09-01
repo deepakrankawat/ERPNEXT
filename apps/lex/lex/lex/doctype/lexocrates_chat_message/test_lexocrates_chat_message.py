@@ -14,6 +14,7 @@ from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import (
 	set_channel_preferences,
 	set_message_pinned,
 	send_message,
+	sync_messages,
 	toggle_reaction,
 )
 
@@ -105,6 +106,49 @@ class TestLexocratesChatMessage(FrappeTestCase):
 			kwargs["room"], f"doc:Lexocrates Chat Channel/{self.channel.name}"
 		)
 		self.assertTrue(kwargs["after_commit"])
+		self.assertEqual(args[1]["protocol_version"], 1)
+		self.assertGreater(args[1]["channel_sequence"], 0)
+		self.assertTrue(args[1]["event_id"].startswith("chat-message:"))
+
+	def test_idempotent_retry_returns_one_committed_message(self):
+		client_message_id = "test:retry:00000001"
+		first = send_message(
+			self.channel.name,
+			"Network retry test",
+			client_message_id=client_message_id,
+		)
+		second = send_message(
+			self.channel.name,
+			"Network retry test",
+			client_message_id=client_message_id,
+		)
+		self.assertEqual(first["name"], second["name"])
+		self.assertEqual(first["channel_sequence"], second["channel_sequence"])
+		self.assertEqual(
+			frappe.db.count(
+				"Lexocrates Chat Message", {"client_message_id": client_message_id}
+			),
+			1,
+		)
+
+	def test_sequence_gap_recovery_is_ordered_and_paginated(self):
+		first = send_message(self.channel.name, "Sequence one", client_message_id="test:sequence:0001")
+		second = send_message(self.channel.name, "Sequence two", client_message_id="test:sequence:0002")
+		third = send_message(self.channel.name, "Sequence three", client_message_id="test:sequence:0003")
+
+		page = sync_messages(self.channel.name, after_sequence=first["channel_sequence"], limit=1)
+		self.assertEqual([row["name"] for row in page["messages"]], [second["name"]])
+		self.assertTrue(page["has_more"])
+		self.assertEqual(page["next_sequence"], second["channel_sequence"])
+		remaining = sync_messages(
+			self.channel.name, after_sequence=page["next_sequence"], limit=10
+		)
+		self.assertEqual([row["name"] for row in remaining["messages"]], [third["name"]])
+		self.assertEqual(remaining["high_watermark"], third["channel_sequence"])
+		older = get_messages(
+			self.channel.name, before_sequence=third["channel_sequence"], limit=10
+		)
+		self.assertEqual([row["name"] for row in older], [first["name"], second["name"]])
 
 	def test_edit_window_and_physical_delete_protection(self):
 		message = send_message(self.channel.name, "Original")
@@ -174,6 +218,14 @@ class TestLexocratesChatMessage(FrappeTestCase):
 			),
 			{"notification_level": "Muted", "muted": 1},
 		)
+
+	def test_read_sequence_cannot_move_backwards(self):
+		first = send_message(self.channel.name, "Read first", client_message_id="test:read:00000001")
+		second = send_message(self.channel.name, "Read second", client_message_id="test:read:00000002")
+		latest = mark_channel_read(self.channel.name, second["name"])
+		stale = mark_channel_read(self.channel.name, first["name"])
+		self.assertEqual(stale["last_read_message"], second["name"])
+		self.assertEqual(stale["last_read_sequence"], latest["last_read_sequence"])
 
 	def test_pins_and_thread_details(self):
 		root = send_message(self.channel.name, "Pinned root")

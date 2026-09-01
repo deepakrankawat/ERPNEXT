@@ -15,6 +15,7 @@ from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 )
 from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import (
 	send_message,
+	sync_messages,
 )
 from lex.lex.page.lexocrates_chat.lexocrates_chat import (
 	get_or_create_contextual_channel,
@@ -116,6 +117,8 @@ class TestChatArchitectureScenarios(FrappeTestCase):
 
 		with self.assertRaises(frappe.PermissionError):
 			send_message(channel=channel_name, message_text="User B1 unauthorized attempt")
+		with self.assertRaises(frappe.PermissionError):
+			sync_messages(channel=channel_name, after_sequence=0)
 
 		with self.assertRaises(frappe.PermissionError):
 			frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel_name, throw=True)

@@ -9,6 +9,7 @@
   "channel",
   "user",
   "last_read_message",
+  "last_read_sequence",
   "last_read_at",
   "muted",
   "notification_level"
@@ -35,6 +36,14 @@
    "fieldtype": "Link",
    "label": "Last Read Message",
    "options": "Lexocrates Chat Message",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Monotonic channel sequence last acknowledged by this user.",
+   "fieldname": "last_read_sequence",
+   "fieldtype": "Int",
+   "label": "Last Read Sequence",
    "read_only": 1
   },
   {
