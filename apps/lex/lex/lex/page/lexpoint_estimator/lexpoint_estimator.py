@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import contextlib
 import json
 import os
 
 import frappe
 from frappe import _
+from frappe.core.api.file import get_max_file_size
 from frappe.utils import cint, flt, now_datetime
 from frappe.utils.file_manager import save_file
 
@@ -13,7 +16,7 @@ from lex.ai_document_engine import extract_text_from_file
 from lex.file_quarantine import scan_and_validate_inbound_file
 from lex.lexpoint_estimation import DEFAULT_SERVICE_BY_INTAKE, calculate_estimate
 from lex.portal_audit import create_portal_audit_event
-from lex.work_intake import MAX_UPLOAD_BYTES, _decode_upload, _estimation_profile_with_ai
+from lex.work_intake import _estimation_profile_with_ai
 
 
 ALLOWED_ESTIMATE_EXTENSIONS = {".csv", ".docx", ".pdf", ".txt"}
@@ -29,7 +32,7 @@ def get_estimator_bootstrap() -> dict:
 		"priorities": list(PRIORITIES),
 		"jurisdictions": list(DEFAULT_JURISDICTIONS),
 		"allowed_extensions": sorted(ALLOWED_ESTIMATE_EXTENSIONS),
-		"max_upload_bytes": MAX_UPLOAD_BYTES,
+		"max_upload_bytes": get_max_file_size(),
 		"ai_enabled": bool(cint(_setting("enable_ai_intake_analysis", 0))),
 		"currency": _setting("quote_currency", "USD"),
 		"recent_estimates": _recent_estimates(),
@@ -37,6 +40,32 @@ def get_estimator_bootstrap() -> dict:
 			"Internal preview only. This tool does not create or update a Customer, Matter, Job, quote, wallet, invoice, or payment."
 		),
 	}
+
+
+@frappe.whitelist()
+def upload_standalone_estimate_file() -> dict:
+	"""Receive Frappe's native multipart upload and run the isolated estimate.
+
+	The browser sends the binary directly instead of expanding it into a base64
+	payload. Frappe and the reverse proxy enforce the site-configured capacity.
+	"""
+	_require_system_user()
+	content = getattr(frappe.local, "uploaded_file", None)
+	filename = getattr(frappe.local, "uploaded_filename", None)
+	if isinstance(content, str):
+		content = content.encode()
+	if not content or not filename:
+		frappe.throw(_("Select a non-empty document to upload."), frappe.ValidationError)
+	return _estimate_uploaded_content(
+		filename=filename,
+		content=content,
+		service_type=frappe.form_dict.get("service_type") or "Other",
+		jurisdiction=frappe.form_dict.get("jurisdiction") or "India",
+		priority=frappe.form_dict.get("priority") or "Medium",
+		expected_outcome=frappe.form_dict.get("expected_outcome"),
+		detailed_instructions=frappe.form_dict.get("detailed_instructions"),
+		use_ai=frappe.form_dict.get("use_ai", 1),
+	)
 
 
 @frappe.whitelist()
@@ -50,7 +79,29 @@ def estimate_document(
 	detailed_instructions: str | None = None,
 	use_ai: int = 1,
 ) -> dict:
-	"""Estimate one private document without creating any client/commercial workflow records."""
+	"""Backward-compatible data-URL API; the Desk page uses multipart upload."""
+	_require_system_user()
+	try:
+		decoded = base64.b64decode((content or "").split(",", 1)[-1], validate=True)
+	except (ValueError, binascii.Error):
+		frappe.throw(_("The uploaded file is not valid."), frappe.ValidationError)
+	return _estimate_uploaded_content(
+		filename=filename,
+		content=decoded,
+		service_type=service_type,
+		jurisdiction=jurisdiction,
+		priority=priority,
+		expected_outcome=expected_outcome,
+		detailed_instructions=detailed_instructions,
+		use_ai=use_ai,
+	)
+
+
+def _estimate_uploaded_content(
+	*, filename: str, content: bytes, service_type: str, jurisdiction: str, priority: str,
+	expected_outcome: str | None, detailed_instructions: str | None, use_ai: int,
+) -> dict:
+	"""Persist, scan, extract and estimate a binary already accepted by Frappe."""
 	_require_system_user()
 	filename = os.path.basename((filename or "").strip())
 	extension = os.path.splitext(filename.lower())[1]
@@ -68,7 +119,16 @@ def estimate_document(
 	jurisdiction = (jurisdiction or "India").strip()[:140]
 	if not jurisdiction:
 		frappe.throw(_("Jurisdiction is required."), frappe.MandatoryError)
-	decoded = _decode_upload(content)
+	if not content:
+		frappe.throw(_("Select a non-empty document to upload."), frappe.ValidationError)
+	max_upload_bytes = get_max_file_size()
+	if len(content) > max_upload_bytes:
+		frappe.throw(
+			_("The document exceeds the site upload capacity of {0} MB.").format(
+				round(max_upload_bytes / 1024 / 1024)
+			),
+			frappe.ValidationError,
+		)
 
 	context = frappe._dict(
 		service_type=service_type,
@@ -92,14 +152,14 @@ def estimate_document(
 				"jurisdiction": jurisdiction,
 				"priority": priority,
 				"file_name": filename,
-				"file_size_bytes": len(decoded),
+				"file_size_bytes": len(content),
 				"expected_outcome": context.expected_outcome,
 				"detailed_instructions": context.detailed_instructions,
 			}
 		).insert(ignore_permissions=True)
 		file_doc = save_file(
 			filename,
-			decoded,
+			content,
 			"LPO Standalone Estimate",
 			record.name,
 			is_private=1,
@@ -124,7 +184,7 @@ def estimate_document(
 		frappe._dict(
 			name=file_doc.name,
 			file_name=file_doc.file_name,
-			file_size=file_doc.file_size or len(decoded),
+			file_size=file_doc.file_size or len(content),
 		)
 	]
 	ai_profile = None

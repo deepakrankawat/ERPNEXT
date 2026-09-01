@@ -44,6 +44,7 @@ HOME_WORKSPACE_BLOCK_IDS = {
 LEXPACK_ITEM_CODE = "LEXPACK-LEGAL-CAPACITY"
 FIXED_QUOTE_ITEM_CODE = "LEXOCRATES-FIXED-QUOTE"
 LEXPACK_MODE_OF_PAYMENT = "Razorpay"
+LEGAL_DOCUMENT_MAX_UPLOAD_MB = 250
 LEXPACK_PLANS = (
 	{
 		"plan_code": "STARTER", "plan_name": "Starter", "price": 299, "lexpoints": 100,
@@ -115,6 +116,7 @@ def ensure_app_is_first():
 
 def after_install():
 	ensure_lpo_roles()
+	ensure_legal_document_upload_capacity()
 	ensure_app_is_first()
 	ensure_lexocrates_branding()
 	ensure_home_workspace_actions()
@@ -138,6 +140,24 @@ def after_install():
 
 	ensure_default_lexpoint_rules()
 	ensure_ai_document_estimate_workspace_link()
+
+
+def ensure_legal_document_upload_capacity():
+	"""Keep Frappe's upload ceiling suitable for large legal bundles.
+
+	This is deliberately a high, configurable ceiling rather than an unlimited
+	request body, which would expose every web worker to trivial memory exhaustion.
+	Existing administrators can raise the value later from System Settings.
+	"""
+	if not frappe.db.exists("DocType", "System Settings"):
+		return
+	meta = frappe.get_meta("System Settings")
+	if not meta.has_field("max_file_size"):
+		return
+	current_mb = int(frappe.db.get_single_value("System Settings", "max_file_size") or 0)
+	if current_mb < LEGAL_DOCUMENT_MAX_UPLOAD_MB:
+		frappe.db.set_single_value("System Settings", "max_file_size", LEGAL_DOCUMENT_MAX_UPLOAD_MB)
+		frappe.clear_cache()
 
 
 def ensure_lexpack_master_data():

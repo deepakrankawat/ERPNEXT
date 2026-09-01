@@ -16,6 +16,8 @@
 .lex-estimator__dropzone { border: 1px dashed var(--lex-border); border-radius: 8px; padding: 12px; background: var(--subtle-fg, #f7f7f7); }
 .lex-estimator__dropzone .form-control { padding: 0; height: auto; border: 0; background: transparent; box-shadow: none; }
 .lex-estimator__dropzone small { display: block; margin-top: 8px; }
+.lex-estimator__progress { height: 6px; margin: 10px 0 0; background: var(--gray-200, #e9ecef); }
+.lex-estimator__progress .progress-bar { background: var(--blue-500, #2490ef); transition: width .15s ease; }
 .lex-estimator__check { display: flex; gap: 8px; align-items: center; margin: 2px 0 16px; font-weight: 400; }
 .lex-estimator__actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .lex-estimator__result-card { min-height: 440px; }

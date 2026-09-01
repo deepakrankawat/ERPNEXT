@@ -69,7 +69,8 @@ class LexPointEstimatorPage {
 							<label class="control-label reqd">${__("Document")}</label>
 							<div class="lex-estimator__dropzone">
 								<input class="form-control lex-estimator__file" type="file" accept="${extensions}" required>
-								<small class="text-muted">${__("PDF, DOCX, TXT or CSV · private · maximum {0} MB", [maxMB])}</small>
+								<small class="text-muted">${__("PDF, DOCX, TXT or CSV · private multipart upload · configured capacity {0} MB", [maxMB])}</small>
+								<div class="progress lex-estimator__progress hidden"><div class="progress-bar" role="progressbar" style="width:0%"></div></div>
 							</div>
 						</div>
 						<div class="form-group"><label class="control-label reqd">${__("Service type")}</label><select class="form-control" name="service_type">${serviceOptions}</select></div>
@@ -104,37 +105,73 @@ class LexPointEstimatorPage {
 		const file = this.$root.find(".lex-estimator__file")[0]?.files?.[0];
 		if (!file) return frappe.msgprint(__("Select a document first."));
 		if (file.size > (this.bootstrap.max_upload_bytes || 0)) {
-			return frappe.msgprint(__("The document is larger than the permitted upload limit."));
+			return frappe.msgprint(__("This file exceeds the current site capacity. An administrator can raise Max File Size in System Settings."));
 		}
 		const $button = this.$root.find(".lex-estimator__submit");
-		$button.prop("disabled", true).text(__("Scanning and estimating…"));
+		const $progress = this.$root.find(".lex-estimator__progress").removeClass("hidden");
+		const $bar = $progress.find(".progress-bar").css("width", "0%");
+		$button.prop("disabled", true).text(__("Uploading…"));
 		try {
-			const content = await this.read_file(file);
 			const values = Object.fromEntries(new FormData(form).entries());
-			const response = await frappe.call({
-				method: `${this.api}.estimate_document`,
-				args: {
-					filename: file.name,
-					content,
-					service_type: values.service_type,
-					jurisdiction: values.jurisdiction,
-					priority: values.priority,
-					expected_outcome: values.expected_outcome,
-					detailed_instructions: values.detailed_instructions,
-					use_ai: form.elements.use_ai.checked ? 1 : 0,
-				},
-				freeze: true,
-				freeze_message: __("Security scanning and calculating the estimate…"),
+			const result = await this.upload_file(file, values, form.elements.use_ai.checked, (percent) => {
+				$bar.css("width", `${percent}%`);
+				$button.text(percent < 100 ? __("Uploading {0}%", [percent]) : __("Scanning and estimating…"));
 			});
-			if (response.message) {
-				this.render_result(response.message);
+			if (result) {
+				this.render_result(result);
 				frappe.show_alert({ message: __("Standalone estimate completed"), indicator: "green" });
 				const fresh = await frappe.call({ method: `${this.api}.get_estimator_bootstrap` });
 				this.bootstrap.recent_estimates = fresh.message?.recent_estimates || [];
 				this.render_history(this.bootstrap.recent_estimates);
 			}
+		} catch (error) {
+			frappe.msgprint({ title: __("Upload failed"), indicator: "red", message: this.escape(error.message || __("The document could not be uploaded.")) });
 		} finally {
 			$button.prop("disabled", false).text(__("Estimate LexPoints & Price"));
+			$progress.addClass("hidden");
+			$bar.css("width", "0%");
+		}
+	}
+
+	upload_file(file, values, useAI, onProgress) {
+		return new Promise((resolve, reject) => {
+			const xhr = new XMLHttpRequest();
+			const payload = new FormData();
+			payload.append("file", file, file.name);
+			payload.append("is_private", "1");
+			payload.append("folder", "Home/Attachments");
+			payload.append("method", `${this.api}.upload_standalone_estimate_file`);
+			payload.append("service_type", values.service_type || "Other");
+			payload.append("jurisdiction", values.jurisdiction || "India");
+			payload.append("priority", values.priority || "Medium");
+			payload.append("expected_outcome", values.expected_outcome || "");
+			payload.append("detailed_instructions", values.detailed_instructions || "");
+			payload.append("use_ai", useAI ? "1" : "0");
+			xhr.open("POST", "/api/method/upload_file", true);
+			xhr.setRequestHeader("Accept", "application/json");
+			xhr.setRequestHeader("X-Frappe-CSRF-Token", frappe.csrf_token);
+			xhr.upload.onprogress = (event) => {
+				if (event.lengthComputable) onProgress(Math.min(100, Math.round(event.loaded / event.total * 100)));
+			};
+			xhr.onload = () => {
+				let response = {};
+				try { response = JSON.parse(xhr.responseText || "{}"); } catch (error) { /* handled below */ }
+				if (xhr.status >= 200 && xhr.status < 300 && response.message) return resolve(response.message);
+				if (xhr.status === 413) return reject(new Error(__("The reverse proxy rejected this file as too large.")));
+				const serverMessage = this.extract_server_message(response);
+				reject(new Error(serverMessage || __("Server returned HTTP {0}.", [xhr.status])));
+			};
+			xhr.onerror = () => reject(new Error(__("Network error during upload. Please retry.")));
+			xhr.send(payload);
+		});
+	}
+
+	extract_server_message(response) {
+		try {
+			const messages = JSON.parse(response._server_messages || "[]");
+			return messages.map((item) => JSON.parse(item).message).filter(Boolean).join("<br>");
+		} catch (error) {
+			return response.exception || response._error_message || "";
 		}
 	}
 
@@ -175,15 +212,6 @@ class LexPointEstimatorPage {
 			const price = window.format_currency ? format_currency(row.estimated_price, row.currency) : `${row.currency || ""} ${Number(row.estimated_price || 0).toFixed(2)}`;
 			return `<tr><td><strong>${this.escape(row.file_name || row.estimate_title)}</strong><br><small class="text-muted">${this.escape(frappe.datetime.str_to_user(row.requested_on))}</small></td><td>${this.escape(row.recommended_service || "—")}</td><td>${this.escape(row.estimated_lexpoints || "—")}</td><td>${price}</td><td>${this.escape(row.estimate_source || "—")}</td><td><a class="btn btn-default btn-xs" href="${this.escape(row.route)}">${__("Open")}</a></td></tr>`;
 		}).join("")}</tbody></table></div>`);
-	}
-
-	read_file(file) {
-		return new Promise((resolve, reject) => {
-			const reader = new FileReader();
-			reader.onload = () => resolve(reader.result);
-			reader.onerror = reject;
-			reader.readAsDataURL(file);
-		});
 	}
 
 	escape(value) {

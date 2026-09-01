@@ -31,23 +31,35 @@ class TestStandaloneLexPointEstimator(FrappeTestCase):
 		content = " ".join(
 			["agreement obligations indemnity liability termination governing law confidential"] * 30
 		)
-		with (
-			patch("lex.file_quarantine._run_malware_scan", return_value=("Clean", "Unit Test Scanner", "Clean")),
-			patch(
-				"lex.lex.page.lexpoint_estimator.lexpoint_estimator._estimation_profile_with_ai",
-				return_value=(None, "Formula test"),
-			),
-		):
-			result = lexpoint_estimator.estimate_document(
-				filename="independent-contract.txt",
-				content=_upload(content),
-				service_type="Contract Review",
-				jurisdiction="India",
-				priority="Medium",
-				expected_outcome="Estimate review effort only",
-				detailed_instructions="Review all material commercial and legal risk clauses.",
-				use_ai=1,
+		previous_form = dict(frappe.form_dict)
+		previous_file = getattr(frappe.local, "uploaded_file", None)
+		previous_filename = getattr(frappe.local, "uploaded_filename", None)
+		try:
+			frappe.local.uploaded_file = content.encode()
+			frappe.local.uploaded_filename = "independent-contract.txt"
+			frappe.form_dict.update(
+				{
+					"service_type": "Contract Review",
+					"jurisdiction": "India",
+					"priority": "Medium",
+					"expected_outcome": "Estimate review effort only",
+					"detailed_instructions": "Review all material commercial and legal risk clauses.",
+					"use_ai": 1,
+				}
 			)
+			with (
+				patch("lex.file_quarantine._run_malware_scan", return_value=("Clean", "Unit Test Scanner", "Clean")),
+				patch(
+					"lex.lex.page.lexpoint_estimator.lexpoint_estimator._estimation_profile_with_ai",
+					return_value=(None, "Formula test"),
+				),
+			):
+				result = lexpoint_estimator.upload_standalone_estimate_file()
+		finally:
+			frappe.form_dict.clear()
+			frappe.form_dict.update(previous_form)
+			frappe.local.uploaded_file = previous_file
+			frappe.local.uploaded_filename = previous_filename
 
 		self.assertGreater(result["estimated_lexpoints"], 0)
 		self.assertGreater(result["estimated_price"], 0)
@@ -70,6 +82,15 @@ class TestStandaloneLexPointEstimator(FrappeTestCase):
 		self.assertTrue(file_row.is_private)
 		self.assertEqual(file_row.custom_lex_scan_status, "Clean")
 		self.assertEqual(before, {doctype: frappe.db.count(doctype) for doctype in tracked_doctypes})
+
+	def test_estimator_uses_large_site_capacity_instead_of_ten_mb_app_limit(self):
+		install.ensure_legal_document_upload_capacity()
+		bootstrap = lexpoint_estimator.get_estimator_bootstrap()
+		self.assertGreaterEqual(
+			bootstrap["max_upload_bytes"],
+			install.LEGAL_DOCUMENT_MAX_UPLOAD_MB * 1024 * 1024,
+		)
+		self.assertGreater(bootstrap["max_upload_bytes"], 10 * 1024 * 1024)
 
 	def test_direct_record_creation_is_blocked(self):
 		with self.assertRaises(frappe.PermissionError):

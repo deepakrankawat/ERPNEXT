@@ -104,6 +104,7 @@ before_migrate = "lex.install.ensure_lpo_roles"
 after_install = "lex.install.after_install"
 after_migrate = [
 	"lex.install.ensure_lpo_roles",
+	"lex.install.ensure_legal_document_upload_capacity",
 	"lex.install.ensure_lexocrates_branding",
 	"lex.client_schema.ensure_client_schema",
 	"lex.client_schema.migrate_contact_client_links",
