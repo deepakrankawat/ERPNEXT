@@ -91,6 +91,15 @@ class TestStandaloneLexPointEstimator(FrappeTestCase):
 			install.LEGAL_DOCUMENT_MAX_UPLOAD_MB * 1024 * 1024,
 		)
 		self.assertGreater(bootstrap["max_upload_bytes"], 10 * 1024 * 1024)
+		from frappe.utils.file_manager import check_max_file_size, get_max_file_size
+
+		self.assertGreaterEqual(
+			get_max_file_size(),
+			install.LEGAL_DOCUMENT_MAX_UPLOAD_MB * 1024 * 1024,
+		)
+		# This is the exact legacy save_file guard that previously raised the
+		# reported "maximum allowed size of 10.0 MB" error.
+		self.assertEqual(check_max_file_size(b"x" * (10 * 1024 * 1024 + 1)), 10 * 1024 * 1024 + 1)
 
 	def test_direct_record_creation_is_blocked(self):
 		with self.assertRaises(frappe.PermissionError):

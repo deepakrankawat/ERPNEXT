@@ -154,10 +154,19 @@ def ensure_legal_document_upload_capacity():
 	meta = frappe.get_meta("System Settings")
 	if not meta.has_field("max_file_size"):
 		return
+	target_bytes = LEGAL_DOCUMENT_MAX_UPLOAD_MB * 1024 * 1024
 	current_mb = int(frappe.db.get_single_value("System Settings", "max_file_size") or 0)
 	if current_mb < LEGAL_DOCUMENT_MAX_UPLOAD_MB:
 		frappe.db.set_single_value("System Settings", "max_file_size", LEGAL_DOCUMENT_MAX_UPLOAD_MB)
-		frappe.clear_cache()
+	# Frappe v15 has two upload-size resolvers: the modern File API reads
+	# System Settings, while frappe.utils.file_manager.save_file reads site
+	# config. Keep both sources aligned so the final persistence step cannot
+	# unexpectedly fall back to its legacy 10 MB default.
+	if int(frappe.conf.get("max_file_size") or 0) < target_bytes:
+		from frappe.installer import update_site_config
+
+		update_site_config("max_file_size", target_bytes, validate=False)
+	frappe.clear_cache()
 
 
 def ensure_lexpack_master_data():
