@@ -243,8 +243,17 @@ def accept_sla(intake: str, accepted: int = 0):
 @frappe.whitelist()
 def upload_document(intake: str, filename: str, content: str):
 	doc, actor = _require_intake_access(intake)
-	if not actor or not actor.can_upload_documents:
+	if not _is_internal() and (not actor or not actor.can_upload_documents):
 		frappe.throw(_("Your client role cannot upload documents."), frappe.PermissionError)
+	return _upload_intake_document(doc, actor, filename, content)
+
+
+def _upload_intake_document(doc, actor, filename: str, content: str, *, auto_estimate: bool = True):
+	"""Store, scan and register one private Job source document.
+
+	The public portal action and the internal Desk estimation action share this
+	implementation so both retain the same security scan, lineage and audit trail.
+	"""
 	if not doc.sla_accepted:
 		frappe.throw(_("Review and accept the SLA Document before uploading files."), frappe.PermissionError)
 	if doc.funding_status in {"Payment Pending", "Funded"} or doc.status in {"Funding Pending", "Funded", "Matter Confirmed"}:
@@ -300,7 +309,12 @@ def upload_document(intake: str, filename: str, content: str):
 	_audit(
 		doc,
 		"Work Intake Document Uploaded",
-		{"file": file_doc.name, "file_name": file_doc.file_name, "scan_status": scan["status"]},
+		{
+			"file": file_doc.name,
+			"file_name": file_doc.file_name,
+			"scan_status": scan["status"],
+			"upload_channel": "System User Desk" if _is_internal() else "Client Portal",
+		},
 	)
 	result = {
 		"name": file_doc.name,
@@ -309,7 +323,7 @@ def upload_document(intake: str, filename: str, content: str):
 		"quarantine_passed": scan["quarantine_passed"],
 		"intake_status": doc.status,
 	}
-	if scan["status"] == "Clean" and len(frappe.utils.strip_html(doc.detailed_instructions or "")) >= 20:
+	if auto_estimate and scan["status"] == "Clean" and len(frappe.utils.strip_html(doc.detailed_instructions or "")) >= 20:
 		try:
 			result["estimate"] = _process_documents(doc, actor, estimate_only=True)
 		except Exception as exc:
@@ -349,6 +363,109 @@ def request_cost_estimate(intake: str):
 	"""
 	doc, actor = _require_intake_access(intake)
 	return _process_documents(doc, actor, estimate_only=True)
+
+
+@frappe.whitelist()
+def get_system_job_estimation_context(job: str) -> dict:
+	"""Return the minimum Desk context needed for governed Job estimation."""
+	job_doc, intake_doc = _require_system_job_estimation_access(job)
+	documents = _intake_files(intake_doc.name)
+	return {
+		"job": job_doc.name,
+		"job_title": job_doc.job_title,
+		"intake": intake_doc.name,
+		"intake_status": intake_doc.status,
+		"sla_accepted": bool(intake_doc.sla_accepted),
+		"detailed_instructions": intake_doc.detailed_instructions or "",
+		"document_count": len(documents),
+		"clean_document_count": sum(
+			(row.custom_lex_scan_status or "Pending") == "Clean" for row in documents
+		),
+		"current_estimate": intake_doc.ai_document_estimate,
+		"required_lexpoints": cint(intake_doc.required_lexpoints),
+		"quoted_amount": flt(intake_doc.quoted_amount, 2),
+		"currency": intake_doc.currency,
+		"estimate_method": intake_doc.estimate_method,
+		"quote_status": intake_doc.quote_status,
+		"pricing_approval_status": intake_doc.pricing_approval_status,
+		"allowed_extensions": sorted(ALLOWED_UPLOAD_EXTENSIONS),
+		"max_upload_bytes": MAX_UPLOAD_BYTES,
+	}
+
+
+@frappe.whitelist()
+def estimate_system_job(
+	job: str,
+	detailed_instructions: str | None = None,
+	filename: str | None = None,
+	content: str | None = None,
+) -> dict:
+	"""Upload an optional Job document and generate one governed price estimate.
+
+	This is an internal commercial-estimation action. It deliberately runs the
+	same estimate-only pipeline used by the portal, not the broader legal AI
+	analysis or document-copilot workflow.
+	"""
+	job_doc, doc = _require_system_job_estimation_access(job)
+	if not doc.sla_accepted:
+		frappe.throw(
+			_("The client must review and accept the SLA before a System User uploads documents or generates pricing."),
+			frappe.PermissionError,
+		)
+	if doc.funding_status in {"Payment Pending", "Funded"} or doc.status in {
+		"Funding Pending", "Funded", "Matter Confirmed"
+	}:
+		frappe.throw(_("The estimate is locked after funding starts."), frappe.PermissionError)
+	if job_doc.job_status != "Draft":
+		frappe.throw(_("Cost estimation is available only while the Job is in Draft."), frappe.ValidationError)
+
+	instructions = (detailed_instructions or doc.detailed_instructions or "").strip()
+	if len(frappe.utils.strip_html(instructions)) < 20:
+		frappe.throw(_("Provide at least 20 characters of detailed instructions."), frappe.ValidationError)
+	if instructions != (doc.detailed_instructions or ""):
+		with _service_writes():
+			doc.detailed_instructions = instructions
+			doc.save(ignore_permissions=True)
+		_invalidate_unfunded_estimate(doc)
+
+	upload = None
+	if bool(filename) != bool(content):
+		frappe.throw(_("Provide both the document filename and its content."), frappe.ValidationError)
+	if filename and content:
+		upload = _upload_intake_document(
+			doc, None, filename, content, auto_estimate=False
+		)
+	elif not _intake_files(doc.name):
+		frappe.throw(
+			_("Upload a document or attach at least one clean source document before estimating."),
+			frappe.ValidationError,
+		)
+
+	_process_documents(doc, None, estimate_only=True)
+	doc.reload()
+	estimate_status = None
+	if doc.ai_document_estimate:
+		estimate_status = frappe.db.get_value(
+			"LPO AI Document Estimate", doc.ai_document_estimate, "status"
+		)
+	return {
+		"job": job_doc.name,
+		"intake": doc.name,
+		"uploaded_document": upload,
+		"estimate": doc.ai_document_estimate,
+		"estimate_status": estimate_status,
+		"estimate_method": doc.estimate_method,
+		"required_lexpoints": cint(doc.required_lexpoints),
+		"quoted_amount": flt(doc.quoted_amount, 2),
+		"currency": doc.currency,
+		"delivery_timeline_hours": cint(doc.delivery_timeline_hours),
+		"scope_summary": doc.scope_summary,
+		"analysis_confidence": flt(doc.analysis_confidence, 2),
+		"low_confidence": bool(doc.low_confidence),
+		"quote_status": doc.quote_status,
+		"pricing_approval_status": doc.pricing_approval_status,
+		"recommended_plan": doc.recommended_plan,
+	}
 
 
 @frappe.whitelist()
@@ -507,7 +624,13 @@ def _process_documents(doc, actor, *, estimate_only: bool):
 		_notify_ceo_of_pending_pricing(doc)
 	_audit(
 		doc,
-		"Client Cost Estimate Requested" if estimate_only else "Work Intake Analysis Completed",
+		(
+			"Client Cost Estimate Requested"
+			if estimate_only and actor
+			else "System User Cost Estimate Generated"
+			if estimate_only
+			else "Work Intake Analysis Completed"
+		),
 		{
 			"confidence": confidence,
 			"low_confidence": low_confidence,
@@ -1840,6 +1963,24 @@ def _require_intake_access(intake, actor=None):
 	if actor.matter_access_scope != "All Client Matters" and doc.portal_user != actor.name:
 		frappe.throw(_("You cannot access this Work Intake."), frappe.PermissionError)
 	return doc, actor
+
+
+def _require_system_job_estimation_access(job: str):
+	_require_internal()
+	job_doc = frappe.get_doc("LPO Job", job)
+	if not frappe.has_permission("LPO Job", ptype="write", doc=job_doc):
+		frappe.throw(_("You do not have permission to estimate this Job."), frappe.PermissionError)
+	if not job_doc.work_intake or not frappe.db.exists("Lexocrates Work Intake", job_doc.work_intake):
+		frappe.throw(
+			_("This Job has no governed Work Intake. Create it through the Client Intake workflow before estimating."),
+			frappe.ValidationError,
+		)
+	intake_doc = frappe.get_doc("Lexocrates Work Intake", job_doc.work_intake)
+	if intake_doc.job != job_doc.name or intake_doc.matter != job_doc.engagement:
+		frappe.throw(_("The Job and Work Intake links are inconsistent."), frappe.ValidationError)
+	if intake_doc.client != job_doc.customer:
+		frappe.throw(_("The Job and Work Intake must belong to the same client."), frappe.ValidationError)
+	return job_doc, intake_doc
 
 
 def _require_funding_authority(actor, route):

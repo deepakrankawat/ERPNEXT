@@ -18,6 +18,18 @@ frappe.ui.form.on("LPO Job", {
 				frappe.set_route("Form", "LPO AI Document Estimate", frm.doc.intake_estimate);
 			}, __("View"));
 		}
+		if (
+			frm.doc.work_intake &&
+			frm.doc.job_status === "Draft" &&
+			(
+				frappe.session.user === "Administrator" ||
+				["System Manager", "LPO_Admin", "LPO_Manager"].some((role) => frappe.user.has_role(role))
+			)
+		) {
+			frm.add_custom_button(__("Estimate Price & LexPoints"), () => {
+				open_system_job_estimator(frm);
+			}, __("Commercial")).addClass("btn-primary");
+		}
 
 		// AI Document Processing Suite for System Users
 		frm.add_custom_button(__("Open AI Document Studio"), () => {
@@ -33,6 +45,113 @@ frappe.ui.form.on("LPO Job", {
 		}, __("AI Document"));
 	},
 });
+
+async function open_system_job_estimator(frm) {
+	const response = await frappe.call({
+		method: "lex.work_intake.get_system_job_estimation_context",
+		args: { job: frm.doc.name },
+		freeze: true,
+		freeze_message: __("Loading governed estimation context..."),
+	});
+	const context = response.message || {};
+	if (!context.sla_accepted) {
+		frappe.msgprint({
+			title: __("SLA acceptance required"),
+			message: __("The client must review and accept the SLA before a System User can upload a pricing document."),
+			indicator: "orange",
+		});
+		return;
+	}
+
+	const accept = (context.allowed_extensions || []).join(",");
+	const dialog = new frappe.ui.Dialog({
+		title: __("AI Cost & LexPoint Estimate — {0}", [context.job_title || frm.doc.name]),
+		size: "large",
+		fields: [
+			{
+				fieldname: "estimate_context",
+				fieldtype: "HTML",
+				options: `
+					<div class="alert alert-info mb-3">
+						<strong>${__("Governed commercial estimation")}</strong><br>
+						${__("The document is stored privately, security-scanned, and used only to calculate scope, price, delivery time and LexPoints. General legal AI analysis is not run by this action.")}
+					</div>
+					<div class="small text-muted mb-3">
+						${__("Existing Job documents")}: <strong>${Number(context.document_count || 0)}</strong>
+						· ${__("Clean")}: <strong>${Number(context.clean_document_count || 0)}</strong>
+						· ${__("Current estimate")}: <strong>${frappe.utils.escape_html(context.current_estimate || __("None"))}</strong>
+					</div>`,
+			},
+			{
+				fieldname: "detailed_instructions",
+				fieldtype: "Small Text",
+				label: __("Detailed scope and instructions"),
+				reqd: 1,
+				default: context.detailed_instructions || frm.doc.task_description || "",
+				description: __("At least 20 characters. These instructions become part of the auditable estimate evidence."),
+			},
+			{
+				fieldname: "document_upload",
+				fieldtype: "HTML",
+				options: `
+					<label class="control-label">${__("Add source document (optional when an existing clean document is available)")}</label>
+					<input id="lex-system-estimate-file" type="file" class="form-control" accept="${frappe.utils.escape_html(accept)}">
+					<p class="help-box small text-muted mt-2">${__("Allowed: PDF, DOC, DOCX, TXT, CSV, JPG and PNG. Maximum 10 MB.")}</p>`,
+			},
+		],
+		primary_action_label: __("Upload, Scan & Estimate"),
+		primary_action: async (values) => {
+			const file = dialog.$wrapper.find("#lex-system-estimate-file")[0]?.files?.[0] || null;
+			if (!file && !Number(context.document_count || 0)) {
+				frappe.msgprint(__("Choose a document because this Job has no existing source documents."));
+				return;
+			}
+			if (file && file.size > Number(context.max_upload_bytes || 10 * 1024 * 1024)) {
+				frappe.msgprint(__("The document must not exceed 10 MB."));
+				return;
+			}
+			dialog.disable_primary_action();
+			try {
+				const content = file ? await read_estimation_file(file) : null;
+				const result = (await frappe.call({
+					method: "lex.work_intake.estimate_system_job",
+					args: {
+						job: frm.doc.name,
+						detailed_instructions: values.detailed_instructions,
+						filename: file?.name || null,
+						content,
+					},
+					freeze: true,
+					freeze_message: __("Uploading securely, scanning and generating the governed estimate..."),
+				})).message;
+				dialog.hide();
+				frappe.msgprint({
+					title: __("Estimate generated"),
+					indicator: result.low_confidence ? "orange" : "green",
+					message: `
+						<p><strong>${__("Required LexPoints")}:</strong> ${Number(result.required_lexpoints || 0)}</p>
+						<p><strong>${__("Fixed quote")}:</strong> ${frappe.utils.escape_html(result.currency || "")} ${Number(result.quoted_amount || 0).toFixed(2)}</p>
+						<p><strong>${__("Delivery timeline")}:</strong> ${Number(result.delivery_timeline_hours || 0)} ${__("hours")}</p>
+						<p><strong>${__("Method")}:</strong> ${frappe.utils.escape_html(result.estimate_method || "")}</p>
+						<p><strong>${__("Next status")}:</strong> ${frappe.utils.escape_html(result.pricing_approval_status || result.quote_status || "")}</p>`,
+				});
+				await frm.reload_doc();
+			} finally {
+				dialog.enable_primary_action();
+			}
+		},
+	});
+	dialog.show();
+}
+
+function read_estimation_file(file) {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(reader.result);
+		reader.onerror = () => reject(reader.error || new Error(__("Could not read the selected document.")));
+		reader.readAsDataURL(file);
+	});
+}
 
 function open_job_ai_document_studio(frm) {
 	frappe.call({

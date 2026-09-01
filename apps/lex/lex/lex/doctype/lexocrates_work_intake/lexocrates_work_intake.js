@@ -1,5 +1,18 @@
 frappe.ui.form.on("Lexocrates Work Intake", {
 	refresh(frm) {
+		if (
+			!frm.is_new() &&
+			frm.doc.job &&
+			!["Payment Pending", "Funded"].includes(frm.doc.funding_status) &&
+			(
+				frappe.session.user === "Administrator" ||
+				["System Manager", "LPO_Admin", "LPO_Manager"].some((role) => frappe.user.has_role(role))
+			)
+		) {
+			frm.add_custom_button(__("Open Job Cost Estimator"), () => {
+				frappe.set_route("Form", "LPO Job", frm.doc.job);
+			}, __("Intake"));
+		}
 		if (!frm.is_new() && frm.doc.ai_document_estimate) {
 			frm.add_custom_button(__("Open AI Estimate"), () => {
 				frappe.set_route("Form", "LPO AI Document Estimate", frm.doc.ai_document_estimate);

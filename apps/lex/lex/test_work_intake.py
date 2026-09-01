@@ -137,6 +137,45 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		self.assertTrue(row["job"])
 		self.assertEqual(frappe.db.get_value("LPO Job", row["job"], "job_status"), "Draft")
 
+	def test_authorized_system_user_can_upload_and_generate_job_estimate(self):
+		intake = _new_intake()
+		work_intake.accept_sla(intake["name"], 1)
+		with self.assertRaises(frappe.PermissionError):
+			work_intake.estimate_system_job(
+				intake["job"],
+				detailed_instructions="Estimate this supplier agreement for scope, price and required LexPoints.",
+			)
+
+		frappe.set_user("Administrator")
+		content = " ".join(
+			["supplier agreement obligations liability indemnity termination governing law"] * 24
+		)
+		with (
+			patch("lex.file_quarantine._run_malware_scan", return_value=("Clean", "Unit Test Scanner", "Clean")),
+			patch("lex.work_intake._estimation_profile_with_ai", return_value=(None, "Formula test")),
+		):
+			result = work_intake.estimate_system_job(
+				intake["job"],
+				detailed_instructions="Estimate this supplier agreement for scope, price and required LexPoints.",
+				filename="system-estimate-source.txt",
+				content=_text_upload(content),
+			)
+
+		self.assertEqual(result["job"], intake["job"])
+		self.assertGreater(result["required_lexpoints"], 0)
+		self.assertGreater(result["quoted_amount"], 0)
+		self.assertEqual(result["estimate_method"], "Formula")
+		self.assertTrue(result["estimate"])
+		self.assertEqual(result["uploaded_document"]["scan_status"], "Clean")
+		intake_doc = frappe.get_doc("Lexocrates Work Intake", intake["name"])
+		self.assertEqual(intake_doc.quote_version, 1)
+		self.assertEqual(intake_doc.ai_document_estimate, result["estimate"])
+		self.assertEqual(
+			frappe.db.get_value("LPO Job", intake["job"], "intake_estimate"),
+			result["estimate"],
+		)
+		self.assertEqual(len(work_intake._intake_files(intake["name"])), 1)
+
 	def test_existing_balance_confirms_matter_and_activates_job(self):
 		intake = _new_intake()
 		work_intake.accept_sla(intake["name"], 1)
