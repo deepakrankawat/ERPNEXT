@@ -7,7 +7,7 @@
  "field_order": [
   "general_section", "default_provider", "default_credential", "default_max_tokens", "provider_timeout_seconds", "general_column_break", "enable_pii_sanitization", "enable_citation_verification", "open_model_registry_btn",
   "credentials_section", "provider_credentials", "credential_actions_column", "add_provider_credential_btn", "verify_all_credentials_btn",
-  "routing_section", "job_chat_credential", "job_chat_provider", "job_chat_model", "document_analysis_credential", "document_analysis_provider", "document_analysis_model", "routing_column_break", "qa_review_credential", "qa_review_provider", "qa_review_model", "intake_credential", "intake_provider", "intake_model",
+  "routing_section", "enable_standalone_estimation", "estimation_credential", "estimation_provider", "estimation_model", "job_chat_credential", "job_chat_provider", "job_chat_model", "routing_column_break", "document_analysis_credential", "document_analysis_provider", "document_analysis_model", "qa_review_credential", "qa_review_provider", "qa_review_model", "intake_credential", "intake_provider", "intake_model",
   "openai_section", "enable_openai", "openai_status", "openai_api_key", "encrypted_openai_key", "openai_default_model", "openai_base_url", "openai_organization_id", "openai_project_id", "openai_column_break", "test_openai_btn", "update_openai_key_btn", "fetch_openai_models_btn", "openai_last_verified_on", "openai_last_latency_ms", "openai_last_error", "openai_available_models",
   "anthropic_section", "enable_anthropic", "anthropic_status", "anthropic_api_key", "encrypted_anthropic_key", "anthropic_default_model", "anthropic_base_url", "anthropic_column_break", "test_anthropic_btn", "update_anthropic_key_btn", "fetch_anthropic_models_btn", "anthropic_last_verified_on", "anthropic_last_latency_ms", "anthropic_last_error", "anthropic_available_models",
   "gemini_section", "enable_gemini", "gemini_status", "gemini_api_key", "encrypted_gemini_key", "gemini_default_model", "gemini_base_url", "gemini_column_break", "test_gemini_btn", "update_gemini_key_btn", "fetch_gemini_models_btn", "gemini_last_verified_on", "gemini_last_latency_ms", "gemini_last_error", "gemini_available_models"
@@ -30,6 +30,10 @@
   {"fieldname":"verify_all_credentials_btn","fieldtype":"Button","label":"Test All Named Credentials"},
 
   {"fieldname":"routing_section","fieldtype":"Section Break","label":"Use-case Routing"},
+  {"default":"1","description":"Use the selected verified LPO AI credential to classify standalone estimator documents before the governed formula calculates LexPoints and price.","fieldname":"enable_standalone_estimation","fieldtype":"Check","label":"Enable AI for Standalone LexPoint Estimator"},
+  {"description":"Dedicated encrypted credential for internal standalone estimates. Falls back to the default credential.","fieldname":"estimation_credential","fieldtype":"Select","label":"Standalone Estimation API Credential"},
+  {"fieldname":"estimation_provider","fieldtype":"Select","label":"Standalone Estimation Provider","options":"\nOpenAI\nGoogle Gemini\nAnthropic"},
+  {"fieldname":"estimation_model","fieldtype":"Select","label":"Standalone Estimation Model"},
   {"description":"Optional named credential. Falls back to the default credential/provider.","fieldname":"job_chat_credential","fieldtype":"Select","label":"Job Chat API Credential"},
   {"fieldname":"job_chat_provider","fieldtype":"Select","label":"Job Chat Provider","options":"\nOpenAI\nGoogle Gemini\nAnthropic"},
   {"fieldname":"job_chat_model","fieldtype":"Select","label":"Job Chat Model"},

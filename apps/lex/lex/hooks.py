@@ -121,6 +121,7 @@ after_migrate = [
 	"lex.ai_document_engine.ensure_default_ai_document_services",
 	"lex.execution_policies.ensure_default_execution_policies",
 	"lex.lex.doctype.lpo_ai_settings.lpo_ai_settings.ensure_ai_provider_registry",
+	"lex.install.ensure_standalone_estimation_ai_route",
 	"lex.pdf_watermark.ensure_all_pdfs_private",
 	"lex.lexpoint_estimation.ensure_default_lexpoint_rules",
 	"lex.install.ensure_ai_document_estimate_workspace_link",

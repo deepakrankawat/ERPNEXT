@@ -525,6 +525,7 @@ def get_ai_provider_config() -> dict:
 		"providers": providers,
 		"credentials": credentials,
 		"routes": {
+			"estimation": settings.estimation_credential or "",
 			"job_chat": settings.job_chat_credential or "",
 			"document_analysis": settings.document_analysis_credential or "",
 			"qa_review": settings.qa_review_credential or "",
@@ -881,6 +882,8 @@ def _is_dummy_password(value):
 
 def _route_fields(use_case):
 	value = str(use_case or "").lower()
+	if "standalone" in value and ("estimate" in value or "estimation" in value or "lexpoint" in value):
+		return "estimation_credential", "estimation_provider", "estimation_model"
 	if "job" in value and ("chat" in value or "copilot" in value):
 		return "job_chat_credential", "job_chat_provider", "job_chat_model"
 	if "document" in value:
@@ -889,6 +892,8 @@ def _route_fields(use_case):
 		return "qa_review_credential", "qa_review_provider", "qa_review_model"
 	if "intake" in value:
 		return "intake_credential", "intake_provider", "intake_model"
+	if "estimate" in value or "estimation" in value or "lexpoint" in value:
+		return "estimation_credential", "estimation_provider", "estimation_model"
 	return None
 
 

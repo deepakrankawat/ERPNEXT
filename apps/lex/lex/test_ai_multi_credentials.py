@@ -52,6 +52,10 @@ class TestAIMultiCredentials(FrappeTestCase):
 		settings.job_chat_credential = self.primary_name
 		settings.job_chat_provider = "OpenAI"
 		settings.job_chat_model = self.model
+		settings.enable_standalone_estimation = 1
+		settings.estimation_credential = self.primary_name
+		settings.estimation_provider = "OpenAI"
+		settings.estimation_model = self.model
 		settings.save(ignore_permissions=True)
 		set_encrypted_password("LPO AI Provider Credential", primary.name, self.primary_secret, "api_key")
 		set_encrypted_password("LPO AI Provider Credential", secondary.name, self.secondary_secret, "api_key")
@@ -66,6 +70,10 @@ class TestAIMultiCredentials(FrappeTestCase):
 			_get_provider_key(settings, provider, credential_name=credential),
 			self.primary_secret,
 		)
+
+	def test_standalone_estimator_has_a_dedicated_lpo_ai_route(self):
+		provider, model, credential = resolve_ai_route(None, None, "Standalone LexPoint Estimation")
+		self.assertEqual((provider, model, credential), ("OpenAI", self.model, self.primary_name))
 
 	def test_priority_selects_best_credential_without_explicit_route(self):
 		settings = frappe.get_single("LPO AI Settings")

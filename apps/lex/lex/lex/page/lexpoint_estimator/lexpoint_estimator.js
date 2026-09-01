@@ -16,6 +16,7 @@ class LexPointEstimatorPage {
 			single_column: true,
 		});
 		this.page.set_secondary_action(__("Refresh"), () => this.load(), "refresh");
+		this.page.add_inner_button(__("Test Estimation AI"), () => this.test_ai_connection(), __("AI"));
 		this.$root = $("<div class='lex-estimator'></div>").appendTo(this.page.main);
 		this.render_loading();
 		this.load();
@@ -41,6 +42,7 @@ class LexPointEstimatorPage {
 
 	render() {
 		const data = this.bootstrap;
+		const aiRoute = data.ai_route || {};
 		const serviceOptions = (data.service_types || []).map((item) =>
 			`<option value="${this.escape(item)}" ${item === "Contract Review" ? "selected" : ""}>${this.escape(item)}</option>`
 		).join("");
@@ -62,7 +64,7 @@ class LexPointEstimatorPage {
 				<section class="form-dashboard-section lex-estimator__card">
 					<div class="lex-estimator__card-head">
 						<div><h4>${__("Upload and estimate")}</h4><p class="text-muted">${__("The source stays private and is security-scanned before analysis.")}</p></div>
-						<span class="indicator-pill ${data.ai_enabled ? "green" : "gray"}">${data.ai_enabled ? __("AI classification available") : __("Formula mode")}</span>
+						<div class="lex-estimator__ai-status"><span class="indicator-pill ${data.ai_enabled ? "green" : "orange"}">${data.ai_enabled ? __("LPO AI connected") : __("Formula fallback")}</span><small class="text-muted">${this.escape(aiRoute.message || "")}</small></div>
 					</div>
 					<form class="lex-estimator__form">
 						<div class="form-group lex-estimator__wide">
@@ -97,6 +99,22 @@ class LexPointEstimatorPage {
 		`);
 		this.render_history(data.recent_estimates || []);
 		this.$root.find(".lex-estimator__form").on("submit", (event) => this.submit(event));
+	}
+
+	async test_ai_connection() {
+		const response = await frappe.call({
+			method: `${this.api}.test_estimation_ai_connection`,
+			freeze: true,
+			freeze_message: __("Testing the LPO AI estimation route…"),
+		});
+		const result = response.message || {};
+		frappe.msgprint({
+			title: result.status === "success" ? __("Estimation AI connected") : __("Estimation AI unavailable"),
+			indicator: result.status === "success" ? "green" : "orange",
+			message: [result.message, result.provider && `${__("Provider")}: ${result.provider}`, result.model && `${__("Model")}: ${result.model}`, result.credential_name && `${__("Credential")}: ${result.credential_name}`]
+				.filter(Boolean).map((item) => this.escape(item)).join("<br>"),
+		});
+		await this.load();
 	}
 
 	async submit(event) {
@@ -182,6 +200,9 @@ class LexPointEstimatorPage {
 		const review = result.requires_human_review
 			? `<span class="indicator-pill orange">${__("Human review recommended")}</span>`
 			: `<span class="indicator-pill green">${__("Confidence passed")}</span>`;
+		const aiRoute = result.analysis_provider
+			? `${this.escape(result.analysis_provider)} · ${this.escape(result.analysis_model || "")}`
+			: __("Deterministic formula");
 		this.$root.find(".lex-estimator__result-card").html(`
 			<div class="lex-estimator__card-head"><div><h4>${__("Indicative estimate")}</h4><p class="text-muted">${this.escape(result.file_name)}</p></div>${review}</div>
 			<div class="lex-estimator__metrics">
@@ -196,6 +217,7 @@ class LexPointEstimatorPage {
 				<div><span>${__("Risk / reviewer")}</span><strong>${this.escape(result.risk_level)} · ${this.escape(result.reviewer_level)}</strong></div>
 				<div><span>${__("Evidence")}</span><strong>${this.escape(result.page_count)} ${__("pages")} · ${this.escape(result.word_count)} ${__("words")}</strong></div>
 				<div><span>${__("Method")}</span><strong>${this.escape(result.estimate_source)} · ${this.escape(result.confidence)}%</strong></div>
+				<div><span>${__("AI route")}</span><strong>${aiRoute}</strong></div>
 			</div>
 			<div class="lex-estimator__explanation"><strong>${__("Why this estimate")}</strong><p>${this.escape(result.explanation || result.analysis_note || "")}</p></div>
 			<div class="lex-estimator__result-actions"><a class="btn btn-default btn-sm" href="${this.escape(result.route)}">${__("Open audit record")}</a><span class="text-muted">${__("Preview only — no quote or payment record created")}</span></div>
@@ -210,8 +232,42 @@ class LexPointEstimatorPage {
 		}
 		$body.html(`<div class="table-responsive"><table class="table table-hover"><thead><tr><th>${__("Document")}</th><th>${__("Service")}</th><th>${__("LexPoints")}</th><th>${__("Price")}</th><th>${__("Method")}</th><th></th></tr></thead><tbody>${rows.map((row) => {
 			const price = window.format_currency ? format_currency(row.estimated_price, row.currency) : `${row.currency || ""} ${Number(row.estimated_price || 0).toFixed(2)}`;
-			return `<tr><td><strong>${this.escape(row.file_name || row.estimate_title)}</strong><br><small class="text-muted">${this.escape(frappe.datetime.str_to_user(row.requested_on))}</small></td><td>${this.escape(row.recommended_service || "—")}</td><td>${this.escape(row.estimated_lexpoints || "—")}</td><td>${price}</td><td>${this.escape(row.estimate_source || "—")}</td><td><a class="btn btn-default btn-xs" href="${this.escape(row.route)}">${__("Open")}</a></td></tr>`;
+			const runAI = row.estimate_source !== "AI-Assisted Formula"
+				? `<button class="btn btn-primary btn-xs lex-estimator__rerun-ai" type="button" data-estimate="${this.escape(row.name)}">${__("Run LPO AI")}</button>`
+				: "";
+			return `<tr><td><strong>${this.escape(row.file_name || row.estimate_title)}</strong><br><small class="text-muted">${this.escape(frappe.datetime.str_to_user(row.requested_on))}</small></td><td>${this.escape(row.recommended_service || "—")}</td><td>${this.escape(row.estimated_lexpoints || "—")}</td><td>${price}</td><td>${this.escape(row.estimate_source || "—")}</td><td><div class="lex-estimator__row-actions">${runAI}<a class="btn btn-default btn-xs" href="${this.escape(row.route)}">${__("Open")}</a></div></td></tr>`;
 		}).join("")}</tbody></table></div>`);
+		$body.find(".lex-estimator__rerun-ai").on("click", (event) => {
+			this.rerun_with_ai(event.currentTarget.dataset.estimate, event.currentTarget);
+		});
+	}
+
+	async rerun_with_ai(estimate, button) {
+		const $button = $(button);
+		$button.prop("disabled", true).text(__("Running AI…"));
+		try {
+			const response = await frappe.call({
+				method: `${this.api}.rerun_estimate_with_ai`,
+				args: { estimate },
+				freeze: true,
+				freeze_message: __("Classifying the existing document through LPO AI…"),
+			});
+			if (response.message) {
+				this.render_result(response.message);
+				frappe.show_alert({ message: __("AI-assisted estimate completed"), indicator: "green" });
+			}
+			const fresh = await frappe.call({ method: `${this.api}.get_estimator_bootstrap` });
+			this.bootstrap = fresh.message || this.bootstrap;
+			this.render_history(this.bootstrap.recent_estimates || []);
+		} catch (error) {
+			frappe.msgprint({
+				title: __("AI estimation failed"),
+				indicator: "red",
+				message: this.escape(error.message || __("The document could not be re-estimated.")),
+			});
+		} finally {
+			$button.prop("disabled", false).text(__("Run LPO AI"));
+		}
 	}
 
 	escape(value) {

@@ -20,6 +20,7 @@ const PROVIDER_META = {
 	},
 };
 const ROUTES = [
+	["estimation_credential", "estimation_provider", "estimation_model"],
 	["job_chat_credential", "job_chat_provider", "job_chat_model"],
 	["document_analysis_credential", "document_analysis_provider", "document_analysis_model"],
 	["qa_review_credential", "qa_review_provider", "qa_review_model"],
@@ -41,10 +42,12 @@ frappe.ui.form.on("LPO AI Settings", {
 	},
 
 	job_chat_provider: sync_model_options,
+	estimation_provider: sync_model_options,
 	document_analysis_provider: sync_model_options,
 	qa_review_provider: sync_model_options,
 	intake_provider: sync_model_options,
 	job_chat_credential: route_credential_changed,
+	estimation_credential: route_credential_changed,
 	document_analysis_credential: route_credential_changed,
 	qa_review_credential: route_credential_changed,
 	intake_credential: route_credential_changed,

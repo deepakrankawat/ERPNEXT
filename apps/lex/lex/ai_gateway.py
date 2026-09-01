@@ -22,6 +22,7 @@ JOB_AI_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".csv", ".json"}
 MAX_JOB_AI_DOCUMENTS = 8
 MAX_JOB_AI_CONTEXT_CHARS = 48000
 CLIENT_COST_ESTIMATION_USE_CASE = "Client Work Intake LexPoint Estimation"
+STANDALONE_ESTIMATION_USE_CASE = "Standalone LexPoint Estimation"
 
 
 @frappe.whitelist()
@@ -69,7 +70,7 @@ def invoke_ai_gateway(
 ):
 	"""Execute an authorized, retained, retry-bounded AI call through a configured gateway."""
 	_authorize_gateway_caller(use_case)
-	client_id = _authorize_ai_subject(client_id, matter_id, job_id)
+	client_id = _authorize_ai_subject(client_id, matter_id, job_id, use_case=use_case)
 	settings = frappe.get_single("LPO AI Settings") if frappe.db.exists("DocType", "LPO AI Settings") else None
 	from lex.lex.doctype.lpo_ai_settings.lpo_ai_settings import resolve_ai_route
 
@@ -228,6 +229,12 @@ def _authorize_gateway_caller(use_case: str):
 		frappe.throw(_("Authentication required."), frappe.AuthenticationError)
 	roles = set(frappe.get_roles(user))
 	if user == "Administrator" or roles.intersection(INTERNAL_AI_ROLES):
+		return
+	if (
+		use_case == STANDALONE_ESTIMATION_USE_CASE
+		and getattr(frappe.flags, "lexocrates_standalone_ai_estimation", False)
+		and frappe.db.get_value("User", user, "user_type") == "System User"
+	):
 		return
 	portal_user = get_portal_user(user)
 	if (
@@ -560,7 +567,7 @@ def review_matter_job_ai(
 	}
 
 
-def _authorize_ai_subject(client_id, matter_id, job_id):
+def _authorize_ai_subject(client_id, matter_id, job_id, *, use_case: str | None = None):
 	portal_user = get_portal_user()
 	if portal_user:
 		client_id = portal_user.client
@@ -572,7 +579,16 @@ def _authorize_ai_subject(client_id, matter_id, job_id):
 				frappe.throw(_("You cannot use AI for this Job."), frappe.PermissionError)
 	else:
 		roles = set(frappe.get_roles(frappe.session.user))
-		if frappe.session.user != "Administrator" and not roles.intersection(INTERNAL_AI_ROLES):
+		sealed_standalone_estimate = (
+			use_case == STANDALONE_ESTIMATION_USE_CASE
+			and getattr(frappe.flags, "lexocrates_standalone_ai_estimation", False)
+			and frappe.db.get_value("User", frappe.session.user, "user_type") == "System User"
+		)
+		if (
+			frappe.session.user != "Administrator"
+			and not roles.intersection(INTERNAL_AI_ROLES)
+			and not sealed_standalone_estimate
+		):
 			frappe.throw(_("AI Gateway permission is required."), frappe.PermissionError)
 	if matter_id:
 		matter_client = frappe.db.get_value("LPO Matter", matter_id, "customer")

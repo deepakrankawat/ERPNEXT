@@ -136,6 +136,7 @@ def after_install():
 	from lex.lex.doctype.lpo_ai_settings.lpo_ai_settings import ensure_ai_provider_registry
 
 	ensure_ai_provider_registry()
+	ensure_standalone_estimation_ai_route()
 	from lex.lexpoint_estimation import ensure_default_lexpoint_rules
 
 	ensure_default_lexpoint_rules()
@@ -167,6 +168,42 @@ def ensure_legal_document_upload_capacity():
 
 		update_site_config("max_file_size", target_bytes, validate=False)
 	frappe.clear_cache()
+
+
+def ensure_standalone_estimation_ai_route():
+	"""Enable the dedicated estimator route and inherit the verified intake route once."""
+	if not frappe.db.exists("DocType", "LPO AI Settings"):
+		return
+	meta = frappe.get_meta("LPO AI Settings")
+	if not meta.has_field("enable_standalone_estimation"):
+		return
+	settings = frappe.get_single("LPO AI Settings")
+	initialized_fields = {
+		row[0]
+		for row in frappe.db.sql(
+			"""select `field` from `tabSingles`
+			where `doctype` = %s and `field` in
+			('enable_standalone_estimation', 'estimation_credential', 'estimation_provider', 'estimation_model')""",
+			("LPO AI Settings",),
+		)
+	}
+	values = {}
+	if "enable_standalone_estimation" not in initialized_fields:
+		values["enable_standalone_estimation"] = 1
+	for target, source in (
+		("estimation_credential", "intake_credential"),
+		("estimation_provider", "intake_provider"),
+		("estimation_model", "intake_model"),
+	):
+		if (
+			meta.has_field(target)
+			and target not in initialized_fields
+			and settings.get(source)
+		):
+			values[target] = settings.get(source)
+	if values:
+		frappe.db.set_value("LPO AI Settings", "LPO AI Settings", values, update_modified=False)
+	frappe.clear_cache(doctype="LPO AI Settings")
 
 
 def ensure_lexpack_master_data():

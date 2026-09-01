@@ -50,7 +50,7 @@ class TestStandaloneLexPointEstimator(FrappeTestCase):
 			with (
 				patch("lex.file_quarantine._run_malware_scan", return_value=("Clean", "Unit Test Scanner", "Clean")),
 				patch(
-					"lex.lex.page.lexpoint_estimator.lexpoint_estimator._estimation_profile_with_ai",
+					"lex.lex.page.lexpoint_estimator.lexpoint_estimator._standalone_estimation_profile_with_ai",
 					return_value=(None, "Formula test"),
 				),
 			):
@@ -100,6 +100,49 @@ class TestStandaloneLexPointEstimator(FrappeTestCase):
 		# This is the exact legacy save_file guard that previously raised the
 		# reported "maximum allowed size of 10.0 MB" error.
 		self.assertEqual(check_max_file_size(b"x" * (10 * 1024 * 1024 + 1)), 10 * 1024 * 1024 + 1)
+
+	def test_estimation_ai_uses_dedicated_lpo_ai_gateway_route(self):
+		context = frappe._dict(
+			service_type="Contract Review",
+			jurisdiction="India",
+			priority="Medium",
+			expected_outcome="Identify contract risk",
+			detailed_instructions="Classify the agreement for internal estimation.",
+		)
+		gateway_result = {
+			"response_text": (
+				'{"document_type":"Agreement","recommended_service":"Standard Contract Review",'
+				'"complexity_score":42,"risk_level":"Medium","reviewer_level":"Senior Associate",'
+				'"jurisdiction":"India","volume":4,"task_count":1,"confidence":0.91,'
+				'"document_type_confidence":0.88,"jurisdiction_confidence":0.95}'
+			),
+			"ai_execution": "AIEXEC-TEST",
+			"provider": "OpenAI",
+			"model": "gpt-4o",
+			"credential_name": "OpenAI Primary",
+			"requires_human_review": False,
+		}
+		with (
+			patch.object(
+				lexpoint_estimator,
+				"_estimation_ai_route_status",
+				return_value={"ready": True, "provider": "OpenAI", "model": "gpt-4o"},
+			),
+			patch("lex.ai_gateway.invoke_ai_gateway", return_value=gateway_result) as gateway,
+		):
+			profile, note = lexpoint_estimator._standalone_estimation_profile_with_ai(
+				context, "agreement liability termination", 1, 3
+			)
+		self.assertIsNone(note)
+		self.assertEqual(profile["provider"], "OpenAI")
+		self.assertEqual(profile["model"], "gpt-4o")
+		self.assertEqual(profile["recommended_service"], "Standard Contract Review")
+		self.assertEqual(profile["confidence"], 91)
+		self.assertEqual(profile["document_type_confidence"], 88)
+		self.assertEqual(profile["jurisdiction_confidence"], 95)
+		self.assertNotIn("volume", profile)
+		self.assertEqual(gateway.call_args.kwargs["use_case"], "Standalone LexPoint Estimation")
+		self.assertIsNone(gateway.call_args.kwargs["client_id"])
 
 	def test_direct_record_creation_is_blocked(self):
 		with self.assertRaises(frappe.PermissionError):
