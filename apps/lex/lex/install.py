@@ -319,10 +319,12 @@ def ensure_ai_document_estimate_workspace_link():
 	):
 		return
 	managed_links = (
-		("Intake AI Estimates", "LPO AI Document Estimate"),
-		("LexPoint Service Rules", "LPO LexPoint Service Rule"),
-		("LexPoint Multipliers", "LPO LexPoint Multiplier"),
-		("LexPoint Formula Settings", "LPO LexPoint Settings"),
+		("Standalone LexPoint Estimator", "lexpoint-estimator", "Page"),
+		("Standalone Estimate History", "LPO Standalone Estimate", "DocType"),
+		("Intake AI Estimates", "LPO AI Document Estimate", "DocType"),
+		("LexPoint Service Rules", "LPO LexPoint Service Rule", "DocType"),
+		("LexPoint Multipliers", "LPO LexPoint Multiplier", "DocType"),
+		("LexPoint Formula Settings", "LPO LexPoint Settings", "DocType"),
 	)
 	changed = False
 	next_idx = frappe.db.get_value(
@@ -330,8 +332,8 @@ def ensure_ai_document_estimate_workspace_link():
 		{"parent": "AI Workspace", "parenttype": "Workspace", "parentfield": "links"},
 		"max(idx)",
 	) or 0
-	for label, link_to in managed_links:
-		if not frappe.db.exists("DocType", link_to):
+	for label, link_to, link_type in managed_links:
+		if not frappe.db.exists(link_type, link_to):
 			continue
 		existing = frappe.get_all(
 			"Workspace Link",
@@ -343,9 +345,9 @@ def ensure_ai_document_estimate_workspace_link():
 		)
 		if existing:
 			row = existing[0]
-			if row.label != label or row.link_type != "DocType":
+			if row.label != label or row.link_type != link_type:
 				frappe.db.set_value(
-					"Workspace Link", row.name, {"label": label, "link_type": "DocType"}, update_modified=False,
+					"Workspace Link", row.name, {"label": label, "link_type": link_type}, update_modified=False,
 				)
 				changed = True
 			continue
@@ -353,7 +355,7 @@ def ensure_ai_document_estimate_workspace_link():
 		frappe.get_doc({
 			"doctype": "Workspace Link", "parent": "AI Workspace", "parenttype": "Workspace",
 			"parentfield": "links", "idx": int(next_idx), "type": "Link", "label": label,
-			"link_to": link_to, "link_type": "DocType",
+			"link_to": link_to, "link_type": link_type,
 		}).db_insert()
 		changed = True
 

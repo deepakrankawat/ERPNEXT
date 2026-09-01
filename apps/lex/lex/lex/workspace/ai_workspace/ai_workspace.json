@@ -16,7 +16,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Decision Center",
-   "link_count": 16,
+   "link_count": 18,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -138,6 +138,26 @@
    "link_count": 0,
    "link_to": "lexocrates-chat",
    "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Standalone LexPoint Estimator",
+   "link_count": 0,
+   "link_to": "lexpoint-estimator",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Standalone Estimate History",
+   "link_count": 0,
+   "link_to": "LPO Standalone Estimate",
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
   },
