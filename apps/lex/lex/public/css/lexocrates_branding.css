@@ -13,6 +13,9 @@
 	--btn-primary: #1e293b !important;
 	--border-primary: #1e293b !important;
 	--sidebar-select-color: #e2e8f0 !important;
+	--lex-field-border: #94a3b8;
+	--lex-field-border-hover: #64748b;
+	--lex-field-border-focus: #1e293b;
 }
 
 [data-theme="dark"] {
@@ -22,6 +25,9 @@
 	--btn-primary: #7fa8d9 !important;
 	--border-primary: #7fa8d9 !important;
 	--sidebar-select-color: #1c2a3f !important;
+	--lex-field-border: #64748b;
+	--lex-field-border-hover: #94a3b8;
+	--lex-field-border-focus: #7fa8d9;
 }
 
 /* Ensure high-contrast text on light-blue primary buttons in dark mode */
@@ -85,6 +91,69 @@ html[data-theme="dark"] .lexocrates-logo-dark,
 html[data-theme="dark"] .lexocrates-logo-light,
 [data-theme="dark"] .lexocrates-logo-light {
 	display: inline-block !important;
+}
+
+/* Frappe swaps between .control-value and .control-input while editing. Keep
+   both layers outlined so empty fields remain discoverable before focus. */
+.frappe-control .form-control,
+.frappe-control input.form-control,
+.frappe-control select.form-control,
+.frappe-control textarea.form-control,
+.frappe-control .control-value.like-disabled-input,
+.frappe-control > .like-disabled-input,
+.grid-row .form-control,
+.grid-form .form-control,
+.form-in-grid .form-control,
+.grid-row .like-disabled-input,
+.grid-form .like-disabled-input,
+.form-in-grid .like-disabled-input {
+	background-color: var(--control-bg, #f3f4f6) !important;
+	border: 1px solid var(--lex-field-border) !important;
+	border-radius: 8px !important;
+	box-shadow: none !important;
+	color: var(--text-color, #1f2937) !important;
+}
+
+.frappe-control .form-control:hover,
+.frappe-control .control-value.like-disabled-input:hover,
+.frappe-control > .like-disabled-input:hover,
+.grid-row .form-control:hover,
+.grid-form .form-control:hover,
+.form-in-grid .form-control:hover {
+	border-color: var(--lex-field-border-hover) !important;
+}
+
+.frappe-control .form-control::placeholder,
+.grid-row .form-control::placeholder,
+.grid-form .form-control::placeholder,
+.form-in-grid .form-control::placeholder {
+	color: var(--text-muted, #8a97a3) !important;
+	opacity: 1;
+}
+
+.frappe-control .form-control:focus,
+.frappe-control .input-with-feedback:focus,
+.grid-row .form-control:focus,
+.grid-form .form-control:focus,
+.form-in-grid .form-control:focus {
+	outline: none !important;
+	border-color: var(--lex-field-border-focus) !important;
+	box-shadow: 0 0 0 3px rgba(30, 41, 59, 0.12) !important;
+}
+
+.grid-row .control-input,
+.grid-row .input-with-feedback,
+.grid-form .control-input,
+.grid-form .input-with-feedback,
+.form-in-grid .control-input,
+.form-in-grid .input-with-feedback {
+	background-color: transparent !important;
+}
+
+.grid-row .static-area,
+.grid-form .static-area,
+.form-in-grid .static-area {
+	color: var(--text-color, #1f2937) !important;
 }
 
 /* Robust single-img logo & mark swaps for Dark Mode */

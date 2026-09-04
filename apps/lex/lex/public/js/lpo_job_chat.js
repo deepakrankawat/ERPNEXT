@@ -41,6 +41,8 @@ frappe.provide("lex.ai");
 				.lex-ai-controls select { padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 13px; font-weight: 500; }
 
 				.lex-ai-body { padding: 16px 18px; max-height: 380px; overflow-y: auto; background: #f8fafc; }
+				.lex-ai-history { max-height: 320px; overflow-y: auto; padding: 0 0 12px 0; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+				.lex-ai-history__empty { padding: 18px 12px; color: #64748b; font-size: 13px; text-align: center; }
 				.lex-ai-msg { margin-bottom: 12px; padding: 12px 14px; border-radius: 8px; font-size: 13.5px; line-height: 1.5; }
 				.lex-ai-msg--user { background: #e0f2fe; color: #0369a1; border-left: 4px solid #0284c7; margin-left: 30px; }
 				.lex-ai-msg--ai { background: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; border-left: 4px solid #10b981; margin-right: 30px; }
@@ -109,6 +111,23 @@ frappe.provide("lex.ai");
 			);
 		}
 		$history.find(".lpo-chat__empty").remove();
+		$history.append($message);
+		$history.scrollTop($history[0].scrollHeight);
+	}
+
+	function render_ai_history_message($history, data) {
+		if (!data?.name || $history.find(`[data-message-name="${CSS.escape(data.name)}"]`).length) return;
+		const is_ai = !!data.system_generated;
+		const sender = frappe.utils.escape_html(data.sender_full_name || data.sender || (is_ai ? __("AI Assistant") : __("You")));
+		const timestamp = frappe.utils.escape_html(data.formatted_timestamp || data.timestamp || "");
+		const $message = $(`
+			<div class="lex-ai-msg ${is_ai ? "lex-ai-msg--ai" : "lex-ai-msg--user"}" data-message-name="${frappe.utils.escape_html(data.name)}">
+				<div class="lex-ai-msg-header">${sender}${timestamp ? ` · ${timestamp}` : ""}</div>
+				<div class="lex-ai-msg-body"></div>
+			</div>
+		`);
+		$message.find(".lex-ai-msg-body").html(data.message_text || "");
+		$history.find(".lex-ai-history__empty").remove();
 		$history.append($message);
 		$history.scrollTop($history[0].scrollHeight);
 	}
@@ -340,6 +359,7 @@ frappe.provide("lex.ai");
 					</div>
 				</div>
 				<div class="lex-ai-body" id="copilot-body">
+					<div class="lex-ai-history" id="copilot-history"></div>
 					<div class="lex-ai-msg lex-ai-msg--ai">
 						<div class="lex-ai-msg-header">AI Copilot (${frappe.utils.escape_html(frm.doc.job_title)})</div>
 						${has_any_provider ?
@@ -364,10 +384,31 @@ frappe.provide("lex.ai");
 		const $model = $card.find("#copilot-model");
 		const $token_limit = $card.find("#copilot-token-limit");
 		const $include_doc = $card.find("#include-source-doc");
+		const $history = $card.find("#copilot-history");
 		const $body = $card.find("#copilot-body");
 		const $input = $card.find("#copilot-input");
 		const $send = $card.find("#copilot-send");
 		const $token_badge = $card.find("#token-badge");
+
+		const channel_res = await frappe.call({
+			method: `${API_ROOT}.get_or_create_contextual_channel`,
+			args: { reference_doctype: frm.doctype, reference_name: frm.docname },
+		});
+		const job_chat_channel = channel_res.message;
+
+		async function load_ai_history() {
+			const history_res = await frappe.call({
+				method: `${API_ROOT}.get_messages`,
+				args: { channel: job_chat_channel.name, limit: 100 },
+			});
+			const messages = history_res.message || [];
+			$history.empty();
+			if (!messages.length) {
+				$history.html(`<div class="lex-ai-history__empty">${__("No AI chat history yet. Ask a question to begin.")}</div>`);
+				return;
+			}
+			messages.forEach((message) => render_ai_history_message($history, message));
+		}
 
 		function update_models() {
 			const p = $provider.val();
@@ -403,6 +444,7 @@ frappe.provide("lex.ai");
 			if (credential) $provider.val(credential.provider);
 		}
 		update_models();
+		await load_ai_history();
 
 		// Quick Top-up Tokens
 		$card.on("click", ".btn-add-tokens", async function() {
@@ -483,6 +525,7 @@ frappe.provide("lex.ai");
 				$token_badge.html(`Budget: <strong>${new_used}</strong> / <strong>${new_budget}</strong> tokens (${new_rem} left)`);
 
 				frm.set_value("ai_tokens_used", new_used);
+				await load_ai_history();
 			} catch (err) {
 				const safe_error = String(err?.message || __("The AI request failed. Check provider diagnostics in LPO AI Settings.")).slice(0, 320);
 				$body.append(`

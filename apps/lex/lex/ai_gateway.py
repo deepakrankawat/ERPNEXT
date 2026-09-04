@@ -12,6 +12,11 @@ from lex.ai_citation_verifier import verify_ai_citations
 from lex.ai_dlp_sanitizer import sanitize_text_for_ai
 from lex.ai_providers import AIProviderError, call_provider_with_retries, get_registry_endpoint
 from lex.client_access import get_portal_user, has_matter_access
+from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import ensure_contextual_channel
+from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import (
+	create_system_message,
+	send_message as create_chat_message,
+)
 from lex.portal_audit import create_portal_audit_event
 
 
@@ -398,6 +403,7 @@ def chat_job_ai(
 		frappe.throw(_("Job {0} not found.").format(job_id), frappe.DoesNotExistError)
 
 	job = frappe.get_doc("LPO Job", job_id)
+	job_chat_channel = _ensure_job_ai_chat_channel(job)
 	settings = frappe.get_single("LPO AI Settings") if frappe.db.exists("DocType", "LPO AI Settings") else None
 	from lex.lex.doctype.lpo_ai_settings.lpo_ai_settings import resolve_ai_route
 
@@ -437,6 +443,24 @@ def chat_job_ai(
 		f"Provide a thorough, accurate, and professional legal analysis."
 	)
 	full_prompt = f"{system_prompt}\n\nUser Request/Instruction:\n{prompt}"
+	chat_context_id = f"ai-chat:{job.name}:{now_datetime().isoformat()}"
+
+	# Persist the user's question in the job's contextual chat before invoking AI.
+	try:
+		create_chat_message(
+			channel=job_chat_channel.name,
+			message_text=f"<p><strong>AI request</strong></p><p>{frappe.utils.escape_html(prompt).replace(chr(10), '<br>')}</p>",
+			client_message_id=f"{chat_context_id}:user",
+		)
+	except Exception:
+		# The AI execution can still proceed if chat persistence is temporarily unavailable.
+		frappe.log_error(
+			title="LPO AI Copilot Chat Persistence",
+			message=frappe.get_traceback(),
+			reference_doctype="LPO Job",
+			reference_name=job.name,
+			defer_insert=True,
+		)
 
 	try:
 		result = invoke_ai_gateway(
@@ -449,6 +473,15 @@ def chat_job_ai(
 			credential_name=credential_name,
 			source_corpus=doc_context,
 			max_tokens=effective_max_tokens,
+		)
+		create_system_message(
+			job_chat_channel.name,
+			_("<p><strong>AI response</strong></p><div>{0}</div>").format(
+				frappe.utils.escape_html(result.get("response_text") or "").replace("\n", "<br>")
+			),
+			source_doctype="LPO Job",
+			source_name=job.name,
+			automation_key=f"{chat_context_id}:assistant",
 		)
 		consumed = cint(result.get("tokens") or (len(prompt.split()) + len(result.get("response_text", "").split())))
 		new_tokens_used = tokens_used + consumed
@@ -474,6 +507,15 @@ def chat_job_ai(
 			"documents_skipped": documents_skipped,
 		}
 	except Exception:
+		create_system_message(
+			job_chat_channel.name,
+			_("<p><strong>AI request failed</strong></p><p>{0}</p>").format(
+				frappe.utils.escape_html(str(frappe.get_traceback() or "The AI request failed.")).replace("\n", "<br>")
+			),
+			source_doctype="LPO Job",
+			source_name=job.name,
+			automation_key=f"{chat_context_id}:error",
+		)
 		frappe.log_error(
 			title="LPO AI Copilot",
 			message=frappe.get_traceback(),
@@ -482,6 +524,15 @@ def chat_job_ai(
 			defer_insert=True,
 		)
 		raise
+
+
+def _ensure_job_ai_chat_channel(job):
+	"""Return the job's contextual chat channel so AI prompts/responses are preserved."""
+	matter_manager = frappe.db.get_value("LPO Matter", job.engagement, "matter_manager")
+	members = [frappe.session.user, job.get("owner"), job.get("assigned_analyst"), matter_manager]
+	channel = ensure_contextual_channel("LPO Job", job.name, members)
+	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel.name, throw=True)
+	return channel
 
 
 @frappe.whitelist()

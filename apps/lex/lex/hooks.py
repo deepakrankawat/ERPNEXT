@@ -27,7 +27,7 @@ add_to_apps_screen = [
 # ------------------
 
 # include js, css files in header of desk.html
-app_include_css = "/assets/lex/css/lexocrates_branding.css?v=20260825-1"
+app_include_css = "/assets/lex/css/lexocrates_branding.css?v=20260903-1"
 app_include_js = [
 	"/assets/lex/js/lexocrates_realtime_transport.js?v=20260901-2",
 	"/assets/lex/js/lexocrates_chat_sound.js?v=20260825-1",
