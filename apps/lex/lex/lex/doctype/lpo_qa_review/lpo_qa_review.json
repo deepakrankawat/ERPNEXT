@@ -19,6 +19,9 @@
   "assessment_section",
   "score",
   "reviewed_document",
+  "reviewed_document_checksum",
+  "reviewed_document_version",
+  "reviewer_independent",
   "findings",
   "corrective_actions"
  ],
@@ -106,7 +109,28 @@
   {
    "fieldname": "reviewed_document",
    "fieldtype": "Attach",
-   "label": "Reviewed Document"
+   "label": "Reviewed Document",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reviewed_document_checksum",
+   "fieldtype": "Data",
+   "label": "Reviewed Document Checksum",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "reviewed_document_version",
+   "fieldtype": "Int",
+   "label": "Reviewed Document Version",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "reviewer_independent",
+   "fieldtype": "Check",
+   "label": "Independent Reviewer",
+   "read_only": 1
   },
   {
    "fieldname": "findings",

@@ -118,11 +118,25 @@ frappe.provide("lex.chat");
 					if (!data.messages?.length) break;
 				}
 				this._flush(entry);
+				if (["reconnect", "online", "visible", "manual"].includes(reason)) {
+					await this._reconcile(entry, reason);
+				}
 				this._state(entry, this.connected ? "live" : "offline", reason);
 			} catch (error) {
 				this._state(entry, this.connected ? "degraded" : "offline", reason, error);
 				throw error;
 			}
+		}
+
+		async _reconcile(entry, reason) {
+			const callbacks = [...entry.listeners.values()]
+				.filter((listener) => typeof listener.onReconcile === "function")
+				.map((listener) => Promise.resolve().then(() => listener.onReconcile({
+					channel: entry.channel,
+					highWater: entry.highWater,
+					reason,
+				})));
+			await Promise.allSettled(callbacks);
 		}
 
 		_receive(message, source) {

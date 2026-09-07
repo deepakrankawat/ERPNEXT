@@ -96,6 +96,7 @@ frappe.provide("lex.ai");
 
 	function render_chat_message($history, data) {
 		if (!data?.name || $history.find(`[data-message-name="${CSS.escape(data.name)}"]`).length) return;
+		const should_stick = $history[0].scrollHeight - $history.scrollTop() - $history.innerHeight() < 100;
 		const sender = frappe.utils.escape_html(data.sender_full_name || data.sender || "");
 		const timestamp = frappe.utils.escape_html(data.formatted_timestamp || data.timestamp || "");
 		const $message = $(
@@ -112,7 +113,7 @@ frappe.provide("lex.ai");
 		}
 		$history.find(".lpo-chat__empty").remove();
 		$history.append($message);
-		$history.scrollTop($history[0].scrollHeight);
+		if (should_stick) $history.scrollTop($history[0].scrollHeight);
 	}
 
 	function render_ai_history_message($history, data) {
@@ -177,8 +178,12 @@ frappe.provide("lex.ai");
 
 			chat.listener = (data) => {
 				if (data.channel === chat.channel) {
+					const was_viewing_latest = !document.hidden && $history.is(":visible") &&
+						$history[0].scrollHeight - $history.scrollTop() - $history.innerHeight() < 100;
 					render_chat_message($history, data);
-					frappe.call({ method: `${API_ROOT}.mark_channel_read`, args: { channel: chat.channel, message_name: data.name }, freeze: false }).catch(() => {});
+					if (was_viewing_latest) {
+						frappe.call({ method: `${API_ROOT}.mark_channel_read`, args: { channel: chat.channel, message_name: data.name }, freeze: false }).catch(() => {});
+					}
 				}
 			};
 			const history_response = await frappe.call({
@@ -203,7 +208,20 @@ frappe.provide("lex.ai");
 				frappe.realtime.on("new_chat_message", chat.listener);
 				frappe.realtime.emit("doc_subscribe", "Lexocrates Chat Channel", channel.name);
 			}
-			frappe.call({ method: `${API_ROOT}.mark_channel_read`, args: { channel: channel.name, message_name: messages.at(-1)?.name }, freeze: false }).catch(() => {});
+			if (!document.hidden && $history.is(":visible")) {
+				frappe.call({ method: `${API_ROOT}.mark_channel_read`, args: { channel: channel.name, message_name: messages.at(-1)?.name }, freeze: false }).catch(() => {});
+			}
+			let read_timer = null;
+			$history.on("scroll", () => {
+				window.clearTimeout(read_timer);
+				read_timer = window.setTimeout(() => {
+					const at_latest = $history[0].scrollHeight - $history.scrollTop() - $history.innerHeight() < 100;
+					const message_name = $history.find("[data-message-name]").last().attr("data-message-name");
+					if (!document.hidden && $history.is(":visible") && at_latest && message_name) {
+						frappe.call({ method: `${API_ROOT}.mark_channel_read`, args: { channel: channel.name, message_name }, freeze: false }).catch(() => {});
+					}
+				}, 200);
+			});
 
 			const send = async () => {
 				const content = $input.val().trim();

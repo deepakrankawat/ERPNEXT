@@ -157,7 +157,7 @@ function processor_export_fields(frm) {
 		{ fieldtype: "Column Break" },
 		{ fieldname: "include_page_numbers", fieldtype: "Check", label: __("Include Page Numbers"), default: 1 },
 		{ fieldtype: "Section Break", label: __("Delivery Workflow") },
-		{ fieldname: "job_status", fieldtype: "Select", label: __("Set Job Status"), options: "Ready for Delivery\nQA Review\nCompleted", default: "Ready for Delivery", reqd: 1 },
+		{ fieldname: "job_status", fieldtype: "Select", label: __("Set Job Status"), options: "Ready for Delivery\nQA Review", default: "Ready for Delivery", reqd: 1 },
 		{ fieldtype: "Column Break" },
 		{ fieldname: "notes", fieldtype: "Small Text", label: __("Completion Notes"), default: "Final deliverable approved by operational analyst via AI Document Studio." },
 	];

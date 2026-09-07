@@ -13,8 +13,13 @@ from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import (
 	create_system_message,
 )
-from lex.client_access import get_authorized_portal_users
+from lex.client_access import (
+	can_approve_deliverables,
+	get_authorized_portal_users,
+	has_matter_access,
+)
 from lex.lexocrates_chat_sync import ensure_matter_chat_channel
+from lex.portal_audit import create_portal_audit_event
 
 
 LPO_QA_FAILURE_STATUSES = {"Rejected", "Changes Required"}
@@ -26,6 +31,7 @@ LPO_OPEN_JOB_STATUSES = {
 	"QA Review",
 	"Ready for Delivery",
 }
+CLIENT_APPROVAL_URL = "https://engine.lexocrates.com/client-portal#approvals"
 
 
 def notify_lpo_job_created(doc, method=None):
@@ -70,6 +76,8 @@ def notify_lpo_job_updated(doc, method=None):
 	if not changed_fields:
 		return
 	_run_safely("LPO Job update chat notification", _notify_lpo_job_updated, doc)
+	if "job_status" in changed_fields and doc.job_status == "Ready for Delivery":
+		_run_safely("LPO Job deliverable-ready notification", _notify_client_deliverable_ready, doc)
 
 
 def _notify_lpo_job_updated(doc):
@@ -92,6 +100,78 @@ def _notify_lpo_job_updated(doc):
 		source_name=doc.name,
 		automation_key=f"lpo-job-updated:{channel.name}:{doc.name}:{doc.modified}",
 	)
+
+
+def _notify_client_deliverable_ready(job):
+	frappe.db.savepoint("deliverable_ready_notification")
+	state = frappe.db.get_value(
+		"LPO Job",
+		job.name,
+		["delivery_document", "delivery_document_version", "delivery_notification_version"],
+		as_dict=True,
+		for_update=True,
+	)
+	version = int((state or {}).get("delivery_document_version") or 0)
+	if not state or not state.delivery_document or version <= int(state.delivery_notification_version or 0):
+		return
+	users = [
+		user
+		for user in get_authorized_portal_users(job.engagement)
+		if can_approve_deliverables(user) and has_matter_access(job.engagement, "approve", user)
+	]
+	users = list(dict.fromkeys(users))
+	if not users:
+		frappe.log_error(
+			f"No authorized deliverable approver found for Job {job.name}.",
+			"LPO Job Deliverable Notification",
+		)
+		return
+	recipients = list(filter(None, (frappe.db.get_value("User", user, "email") for user in users)))
+	if not recipients:
+		return
+	subject = f"Deliverable ready for review: {job.job_title} ({job.name})"
+	message = (
+		f"<p>Your secure deliverable for <strong>{escape(job.job_title or job.name)}</strong> "
+		f"is ready for review.</p><p><strong>Job:</strong> {escape(job.name)}<br>"
+		f"<strong>Matter:</strong> {escape(job.engagement or '')}<br>"
+		f"<strong>Version:</strong> {version}.0</p>"
+		f'<p><a href="{CLIENT_APPROVAL_URL}">Review and approve the deliverable</a></p>'
+	)
+	try:
+		for user in users:
+			frappe.get_doc({
+				"doctype": "Notification Log",
+				"for_user": user,
+				"type": "Alert",
+				"document_type": "LPO Job",
+				"document_name": job.name,
+				"subject": subject,
+				"email_content": message,
+			}).insert(ignore_permissions=True)
+		frappe.sendmail(
+			recipients=recipients,
+			subject=subject,
+			message=message,
+			reference_doctype="LPO Job",
+			reference_name=job.name,
+			now=False,
+		)
+		frappe.db.set_value("LPO Job", job.name, {
+			"delivery_notification_version": version,
+			"delivery_notified_on": now_datetime(),
+			"delivery_notified_recipients": "\n".join(recipients),
+		}, update_modified=False)
+		create_portal_audit_event(
+			client=job.customer,
+			matter=job.engagement,
+			action="Deliverable Ready Notification Queued",
+			object_type="LPO Job",
+			object_id=job.name,
+			new_value={"version": version, "recipients": users, "portal_url": CLIENT_APPROVAL_URL},
+		)
+	except Exception:
+		frappe.db.rollback(save_point="deliverable_ready_notification")
+		raise
 
 
 def notify_qa_failure(doc, method=None):

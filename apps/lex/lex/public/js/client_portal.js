@@ -99,7 +99,7 @@
 				localStorage.removeItem("current_app");
 				localStorage.removeItem("current_route");
 				await frappe.call({ method: "logout" });
-			} finally { window.location.assign("/login"); }
+			} finally { window.location.assign("/client-login"); }
 		});
 	}
 
@@ -752,12 +752,38 @@
 		let selected = null;
 		let realtimeUnsubscribe = null;
 		let channelGeneration = 0;
+		let readTimer = null;
+		const canMarkLatestRead = () => (
+			!document.hidden &&
+			messageBox.offsetParent !== null &&
+			messageBox.scrollHeight - messageBox.scrollTop - messageBox.clientHeight < 100
+		);
+		const markVisibleRead = (messageName) => {
+			if (!selected || !messageName || !canMarkLatestRead()) return;
+			call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.mark_channel_read", {
+				channel: selected.name,
+				message_name: messageName,
+			}).catch(() => {});
+		};
 		const onRealtimeMessage = (message) => {
 			if (selected && message.channel === selected.name) {
+				const wasViewingLatest = canMarkLatestRead();
 				appendMessage(message, messageBox);
-				call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.mark_channel_read", { channel: selected.name, message_name: message.name }).catch(() => {});
+				if (wasViewingLatest) markVisibleRead(message.name);
 			}
 		};
+		messageBox.addEventListener("scroll", () => {
+			window.clearTimeout(readTimer);
+			readTimer = window.setTimeout(() => {
+				const messages = messageBox.querySelectorAll("[data-message]");
+				markVisibleRead(messages[messages.length - 1]?.dataset.message);
+			}, 200);
+		}, { passive: true });
+		document.addEventListener("visibilitychange", () => {
+			if (document.hidden) return;
+			const messages = messageBox.querySelectorAll("[data-message]");
+			markVisibleRead(messages[messages.length - 1]?.dataset.message);
+		});
 		await refreshPresence().catch(() => []);
 		const channels = await call("lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel.get_channels");
 		const channelRows = channels.map((channel) => {
@@ -800,9 +826,10 @@
 			const jobs = ["LPO Matter", "LPO Job"].includes(selected.reference_doctype)
 				? await call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.get_channel_jobs", { channel: selected.name, limit: 100 }).catch(() => [])
 				: [];
+			if (generation !== channelGeneration) return;
 			jobPicker.innerHTML = `<option value="">@ Job</option>${jobs.map((job) => `<option value="${escapeHTML(job.name)}">${escapeHTML(job.name)} · ${escapeHTML(job.job_title || "")}</option>`).join("")}`;
 			jobPicker.disabled = !selected.can_post || !jobs.length;
-			await call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.mark_channel_read", { channel: selected.name, message_name: messages.at(-1)?.name }).catch(() => {});
+			markVisibleRead(messages.at(-1)?.name);
 			form.elements.message.disabled = !selected.can_post; form.querySelector("button").disabled = !selected.can_post;
 		});
 		form.elements.job_mention.addEventListener("change", (event) => {
@@ -816,12 +843,14 @@
 		channelBox.querySelector("[data-channel]")?.click();
 		form.addEventListener("submit", async (event) => {
 			event.preventDefault(); const text = form.elements.message.value.trim(); if (!selected || !text) return; const button = form.querySelector("button"); button.disabled = true;
+			const sendChannel = selected;
 			try {
-				const args = { channel: selected.name, message_text: text, attachments: "[]" };
+				const args = { channel: sendChannel.name, message_text: text, attachments: "[]" };
 				const message = window.lexocratesReliableChat
 					? await window.lexocratesReliableChat.send({ method: "lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.send_message", args })
 					: await call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.send_message", args);
-				appendMessage(message, messageBox); form.reset();
+				if (selected?.name === sendChannel.name) appendMessage(message, messageBox);
+				form.reset();
 			}
 			catch (error) { showError("Message not sent", error); }
 			finally { button.disabled = !selected.can_post; }

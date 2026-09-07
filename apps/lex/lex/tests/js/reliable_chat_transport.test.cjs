@@ -54,12 +54,15 @@ const message = (sequence) => ({
 (async () => {
 	serverMessages = [message(1), message(2)];
 	const delivered = [];
+	const reconciliations = [];
 	window.lexocratesReliableChat.subscribe("LCC-TEST", {
 		afterSequence: 0,
 		onMessage(value) { delivered.push(value.channel_sequence); },
+		onReconcile(value) { reconciliations.push(value); },
 	});
 	await settle();
 	assert.deepEqual(delivered, [1, 2], "initial recovery must deliver ordered history");
+	assert.deepEqual(reconciliations, [], "initial subscription should not reload message state");
 
 	fire("new_chat_message", message(2));
 	assert.deepEqual(delivered, [1, 2], "duplicate Socket.IO delivery must be ignored");
@@ -69,6 +72,7 @@ const message = (sequence) => ({
 	fire("connect");
 	await settle();
 	assert.deepEqual(delivered, [1, 2, 3], "reconnect must recover the missed sequence");
+	assert.equal(reconciliations.at(-1)?.reason, "reconnect", "reconnect must reconcile mutable state");
 	assert.ok(
 		emitted.filter((args) => args[0] === "doc_subscribe" && args[2] === "LCC-TEST").length >= 2,
 		"document room must be restored after reconnect",

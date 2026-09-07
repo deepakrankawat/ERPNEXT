@@ -43,7 +43,7 @@ git push -u origin develop
 
 ### Prerequisites
 * Linux VPS (Ubuntu 22.04 LTS / 24.04 LTS or Debian 12) with at least 4GB RAM & 2 CPU cores.
-* Domain DNS `A Record` pointing your domain (e.g., `erp.yourdomain.com`) to your VPS IP address.
+* Domain DNS `A Record` for `engine.lexocrates.com` pointing to your VPS IP address.
 * Installed software: `git`, `docker`, `docker-compose-plugin`.
 
 ### Step 1: Clone Repository on VPS
@@ -60,18 +60,23 @@ cp .env.example .env
 nano .env
 ```
 Replace every `CHANGE_ME` value and ensure:
-* `SITE_NAME=erp.yourdomain.com`
+* `SITE_NAME=engine.lexocrates.com`
 * `DB_ROOT_PASSWORD=YourStrongDatabasePasswordHere!`
 * `ADMIN_PASSWORD=YourStrongAdminPasswordHere!`
 * `DEVELOPER_MODE=0`
 
 The deployment script intentionally refuses development hostnames, default passwords, missing secrets, or developer mode. The production Compose stack runs separate Gunicorn web, Socket.IO, scheduler, short/default worker, long worker, MariaDB, Redis, and ClamAV updater services.
 
+Socket.IO shares the Gunicorn service's network namespace. Frappe v15 validates
+authenticated realtime sessions through `127.0.0.1:8000`, so these two services
+must be recreated together after a Compose configuration change; a plain restart
+of an older deployment is not sufficient.
+
 ### Step 3: Execute Automated VPS Deployment
 Run the complete application/controller/architecture suite before deployment:
 ```bash
 cd /path/to/frappe-bench
-bash apps/lex/scripts/run_full_tests.sh your-staging-site.example.com
+bash apps/lex/scripts/run_full_tests.sh engine.lexocrates.com
 ```
 
 Run the automated deployment script:
@@ -102,7 +107,7 @@ map $http_upgrade $connection_upgrade {
 }
 
 server {
-    server_name erp.yourdomain.com;
+    server_name engine.lexocrates.com;
 
     # Maximum file upload size for Frappe/ERPNext attachments
     client_max_body_size 100M;
@@ -111,6 +116,7 @@ server {
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
+        proxy_set_header X-Frappe-Site-Name engine.lexocrates.com;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -126,6 +132,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
+        proxy_set_header X-Frappe-Site-Name engine.lexocrates.com;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -148,7 +155,7 @@ sudo systemctl reload nginx
 
 ### Step 3: Issue SSL Certificate
 ```bash
-sudo certbot --nginx -d erp.yourdomain.com
+sudo certbot --nginx -d engine.lexocrates.com
 ```
 
 ---
@@ -157,12 +164,12 @@ sudo certbot --nginx -d erp.yourdomain.com
 
 ### Take On-Demand Backup
 ```bash
-docker compose -f docker-compose.prod.yml exec -T frappe-web bench --site erp.yourdomain.com backup --with-files
+docker compose -f docker-compose.prod.yml exec -T frappe-web bench --site engine.lexocrates.com backup --with-files
 ```
-Backups are saved in `./sites/erp.yourdomain.com/private/backups/`.
+Backups are saved in `./sites/engine.lexocrates.com/private/backups/`.
 
 ### Automated Daily Backup Cron Job
 Add to root crontab (`sudo crontab -e`):
 ```cron
-0 2 * * * cd /opt/erpnext-lpo && docker compose -f docker-compose.prod.yml exec -T frappe-web bench --site erp.yourdomain.com backup --with-files > /dev/null 2>&1
+0 2 * * * cd /opt/erpnext-lpo && docker compose -f docker-compose.prod.yml exec -T frappe-web bench --site engine.lexocrates.com backup --with-files > /dev/null 2>&1
 ```

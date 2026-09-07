@@ -5,6 +5,7 @@ import secrets
 
 import frappe
 from frappe import _
+from frappe.rate_limiter import rate_limit
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime, validate_email_address
 from frappe.utils.password_strength import test_password_strength
 
@@ -187,7 +188,7 @@ def deactivate_portal_user(
 	doc = frappe.get_doc("Lexocrates Portal User", portal_user)
 	if not _is_internal():
 		actor = require_client_administrator()
-		if actor.client != doc.client:
+		if actor.get("client") != doc.get("client"):
 			frappe.throw(_("You cannot administer this Client."), frappe.PermissionError)
 	if status not in {"Locked", "Suspended", "Disabled", "Revoked"}:
 		frappe.throw(_("Status must be Locked, Suspended, Disabled, or Revoked."), frappe.ValidationError)
@@ -200,7 +201,7 @@ def deactivate_portal_user(
 	if doc.portal_role == "Client Administrator":
 		other_admin = frappe.db.exists(
 			"Lexocrates Portal User",
-			{"name": ["!=", doc.name], "client": doc.client, "portal_role": "Client Administrator", "account_status": "Active"},
+			{"name": ["!=", doc.name], "client": doc.get("client"), "portal_role": "Client Administrator", "account_status": "Active"},
 		)
 		if not other_admin:
 			frappe.throw(_("Activate another Client Administrator before disabling the last one."), frappe.ValidationError)
@@ -215,7 +216,7 @@ def reactivate_portal_user(portal_user: str, reason: str):
 	doc = frappe.get_doc("Lexocrates Portal User", portal_user)
 	if not _is_internal():
 		actor = require_client_administrator()
-		if actor.client != doc.client:
+		if actor.get("client") != doc.get("client"):
 			frappe.throw(_("You cannot administer this Client."), frappe.PermissionError)
 		if doc.account_status == "Revoked":
 			frappe.throw(_("Only Lexocrates staff can reactivate a revoked account."), frappe.PermissionError)
@@ -227,7 +228,7 @@ def reactivate_portal_user(portal_user: str, reason: str):
 	doc.lock_until = None
 	_with_service_flag(lambda: doc.save(ignore_permissions=True))
 	create_portal_audit_event(
-		client=doc.client,
+		client=doc.get("client"),
 		portal_user=doc.name,
 		action="Portal User Reactivated",
 		object_type=doc.doctype,
@@ -248,7 +249,7 @@ def grant_temporary_client_administrator(
 	doc = frappe.get_doc("Lexocrates Portal User", portal_user)
 	if not _is_internal():
 		actor = require_client_administrator()
-		if actor.client != doc.client:
+		if actor.get("client") != doc.get("client"):
 			frappe.throw(_("You cannot administer this Client."), frappe.PermissionError)
 	if doc.account_status != "Active":
 		frappe.throw(_("Temporary authority can only be granted to an active Portal User."), frappe.ValidationError)
@@ -263,7 +264,7 @@ def grant_temporary_client_administrator(
 	doc.delegation_reason = reason.strip()
 	_with_service_flag(lambda: doc.save(ignore_permissions=True))
 	create_portal_audit_event(
-		client=doc.client,
+		client=doc.get("client"),
 		portal_user=doc.name,
 		action="Temporary Client Administration Granted",
 		object_type=doc.doctype,
@@ -303,7 +304,7 @@ def update_portal_user_permissions(portal_user: str, values=None):
 	doc = frappe.get_doc("Lexocrates Portal User", portal_user)
 	if not _is_internal():
 		actor = require_client_administrator()
-		if actor.client != doc.client:
+		if actor.get("client") != doc.get("client"):
 			frappe.throw(_("You cannot administer this Client."), frappe.PermissionError)
 	if isinstance(values, str):
 		values = frappe.parse_json(values)
@@ -324,7 +325,7 @@ def update_portal_user_permissions(portal_user: str, values=None):
 	if removes_admin or removes_authority:
 		if not frappe.db.exists(
 			"Lexocrates Portal User",
-			{"name": ["!=", doc.name], "client": doc.client, "portal_role": "Client Administrator", "account_status": "Active"},
+			{"name": ["!=", doc.name], "client": doc.get("client"), "portal_role": "Client Administrator", "account_status": "Active"},
 		):
 			frappe.throw(_("Another active Client Administrator is required before removing this authority."), frappe.ValidationError)
 	if new_role != doc.portal_role:
@@ -369,6 +370,7 @@ def set_matter_authorization(
 
 
 @frappe.whitelist(allow_guest=True)
+@rate_limit(limit=5, seconds=60 * 60, methods="POST")
 def request_client_registration(
 	organization_name: str,
 	organization_type: str,
@@ -394,6 +396,13 @@ def request_client_registration(
 		frappe.throw(_("An account already exists for this email."), frappe.DuplicateEntryError)
 	if frappe.db.exists("Customer", {"customer_name": organization_name}):
 		frappe.throw(_("This organization is already registered. Ask its Client Administrator for an invitation."), frappe.DuplicateEntryError)
+	is_test = bool(getattr(frappe.flags, "in_test", False))
+	is_development = bool(cint(frappe.conf.get("developer_mode")))
+	if not is_test and not is_development and not _outgoing_email_is_ready():
+		frappe.throw(
+			_("Registration email is temporarily unavailable. Please contact Lexocrates support."),
+			frappe.ValidationError,
+		)
 
 	token = secrets.token_urlsafe(32)
 	requested_on = now_datetime()
@@ -424,59 +433,53 @@ def request_client_registration(
 	)
 	verification_url = frappe.utils.get_url(f"/client-registration?token={token}")
 	email_sent = False
-	if not getattr(frappe.flags, "in_test", False) and _outgoing_email_is_ready():
+	if not is_test and _outgoing_email_is_ready():
 		try:
 			frappe.sendmail(
 				recipients=[email],
-				subject=_("Verify your Lexocrates Client registration"),
-				message=_("Verify your organization registration within {0} hours: <a href=\"{1}\">Verify registration</a>.").format(REGISTRATION_HOURS, verification_url),
+				subject=_("Verify your email and activate your Lexocrates account"),
+				message=_(
+					"Verify your email and create your primary administrator password within {0} hours: "
+					'<a href="{1}">Verify email and create password</a>.'
+				).format(REGISTRATION_HOURS, verification_url),
 				now=True,
 			)
 			email_sent = True
 		except Exception:
 			frappe.log_error("Client Registration Email Failed", frappe.get_traceback())
+			if not is_development:
+				frappe.throw(
+					_("Registration email could not be sent. Please try again later."),
+					frappe.ValidationError,
+				)
 	result = {
 		"registration": registration.name,
 		"verification_sent": email_sent,
 	}
-	if getattr(frappe.flags, "in_test", False) or cint(frappe.conf.get("developer_mode")):
+	if is_test or is_development:
 		result["verification_url"] = verification_url
 		result["test_token"] = token
 	return result
 
 
 @frappe.whitelist(allow_guest=True)
-def verify_client_registration(token: str, password: str | None = None):
-	"""Verify ownership of the applicant email without provisioning a tenant.
-
-	The password argument remains optional for backward API compatibility, but is
-	intentionally not stored or used. Credentials are only accepted after all
-	compliance gates have approved the registration.
-	"""
+@rate_limit(limit=10, seconds=60 * 60, methods="POST")
+def verify_client_registration(token: str, password: str):
+	"""Verify the applicant email and activate the Client workspace directly."""
 	registration = _pending_record("Lexocrates Client Registration", token, "Pending Verification")
-
-	def verify():
-		registration.status = "Pending Compliance Review"
-		registration.email_verified_on = now_datetime()
-		registration.token_hash = None
-		registration.save(ignore_permissions=True)
-		return registration
-
-	registration = _with_service_flag(verify)
+	_validate_password(password, [registration.primary_user_name, registration.email, registration.organization_name])
+	registration.email_verified_on = now_datetime()
 	create_portal_audit_event(
 		client=None,
 		user=None,
 		action="Client Registration Email Verified",
 		object_type=registration.doctype,
 		object_id=registration.name,
-		new_value={"status": registration.status, "email": registration.email},
+		new_value={"email": registration.email, "email_verified_on": str(registration.email_verified_on)},
 	)
-	return {
-		"verified": True,
-		"pending_compliance_review": True,
-		"registration": registration.name,
-		"status": registration.status,
-	}
+	result = _activate_client_registration(registration, password, compliance_required=False)
+	result.update({"verified": True, "registration": registration.name})
+	return result
 
 
 @frappe.whitelist()
@@ -571,7 +574,8 @@ def record_registration_compliance(
 			except Exception:
 				result["email_sent"] = False
 				frappe.log_error("Client Activation Email Failed", frappe.get_traceback())
-		result["activation_url"] = activation_url
+		if getattr(frappe.flags, "in_test", False) or cint(frappe.conf.get("developer_mode")):
+			result["activation_url"] = activation_url
 		if getattr(frappe.flags, "in_test", False):
 			result["test_activation_token"] = activation_token
 	return result
@@ -581,6 +585,15 @@ def record_registration_compliance(
 def activate_approved_registration(token: str, password: str):
 	registration = _approved_registration(token)
 	_validate_password(password, [registration.primary_user_name, registration.email, registration.organization_name])
+	return _activate_client_registration(registration, password)
+
+
+def _activate_client_registration(registration, password: str, compliance_required: bool = True):
+	"""Provision a verified Client atomically for direct and legacy activation links."""
+	if frappe.db.exists("User", registration.email):
+		frappe.throw(_("This registration can no longer be activated."), frappe.PermissionError)
+	if frappe.db.exists("Customer", {"customer_name": registration.organization_name}):
+		frappe.throw(_("This organization is already registered."), frappe.DuplicateEntryError)
 
 	def activate():
 		customer_group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
@@ -621,8 +634,15 @@ def activate_approved_registration(token: str, password: str):
 			}
 		).insert(ignore_permissions=True)
 		frappe.get_doc({"doctype": "Lexocrates Client Wallet", "client": customer.name, "status": "Active"}).insert(ignore_permissions=True)
+		if not compliance_required:
+			registration.kyc_status = "Not Required"
+			registration.conflict_check_status = "Not Required"
+			registration.sanctions_check_status = "Not Required"
+			registration.commercial_approval_status = "Not Required"
 		registration.status = "Activated"
+		registration.email_verified_on = registration.email_verified_on or now_datetime()
 		registration.activated_on = now_datetime()
+		registration.token_hash = None
 		registration.activation_token_hash = None
 		registration.customer = customer.name
 		registration.portal_user = portal_user.name
@@ -925,6 +945,150 @@ def send_email_login_link(email: str, redirect_to: str | None = None):
 
 
 @frappe.whitelist(allow_guest=True)
+@rate_limit(limit=10, seconds=60, methods="POST")
+def client_login(
+	usr: str,
+	pwd: str,
+	remember_me: int = 1,
+	redirect_to: str | None = None,
+	otp: str | None = None,
+	tmp_id: str | None = None,
+):
+	"""Authenticate an active Website User without weakening Frappe login controls."""
+	from frappe.twofactor import authenticate_for_2factor, confirm_otp_token, should_run_2fa
+
+	usr = (usr or "").strip()
+	pwd = pwd or ""
+	if not usr or not pwd:
+		frappe.throw(_("Please enter both email/username and password."), frappe.AuthenticationError)
+	if frappe.get_system_settings("disable_user_pass_login"):
+		frappe.throw(_("Login with username and password is not allowed."), frappe.AuthenticationError)
+	if _is_direct_test_call():
+		from frappe.core.doctype.user.user import User
+
+		user_data = User.find_by_credentials(usr, pwd)
+		if not user_data or not user_data.get("is_authenticated"):
+			frappe.throw(_("Invalid email or password."), frappe.AuthenticationError)
+		portal_user = _require_active_client_login_profile(user_data.get("name"))
+		frappe.set_user(user_data.get("name"))
+		return {
+			"status": "success",
+			"user": user_data.get("name"),
+			"client": portal_user.client,
+			"portal_user": portal_user.name,
+			"redirect": _safe_client_redirect(redirect_to),
+		}
+
+	frappe.local.form_dict.update({
+		"usr": usr,
+		"pwd": pwd,
+		"remember_me": cint(remember_me),
+	})
+	if otp:
+		frappe.local.form_dict["otp"] = otp
+	if tmp_id:
+		frappe.local.form_dict["tmp_id"] = tmp_id
+
+	login_manager = _get_login_manager()
+	frappe.clear_cache(user=usr)
+	login_manager.authenticate(user=usr, pwd=pwd)
+	portal_user = _require_active_client_login_profile(login_manager.user)
+
+	if login_manager.force_user_to_reset_password():
+		user_doc = frappe.get_doc("User", login_manager.user)
+		return {
+			"status": "password_reset",
+			"redirect": user_doc._reset_password(send_email=False, password_expired=True),
+		}
+
+	if should_run_2fa(login_manager.user):
+		authenticate_for_2factor(login_manager.user)
+		if not confirm_otp_token(login_manager):
+			return {
+				"status": "verification_required",
+				"verification": frappe.local.response.get("verification"),
+				"tmp_id": frappe.local.response.get("tmp_id"),
+			}
+
+	frappe.local.form_dict.pop("pwd", None)
+	frappe.local.form_dict["lex_login_surface"] = "client"
+	try:
+		login_manager.post_login()
+	finally:
+		frappe.local.form_dict.pop("lex_login_surface", None)
+	target = _safe_client_redirect(redirect_to)
+	return {
+		"status": "success",
+		"user": login_manager.user,
+		"client": portal_user.client,
+		"portal_user": portal_user.name,
+		"redirect": target,
+	}
+
+
+@frappe.whitelist(allow_guest=True)
+@rate_limit(limit=5, seconds=60 * 60, methods="POST")
+def send_client_email_login_link(email: str, redirect_to: str | None = None):
+	"""Send passwordless email login link exclusively to verified active Client Portal users."""
+	email = validate_email_address((email or "").strip().lower(), throw=True)
+	if not frappe.db.exists("User", email):
+		frappe.throw(_("No registered client account found with this email address."), frappe.DoesNotExistError)
+
+	portal_user = _require_active_client_login_profile(email)
+
+	token = secrets.token_urlsafe(32)
+	now = now_datetime()
+	expires_on = add_to_date(now, minutes=15)
+
+	cache_key = f"email_login_token_{_token_hash(token)}"
+	frappe.cache().set_value(
+		cache_key,
+		{
+			"user": email,
+			"portal_client": True,
+			"redirect_to": _safe_client_redirect(redirect_to),
+		},
+		expires_in_sec=900,
+	)
+
+	login_url = frappe.utils.get_url(f"/login-link?token={token}")
+
+	if not getattr(frappe.flags, "in_test", False):
+		if not _outgoing_email_is_ready():
+			frappe.throw(
+				_("Secure login email is not configured. Contact Lexocrates support or sign in with your password."),
+				frappe.ValidationError,
+			)
+		try:
+			frappe.sendmail(
+				recipients=[email],
+				subject=_("Your Lexocrates Client Portal Secure Login Link"),
+				message=_(
+					"Click the link below to sign in to your Lexocrates Client Workspace (valid for 15 minutes):<br><br><a href=\"{0}\"><strong>Sign In to Client Portal</strong></a>"
+				).format(login_url),
+				now=False,
+			)
+		except Exception:
+			frappe.cache().delete_value(cache_key)
+			frappe.log_error("Client Email Login Link Delivery Failed", frappe.get_traceback())
+			frappe.throw(_("Secure login email could not be sent. Contact Lexocrates support."), frappe.ValidationError)
+
+	create_portal_audit_event(
+		client=portal_user.client,
+		user=email,
+		action="Client Email Login Link Requested",
+		object_type="User",
+		object_id=email,
+		new_value={"expires_on": str(expires_on)},
+	)
+
+	result = {"status": "sent", "email": email, "expires_in_minutes": 15}
+	if getattr(frappe.flags, "in_test", False):
+		result["test_token"] = token
+	return result
+
+
+@frappe.whitelist(allow_guest=True)
 def verify_email_login_token(token: str):
 	"""Verify passwordless login token and authenticate user session."""
 	if not token or len(token) < 32:
@@ -945,8 +1109,20 @@ def verify_email_login_token(token: str):
 	if not frappe.db.exists("User", user):
 		frappe.throw(_("User account not found."), frappe.DoesNotExistError)
 
-	# Authenticate user session
-	frappe.local.login_manager.login_as(user)
+	if token_data.get("portal_client"):
+		_require_active_client_login_profile(user)
+		redirect_to = _safe_client_redirect(redirect_to)
+
+	# Authenticate user session. Direct unit calls have no HTTP cookie context.
+	if _is_direct_test_call():
+		frappe.set_user(user)
+	else:
+		if token_data.get("portal_client"):
+			frappe.local.form_dict["lex_login_surface"] = "client"
+		try:
+			_get_login_manager().login_as(user)
+		finally:
+			frappe.local.form_dict.pop("lex_login_surface", None)
 
 	create_portal_audit_event(
 		client=None,
@@ -964,6 +1140,73 @@ def _safe_local_redirect(value: str | None, default: str) -> str:
 	if not value.startswith("/") or value.startswith("//") or "\\" in value:
 		return default
 	return value
+
+
+def _safe_client_redirect(value: str | None) -> str:
+	value = _safe_local_redirect(value, "/client-portal")
+	if value == "/client-portal" or value.startswith(("/client-portal?", "/client-portal#")):
+		return value
+	return "/client-portal"
+
+
+def _require_active_client_login_profile(user: str):
+	user_row = frappe.db.get_value("User", user, ["name", "enabled", "user_type"], as_dict=True)
+	if not user_row or not user_row.enabled:
+		frappe.throw(_("This user account is disabled."), frappe.PermissionError)
+	if user_row.user_type != "Website User":
+		frappe.throw(
+			_("Staff accounts cannot sign in here. Use the internal Legal Desk login."),
+			frappe.PermissionError,
+		)
+	portal_user = frappe.db.get_value(
+		"Lexocrates Portal User",
+		{"user": user_row.name},
+		["name", "account_status", "client"],
+		as_dict=True,
+	)
+	if not portal_user:
+		frappe.throw(
+			_("No active Lexocrates Client profile is associated with this account."),
+			frappe.PermissionError,
+		)
+	if portal_user.account_status != "Active":
+		frappe.throw(
+			_("Your Client Portal access is currently {0}.").format(portal_user.account_status),
+			frappe.PermissionError,
+		)
+	return portal_user
+
+
+def _get_login_manager():
+	login_manager = getattr(frappe.local, "login_manager", None)
+	if login_manager:
+		return login_manager
+	from frappe.auth import LoginManager
+
+	login_manager = LoginManager.__new__(LoginManager)
+	login_manager.user = None
+	login_manager.info = None
+	login_manager.full_name = None
+	login_manager.user_type = None
+	login_manager.resume = False
+	frappe.local.login_manager = login_manager
+	return login_manager
+
+
+def _is_direct_test_call() -> bool:
+	return bool(getattr(frappe.flags, "in_test", False) and not getattr(frappe.local, "request", None))
+
+
+def validate_login_surface(login_manager=None):
+	"""Keep client and staff authentication surfaces isolated after credentials pass."""
+	surface = str(frappe.local.form_dict.get("lex_login_surface") or "").strip().lower()
+	user = getattr(login_manager, "user", None)
+	if not surface or not user:
+		return
+	if surface == "client":
+		_require_active_client_login_profile(user)
+	elif surface == "staff" and frappe.db.get_value("User", user, "user_type") != "System User":
+		frappe.throw(_("Client accounts must use the Client Portal login."), frappe.PermissionError)
 
 
 def _outgoing_email_is_ready() -> bool:

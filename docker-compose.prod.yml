@@ -91,6 +91,9 @@ services:
       - frappe.app:application
     ports:
       - 127.0.0.1:${HTTP_PORT:-8000}:8000
+      # Socket.IO shares this service's network namespace so its authenticated
+      # callback to 127.0.0.1:8000 reaches Gunicorn, as required by Frappe v15.
+      - 127.0.0.1:${SOCKETIO_PORT:-9000}:9000
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/method/ping"]
       interval: 30s
@@ -101,8 +104,7 @@ services:
   socketio:
     <<: *frappe-common
     command: ["bench", "socketio"]
-    ports:
-      - 127.0.0.1:${SOCKETIO_PORT:-9000}:9000
+    network_mode: "service:frappe-web"
     logging: *logging
 
   scheduler:

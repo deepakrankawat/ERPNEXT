@@ -723,7 +723,7 @@ def ensure_lexocrates_email_templates():
 	<p>Dear {{ doc.client_name or 'Client' }},</p>
 	<p>We are pleased to inform you that the deliverables for task <strong>{{ doc.name }}</strong> (<em>{{ doc.job_title }}</em>) have been completed, audited for quality, and uploaded to your secure workspace.</p>
 	<p style="margin: 24px 0;">
-		<a href="{{ frappe.utils.get_url('/app/lpo-job/' + doc.name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 12px 26px; border-radius: 6px; font-weight: 600; text-decoration: none;">Download & Review Deliverable →</a>
+		<a href="https://engine.lexocrates.com/client-portal#approvals" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 12px 26px; border-radius: 6px; font-weight: 600; text-decoration: none;">Download & Review Deliverable →</a>
 	</p>
 	<p>Please review the work product and provide your comments or approval via the portal chat.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Legal Team</strong></p>

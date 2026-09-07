@@ -9,6 +9,11 @@ from lex.portal_audit import create_portal_audit_event
 from lex.workflow_validator import validate_workflow_graph
 
 
+EXECUTION_REQUIRED_STATUSES = {
+	"Assigned", "In Progress", "On Hold", "QA Review", "Ready for Delivery", "Delivered", "Completed",
+}
+
+
 @frappe.whitelist()
 def execute_workflow_version(workflow_version_name: str, matter_id: str | None = None, job_id: str | None = None, payload: dict | None = None):
 	"""Execute pinned workflow version for Matter/Job (WFL-004)."""
@@ -60,6 +65,71 @@ def execute_workflow_version(workflow_version_name: str, matter_id: str | None =
 	)
 
 	return execution.name
+
+
+def sync_job_workflow_execution(job):
+	"""Maintain a pinned, append-only lifecycle execution for an operational Job."""
+	if job.job_status not in EXECUTION_REQUIRED_STATUSES:
+		return None
+	version = frappe.get_doc("LPO Workflow Version", job.workflow_version_snapshot)
+	if version.status != "Published":
+		frappe.throw(_("The Job workflow snapshot is not Published."), frappe.ValidationError)
+	canonical = json.dumps(json.loads(version.graph_json), sort_keys=True, separators=(",", ":"))
+	graph_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+	if version.graph_hash != graph_hash:
+		frappe.throw(_("Workflow graph hash does not match the approved version."), frappe.ValidationError)
+	name = frappe.db.get_value(
+		"LPO Workflow Execution",
+		{"subject_type": "LPO Job", "subject_id": job.name, "status": ["!=", "Cancelled"]},
+		"name",
+		order_by="creation desc",
+	)
+	if name:
+		execution = frappe.get_doc("LPO Workflow Execution", name)
+		if (
+			str(execution.workflow_version) != str(job.workflow_version_snapshot)
+			or execution.graph_hash_snapshot != graph_hash
+		):
+			frappe.throw(_("Workflow execution does not match the Job's immutable snapshot."), frappe.ValidationError)
+	else:
+		execution = frappe.get_doc({
+			"doctype": "LPO Workflow Execution",
+			"workflow_version": job.workflow_version_snapshot,
+			"graph_hash_snapshot": graph_hash,
+			"subject_type": "LPO Job",
+			"subject_id": job.name,
+			"status": "Running",
+			"started": now_datetime(),
+			"payload_json": json.dumps({"job": job.name}),
+			"execution_log_json": json.dumps([]),
+		}).insert(ignore_permissions=True)
+
+	log = json.loads(execution.execution_log_json or "[]")
+	if not log or log[-1].get("job_status") != job.job_status:
+		log.append({
+			"event": "Job Status Reached",
+			"job_status": job.job_status,
+			"recorded_at": str(now_datetime()),
+			"recorded_by": frappe.session.user,
+		})
+	execution.execution_log_json = json.dumps(log)
+	if job.job_status == "Completed":
+		execution.status = "Completed"
+		execution.ended = now_datetime()
+	elif execution.status != "Completed":
+		execution.status = "Running"
+		execution.ended = None
+	execution.save(ignore_permissions=True)
+	return execution
+
+
+def validate_job_workflow_execution(job):
+	execution = sync_job_workflow_execution(job)
+	if not execution or execution.status not in {"Running", "Completed"}:
+		frappe.throw(_("A valid pinned Workflow Execution is required for this Job."), frappe.ValidationError)
+	if job.job_status == "Completed" and execution.status != "Completed":
+		frappe.throw(_("Workflow Execution must complete with the Job."), frappe.ValidationError)
+	return execution
 
 
 @frappe.whitelist()

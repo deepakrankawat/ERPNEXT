@@ -38,13 +38,16 @@ class LexocratesChatPage {
 		this.realtime_unsubscribe = null;
 		this.read_timer = null;
 		this.read_inflight = false;
-		this.pending_read_message = null;
+		this.pending_read_states = new Map();
 		this.loaded = false;
 		this.sound_muted = window.lexocratesChatSound?.isMuted()
 			?? localStorage.getItem("lex_chat_sound_muted") === "1";
 		this.media_recorder = null;
 		this.audio_chunks = [];
 		this.recording_timer = null;
+		this.thread_messages = new Map();
+		this.thread_has_more = false;
+		this.thread_oldest_sequence = null;
 
 		this.page = frappe.ui.make_app_page({
 			parent: wrapper,
@@ -350,7 +353,9 @@ class LexocratesChatPage {
 		$(window).on("focus.lexocrates-chat", () => {
 			this.record_presence_activity();
 			this.heartbeat_presence(true);
-			if (this.selected_channel) this.mark_read();
+			if (this.selected_channel && this.is_near_bottom()) {
+				this.mark_read(this.latest_message_name());
+			}
 		});
 		$(document).on(
 			"mousemove.lexocrates-chat-presence keydown.lexocrates-chat-presence click.lexocrates-chat-presence touchstart.lexocrates-chat-presence",
@@ -524,7 +529,7 @@ class LexocratesChatPage {
 		frappe.show_alert({ message: __("Uploading attachment…"), indicator: "blue" });
 		const formData = new FormData();
 		formData.append("file", fileBlob, fileName);
-		formData.append("is_private", "0");
+		formData.append("is_private", "1");
 		formData.append("folder", "Home/Attachments");
 
 		try {
@@ -1085,6 +1090,7 @@ class LexocratesChatPage {
 			this.realtime_unsubscribe = window.lexocratesReliableChat.subscribe(channel.name, {
 				afterSequence: latest_sequence,
 				onMessage: this.on_new_message,
+				onReconcile: ({ channel: recovered_channel }) => this.reconcile_message_states(recovered_channel),
 				onState: ({ state }) => this.set_realtime_transport_state(state),
 			});
 		} else {
@@ -1139,6 +1145,21 @@ class LexocratesChatPage {
 		this.decorate_message_flow();
 		if (scroll || (!existed && was_near_bottom)) this.scroll_to_bottom();
 		else if (!existed) this.$root.find(".lex-chat__jump-latest").removeClass("hidden");
+	}
+
+	async reconcile_message_states(channel) {
+		if (!channel || channel !== this.selected_channel || !this.messages.size) return;
+		const names = [...this.messages.keys()];
+		for (let index = 0; index < names.length; index += 500) {
+			const response = await frappe.call({
+				method: `${this.api}.get_message_states`,
+				args: { channel, message_names: names.slice(index, index + 500) },
+				freeze: false,
+			});
+			if (channel !== this.selected_channel) return;
+			for (const message of response.message || []) this.upsert_message(message, false);
+		}
+		if (this.thread_dialog) await this.refresh_open_thread();
 	}
 
 	async send_message() {
@@ -1252,6 +1273,8 @@ class LexocratesChatPage {
 		new frappe.ui.FileUploader({
 			allow_multiple: true,
 			folder: "Home/Attachments",
+			make_attachments_public: false,
+			allow_toggle_private: false,
 			on_success: (file) => {
 				if (file?.file_url && !this.attachments.includes(file.file_url)) {
 					this.attachments.push(file.file_url);
@@ -1412,29 +1435,32 @@ class LexocratesChatPage {
 	}
 
 	mark_read(message_name = null) {
-		if (!this.selected_channel || document.hidden) return;
-		if (message_name) this.pending_read_message = message_name;
+		const channel = this.selected_channel;
+		if (!channel || !message_name || document.hidden) return;
+		this.pending_read_states.set(channel, { channel, message_name });
 		window.clearTimeout(this.read_timer);
 		this.read_timer = window.setTimeout(() => this.flush_read_state(), 250);
 	}
 
 	async flush_read_state() {
-		if (!this.selected_channel || document.hidden || this.read_inflight) return;
-		const channel = this.selected_channel;
-		const message_name = this.pending_read_message;
-		this.pending_read_message = null;
+		if (document.hidden || this.read_inflight || !this.pending_read_states.size) return;
+		const [channel, pending] = this.pending_read_states.entries().next().value;
+		this.pending_read_states.delete(channel);
 		this.read_inflight = true;
 		try {
 			await frappe.call({
 				method: `${this.api}.mark_channel_read`,
-				args: { channel, message_name },
+				args: pending,
 				freeze: false,
 			});
 		} catch (error) {
 			console.warn("Could not persist chat read state", error);
 		} finally {
 			this.read_inflight = false;
-			if (this.pending_read_message && channel === this.selected_channel) this.mark_read(this.pending_read_message);
+			if (this.pending_read_states.size) {
+				window.clearTimeout(this.read_timer);
+				this.read_timer = window.setTimeout(() => this.flush_read_state(), 0);
+			}
 		}
 	}
 
@@ -1771,7 +1797,14 @@ class LexocratesChatPage {
 
 	async open_thread(message_name) {
 		this.thread_root = message_name;
-		const response = await frappe.call({ method: `${this.api}.get_thread`, args: { message_name } });
+		const response = await frappe.call({
+			method: `${this.api}.get_thread`,
+			args: { message_name, limit: 100 },
+		});
+		const thread = response.message || {};
+		this.thread_messages = new Map((thread.messages || []).map((message) => [message.name, message]));
+		this.thread_has_more = Boolean(thread.has_more);
+		this.thread_oldest_sequence = thread.oldest_sequence ?? null;
 		const dialog = new frappe.ui.Dialog({
 			title: __("Conversation thread"),
 			size: "large",
@@ -1784,22 +1817,57 @@ class LexocratesChatPage {
 			},
 		});
 		this.thread_dialog = dialog;
-		this.render_thread_messages(response.message?.messages || []);
-		dialog.$wrapper.one("hidden.bs.modal", () => { this.thread_dialog = null; this.thread_root = null; });
+		this.render_thread_messages();
+		dialog.$wrapper.one("hidden.bs.modal", () => {
+			this.thread_dialog = null;
+			this.thread_root = null;
+			this.thread_messages.clear();
+			this.thread_has_more = false;
+			this.thread_oldest_sequence = null;
+		});
 		dialog.show();
 	}
 
 	async refresh_open_thread() {
 		if (!this.thread_dialog || !this.thread_root) return;
-		const response = await frappe.call({ method: `${this.api}.get_thread`, args: { message_name: this.thread_root } });
-		this.render_thread_messages(response.message?.messages || []);
+		const response = await frappe.call({
+			method: `${this.api}.get_thread`,
+			args: { message_name: this.thread_root, limit: 100 },
+		});
+		const thread = response.message || {};
+		this.thread_messages = new Map((thread.messages || []).map((message) => [message.name, message]));
+		this.thread_has_more = Boolean(thread.has_more);
+		this.thread_oldest_sequence = thread.oldest_sequence ?? null;
+		this.render_thread_messages();
 	}
 
-	render_thread_messages(messages) {
+	async load_older_thread_messages() {
+		if (!this.thread_dialog || !this.thread_root || !this.thread_has_more || this.thread_oldest_sequence == null) return;
+		const response = await frappe.call({
+			method: `${this.api}.get_thread`,
+			args: {
+				message_name: this.thread_root,
+				before_sequence: this.thread_oldest_sequence,
+				limit: 100,
+			},
+		});
+		const thread = response.message || {};
+		for (const message of thread.messages || []) this.thread_messages.set(message.name, message);
+		this.thread_has_more = Boolean(thread.has_more);
+		this.thread_oldest_sequence = thread.oldest_sequence ?? this.thread_oldest_sequence;
+		this.render_thread_messages();
+	}
+
+	render_thread_messages() {
 		if (!this.thread_dialog) return;
-		this.thread_dialog.fields_dict.thread_messages.$wrapper.html(
-			`<div class="lex-chat__thread-list">${messages.map((message, index) => `<article class="lex-chat__thread-item ${index ? "is-reply" : "is-root"}"><div><span><strong>${frappe.utils.escape_html(message.sender_full_name || message.sender)}</strong><small class="lex-chat__role-label">${frappe.utils.escape_html(message.sender_role || __("System User"))}</small></span><time>${frappe.utils.escape_html(message.formatted_timestamp || message.sent_at)}</time></div><div>${message.message_text}</div></article>`).join("")}</div>`
+		const messages = [...this.thread_messages.values()].sort(
+			(left, right) => Number(left.channel_sequence || 0) - Number(right.channel_sequence || 0)
 		);
+		const $wrapper = this.thread_dialog.fields_dict.thread_messages.$wrapper;
+		$wrapper.html(
+			`${this.thread_has_more ? `<button type="button" class="btn btn-default btn-xs lex-chat__load-older-thread">${__("Load older replies")}</button>` : ""}<div class="lex-chat__thread-list">${messages.map((message, index) => `<article class="lex-chat__thread-item ${index ? "is-reply" : "is-root"}"><div><span><strong>${frappe.utils.escape_html(message.sender_full_name || message.sender)}</strong><small class="lex-chat__role-label">${frappe.utils.escape_html(message.sender_role || __("System User"))}</small></span><time>${frappe.utils.escape_html(message.formatted_timestamp || message.sent_at)}</time></div><div>${message.message_text}</div></article>`).join("")}</div>`
+		);
+		$wrapper.find(".lex-chat__load-older-thread").one("click", () => this.load_older_thread_messages());
 	}
 
 	open_channel_dialog() {

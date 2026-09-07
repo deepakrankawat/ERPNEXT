@@ -61,6 +61,7 @@ class LPOJob(Document):
 		self._capture_document_lineage()
 		self._validate_schedule()
 		self._validate_assignment()
+		self._validate_execution_controls()
 		self._protect_governance_fields()
 		self._set_completed_on()
 		self._set_client_approval_state()
@@ -266,6 +267,19 @@ class LPOJob(Document):
 				frappe.ValidationError,
 			)
 
+	def _validate_execution_controls(self):
+		if self.job_status not in ASSIGNMENT_REQUIRED_STATUSES:
+			return
+		from lex.sop_execution_engine import sync_job_sop_evidence, validate_job_sop_gate
+		from lex.workflow_runner import validate_job_workflow_execution
+
+		validate_job_workflow_execution(self)
+		sync_job_sop_evidence(self)
+		if self.job_status == "QA Review":
+			validate_job_sop_gate(self, "pre_qa")
+		elif self.job_status in {"Ready for Delivery", "Delivered", "Completed"}:
+			validate_job_sop_gate(self, "delivery")
+
 	def _protect_governance_fields(self):
 		if self.is_new() or _has_management_access(frappe.session.user):
 			return
@@ -301,15 +315,27 @@ class LPOJob(Document):
 
 	def _validate_quality_and_client_gates(self):
 		if self.job_status in {"Ready for Delivery", "Delivered", "Completed"} and self.qa_required:
-			approved_review = frappe.db.exists(
-				"LPO QA Review",
-				{"job": self.name, "review_status": "Approved"},
-			)
+			approved_review = frappe.db.exists("LPO QA Review", {
+				"job": self.name,
+				"review_status": "Approved",
+				"reviewer_independent": 1,
+				"reviewed_document": self.delivery_document,
+				"reviewed_document_checksum": self.delivery_document_checksum,
+				"reviewed_document_version": self.delivery_document_version,
+			})
 			if not approved_review:
-				frappe.throw(
-					_("An approved QA Review is required before client delivery."),
-					frappe.ValidationError,
+				previous = self.get_doc_before_save()
+				legacy_terminal = bool(
+					previous
+					and previous.job_status in {"Delivered", "Completed"}
+					and previous.job_status == self.job_status
+					and previous.delivery_document == self.delivery_document
 				)
+				if not legacy_terminal:
+					frappe.throw(
+						_("An approved QA Review for the current delivery version is required before client delivery."),
+						frappe.ValidationError,
+					)
 		if self.job_status in {"Delivered", "Completed"} and self.client_approval_status != "Approved":
 			frappe.throw(
 				_("Client approval is required before the Job can be delivered or completed."),

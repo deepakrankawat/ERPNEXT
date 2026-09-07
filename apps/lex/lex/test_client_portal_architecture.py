@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from unittest.mock import patch
 
 import frappe
 from frappe.client import get as get_client_document
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, now_datetime
 from frappe.utils.file_manager import save_file
+from frappe.utils.password import check_password, update_password
 from werkzeug.exceptions import Forbidden
 
-from lex import client_portal, persona_workspaces, portal_management, work_intake
+from lex import chat_automation, client_portal, persona_workspaces, portal_management, work_intake
 from lex.audit_worm_chain import verify_audit_trail_integrity
 from lex.client_access import get_linked_client_ids, has_matter_access, require_client_administrator
 from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import (
@@ -92,15 +94,141 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("enforceLoginLightTheme", enhancer)
 		self.assertIn("attributeFilter: ['data-theme']", enhancer)
 
+	def test_client_login_page_is_light_only_and_dedicated(self):
+		app_path = Path(frappe.get_app_path("lex"))
+		template = (app_path / "www" / "client-login.html").read_text(encoding="utf-8")
+		controller = (app_path / "www" / "client_login.py").read_text(encoding="utf-8")
+
+		self.assertIn('setAttribute("data-theme", "light")', template)
+		self.assertNotIn('data-theme="dark"', template)
+		self.assertIn("lex.portal_management.client_login", template)
+		self.assertIn("lex.portal_management.send_client_email_login_link", template)
+		self.assertIn("Password Sign In", template)
+		self.assertIn("Email Magic Link", template)
+		self.assertIn("/client-registration", template)
+		self.assertNotIn('href="/login"', template)
+		self.assertNotIn("tab-system", template)
+		self.assertIn("{% block navbar %}{% endblock %}", template)
+		self.assertIn("{% block footer %}{% endblock %}", template)
+		self.assertIn("Lexocrates Client Portal Login", controller)
+
+	def test_client_login_endpoint_rejects_staff_user(self):
+		staff_email = f"staff-{frappe.generate_hash(length=8).lower()}@example.invalid"
+		staff = frappe.get_doc({
+			"doctype": "User",
+			"email": staff_email,
+			"first_name": "Staff",
+			"last_name": "Member",
+			"enabled": 1,
+			"user_type": "System User",
+			"send_welcome_email": 0,
+			"roles": [{"role": "System Manager"}],
+		}).insert(ignore_permissions=True)
+		update_password(staff.name, STRONG_TEST_PASSWORD)
+
+		with self.assertRaises(frappe.PermissionError) as ctx:
+			portal_management.client_login(staff_email, STRONG_TEST_PASSWORD)
+		self.assertIn("Staff accounts cannot sign in here", str(ctx.exception))
+
+	def test_client_login_endpoint_rejects_user_without_active_portal_profile(self):
+		user = _make_user()
+		update_password(user.name, STRONG_TEST_PASSWORD)
+
+		# Website User without portal profile
+		with self.assertRaises(frappe.PermissionError) as ctx:
+			portal_management.client_login(user.name, STRONG_TEST_PASSWORD)
+		self.assertIn("No active Lexocrates Client profile", str(ctx.exception))
+
+		# Portal User with Suspended/Locked status
+		client = _make_client()
+		portal_user = _make_portal_user(user.name, client, "Legal User")
+		portal_user.account_status = "Locked"
+		portal_user.deactivation_reason = "Security review"
+		portal_user.save(ignore_permissions=True)
+
+		with self.assertRaises(frappe.PermissionError) as ctx:
+			portal_management.client_login(user.name, STRONG_TEST_PASSWORD)
+		self.assertIn("disabled", str(ctx.exception))
+
+	def test_client_login_endpoint_authenticates_valid_client(self):
+		client = _make_client()
+		user = _make_user()
+		_make_portal_user(user.name, client, "Client Administrator")
+		update_password(user.name, STRONG_TEST_PASSWORD)
+
+		res = portal_management.client_login(
+			user.name,
+			STRONG_TEST_PASSWORD,
+			redirect_to="/app/private-route",
+		)
+		self.assertEqual(res["status"], "success")
+		self.assertEqual(res["user"], user.name)
+		self.assertEqual(res["client"], client)
+		self.assertEqual(res["redirect"], "/client-portal")
+
+	def test_staff_login_surface_rejects_website_user(self):
+		client = _make_client()
+		user = _make_user()
+		_make_portal_user(user.name, client, "Legal User")
+		frappe.local.form_dict["lex_login_surface"] = "staff"
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				portal_management.validate_login_surface(frappe._dict(user=user.name))
+		finally:
+			frappe.local.form_dict.pop("lex_login_surface", None)
+
+	def test_client_email_login_link_rejects_staff(self):
+		staff_email = f"staff2-{frappe.generate_hash(length=8).lower()}@example.invalid"
+		frappe.get_doc({
+			"doctype": "User",
+			"email": staff_email,
+			"first_name": "Staff2",
+			"last_name": "Member",
+			"enabled": 1,
+			"user_type": "System User",
+			"send_welcome_email": 0,
+			"roles": [{"role": "System Manager"}],
+		}).insert(ignore_permissions=True)
+
+		with self.assertRaises(frappe.PermissionError):
+			portal_management.send_client_email_login_link(staff_email)
+
+	def test_client_email_login_link_is_single_use(self):
+		client = _make_client()
+		user = _make_user()
+		_make_portal_user(user.name, client, "Legal User")
+		result = portal_management.send_client_email_login_link(
+			user.name,
+			redirect_to="/app",
+		)
+
+		verified = portal_management.verify_email_login_token(result["test_token"])
+		self.assertEqual(verified["user"], user.name)
+		self.assertEqual(verified["redirect"], "/client-portal")
+		with self.assertRaises(frappe.PermissionError):
+			portal_management.verify_email_login_token(result["test_token"])
+
+	def test_client_portal_guest_redirects_to_client_login(self):
+		from lex.www import client_portal as cp_www
+		frappe.set_user("Guest")
+		frappe.local.flags.redirect_location = None
+		ctx = frappe._dict()
+		with self.assertRaises(frappe.Redirect):
+			cp_www.get_context(ctx)
+		self.assertEqual(frappe.local.flags.redirect_location, "/client-login?redirect-to=/client-portal")
+
 	def test_client_registration_page_is_light_only(self):
 		app_path = Path(frappe.get_app_path("lex"))
 		template = (app_path / "www" / "client-registration.html").read_text(encoding="utf-8")
+		script = (app_path / "public" / "js" / "client_registration.js").read_text(encoding="utf-8")
 
 		self.assertIn('setAttribute("data-theme", "light")', template)
 		self.assertIn('root.style.colorScheme = "light"', template)
 		self.assertIn('attributeFilter: ["data-theme"]', template)
+		self.assertIn("Verify Email & Create Password", script)
+		self.assertIn("password: verifyForm.password.value", script)
 
-	def test_compliance_approved_registration_creates_company_admin_and_wallet(self):
+	def test_verified_registration_creates_login_ready_company_admin_and_wallet(self):
 		country = frappe.db.get_value("Country", {}, "name")
 		suffix = frappe.generate_hash(length=8).lower()
 		email = f"registration-{suffix}@example.invalid"
@@ -114,17 +242,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			billing_currency=frappe.db.get_default("currency") or "INR",
 		)
 		frappe.set_user("Guest")
-		verified = portal_management.verify_client_registration(request["test_token"])
-		self.assertTrue(verified["pending_compliance_review"])
-		self.assertFalse(frappe.db.exists("User", email))
-		frappe.set_user("Administrator")
-		approved = portal_management.record_registration_compliance(
-			verified["registration"], "Passed", "Passed", "Passed", "Approved", "Checks completed"
-		)
-		frappe.set_user("Guest")
-		result = portal_management.activate_approved_registration(
-			approved["test_activation_token"], STRONG_TEST_PASSWORD
-		)
+		result = portal_management.verify_client_registration(request["test_token"], STRONG_TEST_PASSWORD)
 		client = frappe.get_doc("Customer", result["client"])
 		portal_user = frappe.get_doc("Lexocrates Portal User", result["portal_user"])
 		user = frappe.get_doc("User", email)
@@ -132,10 +250,18 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertEqual(portal_user.client, client.name)
 		self.assertEqual(portal_user.portal_role, "Client Administrator")
 		self.assertEqual(user.user_type, "Website User")
+		self.assertEqual(check_password(email, STRONG_TEST_PASSWORD), email)
+		self.assertTrue(result["verified"])
+		self.assertTrue(result["activated"])
 		self.assertEqual(result["redirect"], "/client-portal")
+		registration = frappe.get_doc("Lexocrates Client Registration", result["registration"])
+		self.assertEqual(registration.kyc_status, "Not Required")
+		self.assertEqual(registration.conflict_check_status, "Not Required")
+		self.assertEqual(registration.sanctions_check_status, "Not Required")
+		self.assertEqual(registration.commercial_approval_status, "Not Required")
 		self.assertTrue(frappe.db.exists("Lexocrates Client Wallet", {"client": client.name}))
 		with self.assertRaises(frappe.PermissionError):
-			portal_management.activate_approved_registration(approved["test_activation_token"], STRONG_TEST_PASSWORD)
+			portal_management.verify_client_registration(request["test_token"], STRONG_TEST_PASSWORD)
 
 	def test_client_administrator_invites_user_to_same_client(self):
 		client = _make_client()
@@ -375,6 +501,157 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		)
 		self.assertEqual(deliverable.portal_document_type, "Completed Deliverable")
 
+	def test_client_owned_job_upload_is_listed_and_downloadable(self):
+		client = _make_client()
+		user = _make_user()
+		portal_user = _make_portal_user(user.name, client, "Legal User")
+		matter = _make_matter(client)
+		matter.append("authorized_portal_users", _authorization(portal_user))
+		matter.save(ignore_permissions=True)
+		job = frappe.get_doc({
+			"doctype": "LPO Job",
+			"job_title": "Client source upload",
+			"engagement": matter.name,
+			"job_type": "Contract Review",
+			"job_status": "Draft",
+			"priority": "Medium",
+			"task_description": "Review the client's uploaded source agreement.",
+			"received_at": now_datetime(),
+			"due_date": add_days(now_datetime(), 2),
+		}).insert(ignore_permissions=True)
+		file_doc = save_file(
+			fname="client-source-upload.txt",
+			content=b"Client-owned source agreement.",
+			dt="LPO Job",
+			dn=job.name,
+			is_private=1,
+		)
+		frappe.db.set_value("File", file_doc.name, "owner", user.name, update_modified=False)
+
+		frappe.set_user(user.name)
+		document = next(
+			row
+			for row in client_portal.get_portal_dashboard()["documents"]
+			if row.name == file_doc.name
+		)
+		self.assertEqual(document.portal_document_type, "Client Upload")
+		self.assertTrue(document.download_url)
+		self.assertEqual(_resolve_downloadable_file(file_id=file_doc.name).name, file_doc.name)
+
+	@patch("lex.chat_automation.frappe.sendmail")
+	def test_deliverable_ready_email_is_authorized_versioned_and_idempotent(self, mock_sendmail):
+		client = _make_client()
+		user = _make_user()
+		portal_user = _make_portal_user(user.name, client, "Partner / General Counsel")
+		matter = _make_matter(client)
+		matter.append("authorized_portal_users", _authorization(portal_user))
+		matter.save(ignore_permissions=True)
+		job = frappe.get_doc({
+			"doctype": "LPO Job",
+			"job_title": "Versioned email delivery",
+			"engagement": matter.name,
+			"job_type": "Contract Review",
+			"job_status": "Draft",
+			"priority": "Medium",
+			"task_description": "Notify the authorized approver once per delivery version.",
+			"received_at": now_datetime(),
+			"due_date": add_days(now_datetime(), 2),
+		}).insert(ignore_permissions=True)
+		content = b"Versioned email deliverable."
+		file_doc = save_file("versioned-email-deliverable.txt", content, "LPO Job", job.name, is_private=1)
+		checksum = hashlib.sha256(content).hexdigest()
+		release_internally_generated_file(file_doc.name, expected_checksum=checksum)
+		frappe.db.set_value("LPO Job", job.name, {
+			"delivery_document": file_doc.file_url,
+			"delivery_document_checksum": checksum,
+			"delivery_document_version": 1,
+		}, update_modified=False)
+		job.reload()
+
+		chat_automation._notify_client_deliverable_ready(job)
+		job.reload()
+		chat_automation._notify_client_deliverable_ready(job)
+
+		self.assertEqual(mock_sendmail.call_count, 1)
+		self.assertEqual(job.delivery_notification_version, 1)
+		self.assertIn(user.email, mock_sendmail.call_args.kwargs["recipients"])
+		self.assertIn(
+			"https://engine.lexocrates.com/client-portal#approvals",
+			mock_sendmail.call_args.kwargs["message"],
+		)
+		self.assertEqual(
+			frappe.db.count("Notification Log", {"for_user": user.name, "document_name": job.name}),
+			1,
+		)
+
+	def test_commercial_approver_cannot_approve_deliverable(self):
+		client = _make_client()
+		user = _make_user()
+		portal_user = _make_portal_user(user.name, client, "Partner / General Counsel")
+		frappe.db.set_value(
+			"Lexocrates Portal User",
+			portal_user.name,
+			"approval_authority",
+			"Commercial Approval",
+			update_modified=False,
+		)
+		portal_user.reload()
+		self.assertEqual(portal_user.approval_authority, "Commercial Approval")
+		matter = _make_matter(client)
+		matter.append("authorized_portal_users", _authorization(portal_user))
+		matter.save(ignore_permissions=True)
+		job = frappe.get_doc({
+			"doctype": "LPO Job",
+			"job_title": "Restricted deliverable approval",
+			"engagement": matter.name,
+			"job_type": "Contract Review",
+			"job_status": "Activated",
+			"assigned_analyst": "Administrator",
+			"qa_required": 0,
+			"priority": "Medium",
+			"task_description": "Only a deliverable approver may accept this output.",
+			"received_at": now_datetime(),
+			"due_date": add_days(now_datetime(), 2),
+		}).insert(ignore_permissions=True)
+		content = b"Deliverable requiring the correct approval authority."
+		file_doc = save_file(
+			fname="authority-gated-deliverable.txt",
+			content=content,
+			dt="LPO Job",
+			dn=job.name,
+			is_private=1,
+		)
+		release_internally_generated_file(
+			file_doc.name,
+			expected_checksum=hashlib.sha256(content).hexdigest(),
+		)
+		frappe.db.set_value(
+			"LPO Job",
+			job.name,
+			{
+				"source_document": file_doc.file_url,
+				"source_document_checksum": hashlib.sha256(content).hexdigest(),
+				"source_document_version": 1,
+				"delivery_document": file_doc.file_url,
+				"delivery_document_checksum": hashlib.sha256(content).hexdigest(),
+				"delivery_document_version": 1,
+				"job_status": "Ready for Delivery",
+				"client_approval_status": "Pending",
+			},
+			update_modified=False,
+		)
+
+		frappe.set_user(user.name)
+		dashboard = client_portal.get_portal_dashboard()
+		row = next(item for item in dashboard["jobs"] if item.name == job.name)
+		self.assertFalse(row.delivery_preview_url)
+		self.assertNotIn(job.name, {item.name for item in dashboard["approvals"]})
+		self.assertNotIn("Approvals", {item["label"] for item in dashboard["navigation"]})
+		with self.assertRaises(Forbidden):
+			_resolve_downloadable_file(file_id=file_doc.name)
+		with self.assertRaises(frappe.PermissionError):
+			client_portal.submit_client_approval(job.name, "Approved")
+
 	def test_authorized_client_previews_then_approves_delivery(self):
 		client = _make_client()
 		user = _make_user()
@@ -411,7 +688,12 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			"LPO Job",
 			job.name,
 			{
+				"source_document": file_doc.file_url,
+				"source_document_checksum": hashlib.sha256(content).hexdigest(),
+				"source_document_version": 1,
 				"delivery_document": file_doc.file_url,
+				"delivery_document_checksum": hashlib.sha256(content).hexdigest(),
+				"delivery_document_version": 1,
 				"job_status": "Ready for Delivery",
 				"client_approval_status": "Pending",
 			},

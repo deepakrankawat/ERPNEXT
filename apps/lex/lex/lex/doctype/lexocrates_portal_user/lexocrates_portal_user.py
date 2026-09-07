@@ -79,6 +79,36 @@ ROLE_DEFAULTS = {
 
 
 class LexocratesPortalUser(Document):
+	client: str
+	user: str
+	full_name: str | None
+	email: str | None
+	portal_role: str
+	account_status: str
+	department: str | None
+	matter_access_scope: str
+	can_create_matters: int
+	can_upload_documents: int
+	can_comment: int
+	billing_access: int
+	lexpack_view_access: int
+	lexpack_purchase_access: int
+	approval_authority: str
+	user_management_authority: int
+	report_access: str
+	delegated_admin_until: Any
+	delegated_by: str | None
+	delegation_reason: str | None
+	deactivation_reason: str | None
+	deactivated_on: Any
+	activated_on: Any
+	lock_until: Any
+	failed_login_count: int
+	notification_preferences: str
+	mfa_required: int
+	mfa_enabled: int
+	last_login: Any
+
 	def before_insert(self):
 		self._load_user_identity()
 		if not any(self.get(fieldname) for fieldname in CAPABILITY_FIELDS):

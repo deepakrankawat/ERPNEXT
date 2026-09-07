@@ -9,11 +9,12 @@ no_cache = 1
 
 
 def get_context(context):
+	requested_redirect = _safe_local_redirect(
+		frappe.local.request.args.get("redirect-to") or frappe.local.request.args.get("redirect_to"),
+		"",
+	)
 	if frappe.session.user != "Guest":
-		redirect_to = _safe_local_redirect(
-			frappe.local.request.args.get("redirect-to") or frappe.local.request.args.get("redirect_to"),
-			"",
-		)
+		redirect_to = requested_redirect
 		if not redirect_to:
 			user_type = frappe.db.get_value("User", frappe.session.user, "user_type")
 			if user_type == "System User":
@@ -40,10 +41,10 @@ def get_context(context):
 					redirect_to = "/app"
 		frappe.local.flags.redirect_location = redirect_to
 		raise frappe.Redirect
+	if requested_redirect.startswith("/client-portal"):
+		frappe.local.flags.redirect_location = "/client-login?redirect-to=/client-portal"
+		raise frappe.Redirect
 
-	context.title = _("Lexocrates Platform Access")
-	context.redirect_to = _safe_local_redirect(
-		frappe.local.request.args.get("redirect-to") or frappe.local.request.args.get("redirect_to"),
-		"",
-	)
+	context.title = _("Lexocrates Legal Desk Access")
+	context.redirect_to = requested_redirect if requested_redirect.startswith("/app") else "/app"
 	return context

@@ -907,28 +907,43 @@ def get_or_create_direct_channel(other_user: str) -> dict:
 	if existing:
 		return serialize_channel(frappe.get_doc("Lexocrates Chat Channel", existing))
 	label_parts = [re.sub(r"[^a-z0-9]+", "-", user.lower()).strip("-")[:24] for user in users]
-	channel = frappe.get_doc(
-		{
-			"doctype": "Lexocrates Chat Channel",
-			"channel_name": f"#dm-{'-'.join(label_parts)}-{direct_key[:6]}",
-			"channel_type": "Private",
-			"status": "Active",
-			"is_direct_message": 1,
-			"system_user_only": 1,
-			"direct_message_key": direct_key,
-			"description": _("Private direct conversation."),
-			"members": [
-				{
-					"user": user,
-					"channel_role": "Owner" if user == current_user else "Member",
-					"can_post_messages": 1,
-					"can_invite_members": 0,
-					"joined_on": now_datetime(),
-				}
-				for user in users
-			],
-		}
-	).insert(ignore_permissions=True)
+	savepoint = "lexocrates_chat_direct_channel"
+	frappe.db.savepoint(savepoint)
+	try:
+		channel = frappe.get_doc(
+			{
+				"doctype": "Lexocrates Chat Channel",
+				"channel_name": f"#dm-{'-'.join(label_parts)}-{direct_key[:6]}",
+				"channel_type": "Private",
+				"status": "Active",
+				"is_direct_message": 1,
+				"system_user_only": 1,
+				"direct_message_key": direct_key,
+				"description": _("Private direct conversation."),
+				"members": [
+					{
+						"user": user,
+						"channel_role": "Owner" if user == current_user else "Member",
+						"can_post_messages": 1,
+						"can_invite_members": 0,
+						"joined_on": now_datetime(),
+					}
+					for user in users
+				],
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.release_savepoint(savepoint)
+	except (frappe.DuplicateEntryError, frappe.UniqueValidationError):
+		frappe.db.rollback(save_point=savepoint)
+		existing = frappe.db.get_value(
+			"Lexocrates Chat Channel",
+			{"direct_message_key": direct_key},
+			"name",
+			for_update=True,
+		)
+		if not existing:
+			raise
+		channel = frappe.get_doc("Lexocrates Chat Channel", existing)
 	return serialize_channel(channel)
 
 

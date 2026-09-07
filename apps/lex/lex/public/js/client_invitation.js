@@ -8,7 +8,7 @@
 		event.preventDefault();
 		if (form.password.value !== form.confirm_password.value) { show("Passwords do not match.", "error"); return; }
 		const button = form.querySelector("button"); button.disabled = true;
-		try { const response = await frappe.call({ method: "lex.portal_management.accept_portal_invitation", args: { token, password: form.password.value } }); form.hidden = true; show("Portal access activated. Redirecting to login…", "success"); setTimeout(() => { window.location.href = `/login?redirect-to=${encodeURIComponent(response.message.redirect)}`; }, 900); }
+		try { const response = await frappe.call({ method: "lex.portal_management.accept_portal_invitation", args: { token, password: form.password.value } }); form.hidden = true; show("Portal access activated. Redirecting to login…", "success"); setTimeout(() => { window.location.href = `/client-login?redirect-to=${encodeURIComponent(response.message.redirect)}`; }, 900); }
 		catch (error) { show(error.message || String(error), "error"); }
 		finally { button.disabled = false; }
 	});

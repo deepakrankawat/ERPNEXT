@@ -78,6 +78,10 @@ class TestAIDocumentProcessor(FrappeTestCase):
 		for status in ("Activated", "Assigned", "In Progress"):
 			self.job_doc.job_status = status
 			self.job_doc.save(ignore_permissions=True)
+		from lex.sop_execution_engine import record_sop_step_completion
+
+		sop_run = frappe.db.get_value("LPO SOP Run", {"job_id": self.job_doc.name}, "name")
+		record_sop_step_completion(sop_run, "review", comment="Test operational review completed.")
 
 	def test_system_user_access_control(self):
 		"""Verify that only internal system users are permitted, while website/portal users are rejected."""
@@ -105,6 +109,74 @@ class TestAIDocumentProcessor(FrappeTestCase):
 		frappe.set_user(portal_user_name)
 		with self.assertRaises(frappe.PermissionError):
 			ai_document_engine._ensure_internal_system_user()
+
+	def test_ai_endpoints_require_job_assignment_and_job_attached_source(self):
+		analyst_email = f"ai-analyst-{frappe.generate_hash(length=10).lower()}@example.invalid"
+		analyst = frappe.get_doc({
+			"doctype": "User",
+			"email": analyst_email,
+			"first_name": "AI",
+			"last_name": "Analyst",
+			"enabled": 1,
+			"user_type": "System User",
+			"send_welcome_email": 0,
+			"roles": [{"role": "LPO_Analyst"}],
+		}).insert(ignore_permissions=True)
+
+		frappe.set_user(analyst.name)
+		unauthorized_calls = (
+			lambda: ai_document_engine.extract_job_document_text(self.job_doc.name),
+			lambda: ai_document_engine.process_job_document_service(self.job_doc.name, "SUMMARIZE"),
+			lambda: ai_document_engine.run_job_document_pipeline(self.job_doc.name, ["SUMMARIZE"]),
+			lambda: ai_document_engine.complete_job_document(self.job_doc.name, final_text="Restricted"),
+			lambda: ai_document_engine.get_job_document_studio_context(self.job_doc.name),
+		)
+		for call in unauthorized_calls:
+			with self.subTest(endpoint=call):
+				with self.assertRaises(frappe.PermissionError):
+					call()
+
+		frappe.set_user("Administrator")
+		frappe.db.set_value(
+			"LPO Job", self.job_doc.name, "assigned_analyst", analyst.name, update_modified=False
+		)
+		allowed_file = frappe.get_doc({
+			"doctype": "File",
+			"file_name": f"assigned-{frappe.generate_hash(length=8)}.txt",
+			"content": b"Assigned Job source text.",
+			"attached_to_doctype": "LPO Job",
+			"attached_to_name": self.job_doc.name,
+			"is_private": 1,
+		}).insert(ignore_permissions=True)
+		foreign_job = frappe.get_doc({
+			"doctype": "LPO Job",
+			"job_title": "Foreign analyst Job",
+			"engagement": self.matter_doc.name,
+			"customer": self.client_name,
+			"job_type": "Contract Review",
+			"job_status": "Draft",
+			"assigned_analyst": "Administrator",
+			"due_date": frappe.utils.add_days(frappe.utils.nowdate(), 7),
+			"task_description": "Keep this Job's source isolated from other assignments.",
+		}).insert(ignore_permissions=True)
+		foreign_file = frappe.get_doc({
+			"doctype": "File",
+			"file_name": f"foreign-{frappe.generate_hash(length=8)}.txt",
+			"content": b"Private source from outside the assigned Job.",
+			"attached_to_doctype": "LPO Job",
+			"attached_to_name": foreign_job.name,
+			"is_private": 1,
+		}).insert(ignore_permissions=True)
+
+		frappe.set_user(analyst.name)
+		result = ai_document_engine.extract_job_document_text(
+			self.job_doc.name, allowed_file.file_url
+		)
+		self.assertIn("Assigned Job source text", result["extracted_text"])
+		with self.assertRaises(frappe.PermissionError):
+			ai_document_engine.extract_job_document_text(
+				self.job_doc.name, foreign_file.file_url
+			)
 
 	def test_text_extraction(self):
 		"""Verify text extraction from plain text and file attachments."""

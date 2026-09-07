@@ -62,10 +62,11 @@ after migration.
 ### Client Portal
 
 The authenticated website route `/client-portal` provides a responsive,
-permission-personalized client UI. `/client-registration` uses a controlled
-three-stage lifecycle: email verification, staff KYC/conflict/sanctions and
-commercial review, then a separate time-limited activation link. A Customer,
-User, Portal User, and Wallet are created only after every approval gate passes.
+permission-personalized client UI. `/client-registration` uses a direct,
+email-controlled lifecycle: the primary administrator opens a time-limited
+verification link, creates a password, and activates the Client workspace
+without an internal compliance approval step. A Customer, User, Portal User,
+and Wallet are created atomically after email verification.
 
 Eight client roles are supported: Client Administrator, Partner / General
 Counsel, Legal, Operations, Finance, Procurement, Compliance, and Read Only.

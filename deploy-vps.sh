@@ -4,6 +4,7 @@ set -Eeuo pipefail
 
 COMPOSE_FILE="docker-compose.prod.yml"
 WEB_SERVICE="frappe-web"
+CANONICAL_SITE_NAME="engine.lexocrates.com"
 
 fail() {
 	echo "ERROR: $*" >&2
@@ -32,6 +33,9 @@ for variable in SITE_NAME DB_ROOT_PASSWORD ADMIN_PASSWORD; do
 			;;
 	esac
 done
+
+[ "$SITE_NAME" = "$CANONICAL_SITE_NAME" ] || \
+	fail "SITE_NAME must be $CANONICAL_SITE_NAME for this production deployment."
 
 for variable in DB_ROOT_PASSWORD ADMIN_PASSWORD; do
 	value="${!variable}"
@@ -69,6 +73,7 @@ bench_exec bench set-config -g redis_cache redis://redis-cache:6379
 bench_exec bench set-config -g redis_queue redis://redis-queue:6379
 bench_exec bench set-config -g redis_socketio redis://redis-queue:6379
 bench_exec bench set-config -g socketio_port 9000
+bench_exec bench set-config -g webserver_port 8000
 bench_exec bench set-config -g default_site "$SITE_NAME"
 
 if ! bench_exec test -f "sites/$SITE_NAME/site_config.json"; then
@@ -86,12 +91,32 @@ for app in erpnext lex erpnext_custom; do
 done
 bench_exec bench --site "$SITE_NAME" set-config developer_mode 0
 bench_exec bench --site "$SITE_NAME" set-config allow_tests 0
+bench_exec bench --site "$SITE_NAME" set-config host_name "https://$SITE_NAME"
 bench_exec bench --site "$SITE_NAME" migrate
 bench_exec bench --site "$SITE_NAME" enable-scheduler
 bench_exec bench --site "$SITE_NAME" clear-cache
 
-echo "[6/6] Restarting and checking service health..."
+echo "[6/6] Restarting and checking web/realtime service health..."
 docker compose -f "$COMPOSE_FILE" restart "$WEB_SERVICE" socketio scheduler worker-short worker-long
+
+for attempt in $(seq 1 30); do
+	if docker compose -f "$COMPOSE_FILE" exec -T socketio \
+		curl --fail --silent \
+		-H "Host: $SITE_NAME" \
+		-H "X-Frappe-Site-Name: $SITE_NAME" \
+		http://127.0.0.1:8000/api/method/ping | grep -q '"pong"'; then
+		break
+	fi
+	[ "$attempt" -lt 30 ] || fail "Socket.IO cannot reach Frappe web authentication on 127.0.0.1:8000."
+	sleep 2
+done
+
+if ! curl --fail --silent \
+	-H "Origin: https://$SITE_NAME" \
+	"http://127.0.0.1:${SOCKETIO_PORT:-9000}/socket.io/?EIO=4&transport=polling" | grep -q '^0'; then
+	fail "Socket.IO polling handshake failed on port ${SOCKETIO_PORT:-9000}."
+fi
+
 docker compose -f "$COMPOSE_FILE" ps
 
 echo "=========================================================="

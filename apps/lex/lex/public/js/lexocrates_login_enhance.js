@@ -15,10 +15,13 @@
 		}
 	}
 
-	if (window.location.pathname === '/login') enforceLoginLightTheme();
+	if (window.location.pathname === '/login' || window.location.pathname === '/client-login') {
+		enforceLoginLightTheme();
+	}
 
 	function initLoginEnhancements() {
 		const isLoginPage = window.location.pathname === '/login' ||
+			window.location.pathname === '/client-login' ||
 			document.querySelector('.for-login') ||
 			document.querySelector('form[action*="login"]') ||
 			document.querySelector('#page-login');
@@ -34,34 +37,22 @@
 		if (pageCard && !pageCard.dataset.lexEnhanced) {
 			pageCard.dataset.lexEnhanced = 'true';
 
-			// Inject custom tabs, register banner, and footer if not present
-			if (!document.querySelector('.lex-login-tabs')) {
-				const tabsHtml = `
-					<div class="lex-login-tabs" role="tablist" style="display: grid; grid-template-columns: 1fr 1fr 1fr; background: #f1f5f9; padding: 4px; border-radius: 10px; margin-bottom: 20px; gap: 4px;">
-						<button id="tab-client" class="lex-login-tab active" type="button" onclick="window.lexSwitchLogin('client')" style="border:none; background:#fff; padding:9px 8px; font-size:12px; font-weight:600; color:#0f172a; border-radius:8px; cursor:pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-							Client
-						</button>
-						<button id="tab-email" class="lex-login-tab" type="button" onclick="window.lexSwitchLogin('email')" style="border:none; background:transparent; padding:9px 8px; font-size:12px; font-weight:600; color:#64748b; border-radius:8px; cursor:pointer;">
-							Email Link
-						</button>
-						<button id="tab-system" class="lex-login-tab" type="button" onclick="window.lexSwitchLogin('system')" style="border:none; background:transparent; padding:9px 8px; font-size:12px; font-weight:600; color:#64748b; border-radius:8px; cursor:pointer;">
-							Staff
-						</button>
-					</div>
-					<div class="lex-register-banner" id="register-banner" style="background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-						<div class="lex-register-text">
-							<h4 style="margin: 0 0 2px 0; font-size: 13px; font-weight: 700; color: #0369a1;">New Client Organization?</h4>
-							<p style="margin: 0; font-size: 11px; color: #0c4a6e;">Register to submit matters, review quotes &amp; LexPacks.</p>
+			// If this is a generic Frappe Desk login page without client navigation, add client helper link
+			if (window.location.pathname === '/login' && !document.querySelector('.lex-client-helper-banner') && !document.querySelector('.btn-to-client')) {
+				const helperHtml = `
+					<div class="lex-client-helper-banner" style="margin-top: 16px; padding: 12px 16px; background: #eff6ff; border: 1px solid #bae6fd; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+						<div>
+							<h4 style="margin: 0 0 2px 0; font-size: 12px; font-weight: 700; color: #0369a1;">Client Organization?</h4>
+							<p style="margin: 0; font-size: 11px; color: #0c4a6e;">Sign in to review quotes, matters &amp; LexPacks.</p>
 						</div>
-						<a href="/client-registration" class="btn btn-register" style="white-space: nowrap; background: #0284c7; color: #ffffff !important; font-weight: 600; font-size: 12px; padding: 6px 14px; border-radius: 8px; text-decoration: none;">
-							Register Client →
+						<a href="/client-login" class="btn btn-sm" style="white-space: nowrap; background: #0284c7; color: #ffffff !important; font-weight: 600; font-size: 11px; padding: 6px 12px; border-radius: 6px; text-decoration: none;">
+							Client Login →
 						</a>
 					</div>
 				`;
-
 				const form = pageCard.querySelector('form');
 				if (form) {
-					form.insertAdjacentHTML('beforebegin', tabsHtml);
+					form.insertAdjacentHTML('afterend', helperHtml);
 				}
 			}
 
@@ -140,49 +131,6 @@
 			}
 		});
 	}
-
-	window.lexSwitchLogin = function (mode) {
-		const clientTab = document.getElementById('tab-client');
-		const emailTab = document.getElementById('tab-email');
-		const systemTab = document.getElementById('tab-system');
-		const registerBanner = document.getElementById('register-banner');
-		const pwdInput = document.querySelector('input[type="password"]');
-		const pwdGroup = pwdInput ? pwdInput.closest('.form-group, .mb-3') : null;
-		const submitBtn = document.querySelector('button[type="submit"], .btn-login');
-
-		if (clientTab) {
-			clientTab.style.background = mode === 'client' ? '#ffffff' : 'transparent';
-			clientTab.style.color = mode === 'client' ? '#0f172a' : '#64748b';
-		}
-		if (emailTab) {
-			emailTab.style.background = mode === 'email' ? '#ffffff' : 'transparent';
-			emailTab.style.color = mode === 'email' ? '#0f172a' : '#64748b';
-		}
-		if (systemTab) {
-			systemTab.style.background = mode === 'system' ? '#ffffff' : 'transparent';
-			systemTab.style.color = mode === 'system' ? '#0f172a' : '#64748b';
-		}
-
-		if (registerBanner) {
-			registerBanner.style.display = mode === 'client' ? 'flex' : 'none';
-		}
-
-		if (pwdGroup) {
-			pwdGroup.style.display = mode === 'email' ? 'none' : 'block';
-		}
-		if (pwdInput) {
-			pwdInput.required = mode !== 'email';
-		}
-
-		if (submitBtn) {
-			if (mode === 'client') submitBtn.innerHTML = 'Sign in to Client Portal';
-			else if (mode === 'email') submitBtn.innerHTML = 'Send Secure Login Link to Email';
-			else submitBtn.innerHTML = 'Sign in to Legal Desk (/app)';
-		}
-
-		// Store intended redirect
-		window.lexIntendedRedirect = mode === 'system' ? '/app' : '/client-portal';
-	};
 
 	document.addEventListener('DOMContentLoaded', initLoginEnhancements);
 	setTimeout(initLoginEnhancements, 300);

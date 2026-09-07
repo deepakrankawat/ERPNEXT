@@ -38,6 +38,34 @@ def _ensure_internal_system_user():
 		)
 
 
+def _get_authorized_job(job_id: str, ptype: str = "write"):
+	"""Load a Job only after both internal-role and document-level checks pass."""
+	_ensure_internal_system_user()
+	if not frappe.db.exists("LPO Job", job_id):
+		frappe.throw(_("Job {0} does not exist.").format(job_id), frappe.DoesNotExistError)
+	job = frappe.get_doc("LPO Job", job_id)
+	frappe.has_permission("LPO Job", ptype, doc=job, throw=True)
+	return job
+
+
+def _validate_job_source_file(job_id: str, file_url: str | None):
+	if not file_url:
+		return
+	if not frappe.db.exists(
+		"File",
+		{
+			"file_url": file_url,
+			"attached_to_doctype": "LPO Job",
+			"attached_to_name": job_id,
+			"is_folder": 0,
+		},
+	):
+		frappe.throw(
+			_("The selected source file is not attached to Job {0}.").format(job_id),
+			frappe.PermissionError,
+		)
+
+
 def extract_text_from_file(
 	file_url_or_path: str,
 	max_chars: int = 60000,
@@ -385,10 +413,16 @@ def interpolate_prompt(
 	return result
 
 
-def _get_or_create_processor(job_id: str, source_file_url: str | None = None) -> "LPOAIDocumentProcessor":
+def _get_or_create_processor(
+	job_id: str,
+	source_file_url: str | None = None,
+	*,
+	job=None,
+) -> "LPOAIDocumentProcessor":
 	"""Get existing active document processor for job or initialize a new one."""
-	job = frappe.get_doc("LPO Job", job_id)
+	job = job or frappe.get_doc("LPO Job", job_id)
 	file_url = source_file_url or job.source_document
+	_validate_job_source_file(job.name, file_url)
 
 	processor_name = frappe.db.get_value(
 		"LPO AI Document Processor",
@@ -406,6 +440,8 @@ def _get_or_create_processor(job_id: str, source_file_url: str | None = None) ->
 			processor.word_count = w_cnt
 			processor.char_count = c_cnt
 			processor.save(ignore_permissions=True)
+		else:
+			_validate_job_source_file(job.name, processor.source_file)
 		return processor
 
 	# Create new processor
@@ -431,11 +467,8 @@ def _get_or_create_processor(job_id: str, source_file_url: str | None = None) ->
 @frappe.whitelist()
 def extract_job_document_text(job_id: str, file_url: str | None = None) -> dict:
 	"""API endpoint: Extract text from Job source document and prepare processor."""
-	_ensure_internal_system_user()
-	if not frappe.db.exists("LPO Job", job_id):
-		frappe.throw(_("Job {0} does not exist.").format(job_id), frappe.DoesNotExistError)
-
-	processor = _get_or_create_processor(job_id, file_url)
+	job = _get_authorized_job(job_id)
+	processor = _get_or_create_processor(job_id, file_url, job=job)
 	if file_url or not processor.extracted_text:
 		target_url = file_url or processor.source_file
 		text, checksum, w_cnt, c_cnt = extract_text_from_file(target_url)
@@ -469,11 +502,8 @@ def process_job_document_service(
 	extra_params: str | dict | None = None,
 ) -> dict:
 	"""Execute a configured AI Document Service with dynamic prompt interpolation on an LPO Job document."""
-	_ensure_internal_system_user()
+	job_doc = _get_authorized_job(job_id)
 	start_ts = time.time()
-
-	if not frappe.db.exists("LPO Job", job_id):
-		frappe.throw(_("Job {0} not found.").format(job_id), frappe.DoesNotExistError)
 
 	service_code = (service_code or "").strip().upper()
 	if not frappe.db.exists("LPO AI Document Service", service_code):
@@ -482,10 +512,9 @@ def process_job_document_service(
 			frappe.throw(_("AI Document Service '{0}' is not configured.").format(service_code), frappe.DoesNotExistError)
 
 	service_doc = frappe.get_doc("LPO AI Document Service", service_code)
-	job_doc = frappe.get_doc("LPO Job", job_id)
 	matter_doc = frappe.get_doc("LPO Matter", job_doc.engagement) if job_doc.engagement else None
 
-	processor = _get_or_create_processor(job_id, file_url)
+	processor = _get_or_create_processor(job_id, file_url, job=job_doc)
 	if not processor.extracted_text and processor.source_file:
 		text, checksum, w_cnt, c_cnt = extract_text_from_file(processor.source_file)
 		processor.extracted_text = text
@@ -627,7 +656,7 @@ def run_job_document_pipeline(
 	credential_name: str | None = None,
 ) -> dict:
 	"""Execute a chained multi-service AI pipeline against the Job document."""
-	_ensure_internal_system_user()
+	job = _get_authorized_job(job_id)
 	if isinstance(service_codes, str):
 		try:
 			service_codes = json.loads(service_codes)
@@ -661,7 +690,7 @@ def run_job_document_pipeline(
 	]
 	combined_markdown = "\n---\n\n".join(aggregated_sections)
 
-	processor = _get_or_create_processor(job_id)
+	processor = _get_or_create_processor(job_id, job=job)
 	processor.final_output_text = combined_markdown
 	processor.status = "Ready for Review"
 	processor.save(ignore_permissions=True)
@@ -693,15 +722,13 @@ def complete_job_document(
 	include_page_numbers: int = 1,
 ) -> dict:
 	"""Generate versioned PDF/DOCX deliverables, attach them, and advance Job status."""
-	_ensure_internal_system_user()
-	if not frappe.db.exists("LPO Job", job_id):
-		frappe.throw(_("Job {0} not found.").format(job_id), frappe.DoesNotExistError)
+	_get_authorized_job(job_id)
 
 	# Serialize exports for the same Job so concurrent clicks cannot create the
 	# same version number or overwrite one another's delivery pointer.
 	frappe.db.sql("select name from `tabLPO Job` where name = %s for update", job_id)
-	job = frappe.get_doc("LPO Job", job_id)
-	processor = _get_or_create_processor(job_id)
+	job = _get_authorized_job(job_id)
+	processor = _get_or_create_processor(job_id, job=job)
 
 	content = final_text or processor.final_output_text or ""
 	if not content.strip():
@@ -867,15 +894,12 @@ def _version_number(value) -> int:
 @frappe.whitelist()
 def get_job_document_studio_context(job_id: str) -> dict:
 	"""Fetch complete state payload for the interactive Desk AI Document Studio."""
-	_ensure_internal_system_user()
-	if not frappe.db.exists("LPO Job", job_id):
-		frappe.throw(_("Job {0} not found.").format(job_id), frappe.DoesNotExistError)
+	job = _get_authorized_job(job_id)
 
 	ensure_default_ai_document_services()
 
-	job = frappe.get_doc("LPO Job", job_id)
 	matter = frappe.get_doc("LPO Matter", job.engagement) if job.engagement else None
-	processor = _get_or_create_processor(job_id)
+	processor = _get_or_create_processor(job_id, job=job)
 
 	# Fetch active services
 	services = frappe.get_all(

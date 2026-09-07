@@ -95,11 +95,11 @@
 			verifyForm.password.required = true;
 			submitButton.textContent = "Activate Client workspace";
 		} else {
-			title.textContent = "Verify Organization Email";
-			intro.textContent = "Confirm the applicant email. Lexocrates will complete compliance review before account activation.";
-			passwordGroup.hidden = true;
-			verifyForm.password.required = false;
-			submitButton.textContent = "Verify email";
+			title.textContent = "Verify Email & Create Password";
+			intro.textContent = "Confirm your email, create the primary administrator password, and activate the Client workspace.";
+			passwordGroup.hidden = false;
+			verifyForm.password.required = true;
+			submitButton.textContent = "Verify and activate";
 		}
 	}
 
@@ -120,7 +120,7 @@
 		if (modalBody && emailAddress) {
 			modalBody.innerHTML = `
 				<p>A time-limited verification request has been created for <strong>${escapeHTML(emailAddress)}</strong>.</p>
-				<p class="lex-modal-hint">We have sent a verification email to your address. Verification submits the organization for compliance review; it does not create an account.</p>
+				<p class="lex-modal-hint">Open the verification email within 24 hours to create your password and activate the Client workspace.</p>
 			`;
 		}
 		modal.hidden = false;
@@ -159,9 +159,12 @@
 				Object.fromEntries(new FormData(requestForm)),
 			);
 			const userEmail = requestForm.elements["email"]?.value;
+			if (!response?.verification_sent && !response?.verification_url) {
+				throw new Error("Verification email could not be sent. Please try again later.");
+			}
 			show(
 				result,
-				"Check your email for the time-limited verification link. No Client was created before verification.",
+				"Check your email for the time-limited verification link to create your password.",
 				"success",
 			);
 			result.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -189,16 +192,17 @@
 				});
 				show(verifyResult, "Client workspace activated. Redirecting to login…", "success");
 				setTimeout(() => {
-					window.location.href = `/login?redirect-to=${encodeURIComponent(response.redirect)}`;
+					window.location.href = `/client-login?redirect-to=${encodeURIComponent(response.redirect)}`;
 				}, 900);
 			} else {
-				await call("lex.portal_management.verify_client_registration", { token });
-				show(
-					verifyResult,
-					"Email verified. Your organization is pending KYC, conflict, sanctions, and commercial review. No account has been created yet.",
-					"success",
-				);
-				button.hidden = true;
+				const response = await call("lex.portal_management.verify_client_registration", {
+					token,
+					password: verifyForm.password.value,
+				});
+				show(verifyResult, "Email verified and Client workspace activated. Redirecting to login…", "success");
+				setTimeout(() => {
+					window.location.href = `/client-login?redirect-to=${encodeURIComponent(response.redirect)}`;
+				}, 900);
 			}
 		} catch (error) {
 			show(verifyResult, error.message || String(error), "error");

@@ -9,7 +9,7 @@ servers:
   - url: https://{host}
     variables:
       host:
-        default: development.localhost:8001
+        default: engine.lexocrates.com
 components:
   securitySchemes:
     frappeSession:
@@ -78,20 +78,20 @@ paths:
         '200': {description: Pending verification created, content: {application/json: {schema: {$ref: '#/components/schemas/FrappeResponse'}}}}
   /api/method/lex.portal_management.verify_client_registration:
     post:
-      summary: Verify applicant email and move registration to compliance review
+      summary: Verify applicant email, create the password, and activate the Client workspace
       requestBody:
         required: true
         content:
           application/x-www-form-urlencoded:
             schema:
               type: object
-              required: [token]
-              properties: {token: {type: string}}
+              required: [token, password]
+              properties: {token: {type: string}, password: {type: string, format: password, minLength: 10}}
       responses:
-        '200': {description: Email verified; tenant still not provisioned}
+        '200': {description: Email verified and Client, Website User, Portal User, and Wallet created}
   /api/method/lex.portal_management.activate_approved_registration:
     post:
-      summary: Activate a registration only after all compliance gates pass
+      summary: Activate a legacy registration previously approved through compliance review
       requestBody:
         required: true
         content:

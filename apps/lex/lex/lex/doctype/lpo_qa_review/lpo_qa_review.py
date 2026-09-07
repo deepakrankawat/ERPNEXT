@@ -7,12 +7,14 @@ from frappe.utils import now_datetime
 
 
 MANAGEMENT_ROLES = {"LPO_Admin", "LPO_Manager", "System Manager"}
+FINAL_REVIEW_STATUSES = {"Approved", "Changes Required", "Rejected"}
 
 
 class LPOQAReview(Document):
 	def validate(self):
 		self._load_job_context()
 		self._validate_reviewer()
+		self._bind_reviewed_document()
 		self._validate_outcome()
 
 	def on_update(self):
@@ -23,7 +25,10 @@ class LPOQAReview(Document):
 		job = frappe.db.get_value(
 			"LPO Job",
 			self.job,
-			["engagement", "customer", "assigned_analyst", "job_status", "delivery_document", "qa_required"],
+			[
+				"engagement", "customer", "assigned_analyst", "job_status", "delivery_document",
+				"delivery_document_checksum", "delivery_document_version", "qa_required",
+			],
 			as_dict=True,
 		)
 		if not job:
@@ -44,10 +49,38 @@ class LPOQAReview(Document):
 			MANAGEMENT_ROLES | {"LPO_Analyst"}
 		):
 			frappe.throw(_("Reviewer must have an LPO role."), frappe.ValidationError)
+		self.reviewer_independent = int(self.reviewer != self._lex_job_context.assigned_analyst)
+		if not self.reviewer_independent:
+			frappe.throw(_("The assigned analyst cannot review their own Job deliverable."), frappe.ValidationError)
+
+	def _bind_reviewed_document(self):
+		job = self._lex_job_context
+		previous = self.get_doc_before_save()
+		if previous and previous.reviewed_document and (
+			previous.reviewed_document != self.reviewed_document
+			or previous.reviewed_document_checksum != self.reviewed_document_checksum
+			or int(previous.reviewed_document_version or 0) != int(self.reviewed_document_version or 0)
+		):
+			frappe.throw(_("The reviewed deliverable snapshot is immutable."), frappe.PermissionError)
+		if not self.reviewed_document and job.delivery_document:
+			self.reviewed_document = job.delivery_document
+			self.reviewed_document_checksum = job.delivery_document_checksum
+			self.reviewed_document_version = job.delivery_document_version
+		if self.review_status in FINAL_REVIEW_STATUSES:
+			if not self.reviewed_document:
+				frappe.throw(_("A delivery document is required before completing QA."), frappe.ValidationError)
+			if (
+				self.reviewed_document != job.delivery_document
+				or self.reviewed_document_checksum != job.delivery_document_checksum
+				or int(self.reviewed_document_version or 0) != int(job.delivery_document_version or 0)
+			):
+				frappe.throw(_("QA must be completed against the current delivery document version."), frappe.ValidationError)
 
 	def _validate_outcome(self):
-		if self.review_status in {"Approved", "Changes Required", "Rejected"} and self._lex_job_context.job_status != "QA Review":
+		if self.review_status in FINAL_REVIEW_STATUSES and self._lex_job_context.job_status != "QA Review":
 			frappe.throw(_("Finish a QA decision only while the Job is in QA Review."), frappe.ValidationError)
+		if self.review_status in FINAL_REVIEW_STATUSES and frappe.session.user != self.reviewer:
+			frappe.throw(_("Only the selected independent reviewer can submit the QA decision."), frappe.PermissionError)
 		if self.review_status == "Changes Required" and not self.corrective_actions:
 			frappe.throw(
 				_("Required Corrective Actions are mandatory when changes are requested."),
@@ -65,6 +98,9 @@ class LPOQAReview(Document):
 		job.qa_reviewer = self.reviewer
 		job.qa_score = self.score or 0
 		if self.review_status == "Approved":
+			from lex.sop_execution_engine import complete_qa_sop_steps
+
+			complete_qa_sop_steps(job, self)
 			job.job_status = "Ready for Delivery"
 		else:
 			job.job_status = "In Progress"

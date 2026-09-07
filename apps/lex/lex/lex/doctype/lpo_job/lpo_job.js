@@ -509,7 +509,7 @@ function advanced_export_fields(frm) {
 			fieldname: "job_status",
 			fieldtype: "Select",
 			label: __("Set Job Status"),
-			options: "Ready for Delivery\nQA Review\nCompleted",
+			options: "Ready for Delivery\nQA Review",
 			default: "Ready for Delivery",
 			reqd: 1,
 		},

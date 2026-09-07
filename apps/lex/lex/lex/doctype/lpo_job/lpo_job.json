@@ -77,6 +77,9 @@
   "qa_reviewer",
   "qa_score",
   "delivery_notes",
+  "delivery_notification_version",
+  "delivery_notified_on",
+  "delivery_notified_recipients",
   "client_approval_section",
   "client_approval_status",
   "client_approved_by",
@@ -568,6 +571,25 @@
    "fieldname": "delivery_notes",
    "fieldtype": "Text Editor",
    "label": "QA / Delivery Notes"
+  },
+  {
+   "default": "0",
+   "fieldname": "delivery_notification_version",
+   "fieldtype": "Int",
+   "label": "Notified Delivery Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_notified_on",
+   "fieldtype": "Datetime",
+   "label": "Delivery Notification Sent On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_notified_recipients",
+   "fieldtype": "Small Text",
+   "label": "Delivery Notification Recipients",
+   "read_only": 1
   },
   {
    "fieldname": "client_approval_section",

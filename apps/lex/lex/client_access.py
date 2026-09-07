@@ -9,6 +9,7 @@ from frappe import _
 CLIENT_ROLE = "Lexocrates Client"
 PORTAL_USER_DOCTYPE = "Lexocrates Portal User"
 MATTER_AUTHORIZATION_DOCTYPE = "Lexocrates Matter Authorization"
+DELIVERABLE_APPROVAL_AUTHORITIES = {"Deliverable Approval", "All Client Approvals"}
 
 MatterAction = Literal["view", "upload", "comment", "approve", "billing"]
 
@@ -100,6 +101,14 @@ def has_portal_capability(capability: str, user: str | None = None) -> bool:
 	if capability == "report_access":
 		return value not in {None, "", "None"}
 	return bool(value)
+
+
+def can_approve_deliverables(user: str | None = None) -> bool:
+	portal_user = get_portal_user(user)
+	return bool(
+		portal_user
+		and portal_user.approval_authority in DELIVERABLE_APPROVAL_AUTHORITIES
+	)
 
 
 def has_matter_access(

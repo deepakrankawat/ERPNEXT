@@ -84,7 +84,7 @@ class LexocratesChatMessage(Document):
 			)
 
 		self._validate_thread()
-		self.mentions = json.dumps(extract_mentions(plain_text), separators=(",", ":"))
+		self.mentions = json.dumps(extract_mentions(plain_text, channel), separators=(",", ":"))
 		self.job_mentions = json.dumps(
 			extract_job_mentions(plain_text, channel), separators=(",", ":")
 		)
@@ -167,6 +167,7 @@ class LexocratesChatMessage(Document):
 		if getattr(frappe.flags, "lexocrates_chat_import", False):
 			return
 		payload = serialize_message(self)
+		channel = frappe.get_doc("Lexocrates Chat Channel", self.channel)
 		frappe.publish_realtime(
 			"new_chat_message",
 			payload,
@@ -174,7 +175,7 @@ class LexocratesChatMessage(Document):
 			after_commit=True,
 		)
 		for user in parse_json_list(self.mentions):
-			if user != self.sender:
+			if user != self.sender and can_view_channel(channel, user=user):
 				frappe.publish_realtime(
 					"chat_mention",
 					payload,
@@ -287,7 +288,7 @@ def is_within_edit_window(sent_at) -> bool:
 	return 0 <= elapsed <= MESSAGE_EDIT_WINDOW_MINUTES * 60
 
 
-def extract_mentions(plain_text: str) -> list[str]:
+def extract_mentions(plain_text: str, channel=None) -> list[str]:
 	tokens = {match.group(1).lower() for match in MENTION_PATTERN.finditer(plain_text or "")}
 	if not tokens:
 		return []
@@ -302,7 +303,12 @@ def extract_mentions(plain_text: str) -> list[str]:
 		lookup[user.name.lower()] = user.name
 		if user.username:
 			lookup[user.username.lower()] = user.name
-	return sorted({lookup[token] for token in tokens if token in lookup})
+	mentioned_users = {lookup[token] for token in tokens if token in lookup}
+	if channel:
+		mentioned_users = {
+			user for user in mentioned_users if can_view_channel(channel, user=user)
+		}
+	return sorted(mentioned_users)
 
 
 def extract_job_mentions(plain_text: str, channel) -> list[dict]:
@@ -358,7 +364,7 @@ def _normalize_attachments(value) -> list[str]:
 		)
 	normalized = []
 	for url in dict.fromkeys(urls):
-		if not isinstance(url, str) or not url.startswith(("/files/", "/private/files/")):
+		if not isinstance(url, str) or not url.startswith("/private/files/"):
 			frappe.throw(_("Invalid attachment URL."), frappe.ValidationError)
 		file_row = frappe.db.get_value(
 			"File", {"file_url": url}, ["name", "owner"], as_dict=True
@@ -660,14 +666,49 @@ def sync_messages(channel: str, after_sequence: int = 0, limit: int = 200) -> di
 
 
 @frappe.whitelist()
+def get_message_states(channel: str, message_names=None) -> list[dict]:
+	"""Return current state for already-loaded messages after a realtime reconnect."""
+	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
+	requested_names = parse_json_list(message_names)
+	if len(requested_names) > 500:
+		frappe.throw(_("At most 500 message states can be synchronized at once."), frappe.ValidationError)
+	names = list(
+		dict.fromkeys(
+			name.strip()
+			for name in requested_names
+			if isinstance(name, str) and name.strip()
+		)
+	)
+	if not names:
+		return []
+	rows = frappe.get_all(
+		"Lexocrates Chat Message",
+		filters={"channel": channel, "name": ["in", names]},
+		fields=[
+			"name", "channel", "channel_sequence", "client_message_id", "sender",
+			"message_text", "sent_at", "thread_reference", "mentions", "job_mentions",
+			"attachments", "system_generated", "source_doctype", "source_name", "edited_on",
+			"is_pinned", "pinned_by", "pinned_at",
+		],
+		order_by="channel_sequence asc",
+		limit_page_length=500,
+	)
+	identities = _sender_identities(rows)
+	return _enrich_messages(
+		[serialize_message(row, sender_identity=identities.get(row.sender)) for row in rows]
+	)
+
+
+@frappe.whitelist()
 def search_messages(search_text: str, channel: str | None = None, limit: int = 50) -> list[dict]:
 	search_text = strip_html(search_text or "").strip()
 	if len(search_text) < 2:
 		return []
+	if not channel:
+		frappe.throw(_("A channel is required to search chat messages."), frappe.MandatoryError)
 	filters: dict[str, Any] = {"message_text": ["like", f"%{search_text}%"]}
-	if channel:
-		frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
-		filters["channel"] = channel
+	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
+	filters["channel"] = channel
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
 		filters=filters,
@@ -758,29 +799,50 @@ def _enrich_messages(messages: list[dict]) -> list[dict]:
 
 
 @frappe.whitelist()
-def get_thread(message_name: str) -> dict:
+def get_thread(
+	message_name: str,
+	before_sequence: int | None = None,
+	limit: int = 100,
+) -> dict:
 	message = frappe.get_doc("Lexocrates Chat Message", message_name)
 	frappe.has_permission("Lexocrates Chat Channel", "read", doc=message.channel, throw=True)
 	root_name = message.thread_reference or message.name
 	root = frappe.get_doc("Lexocrates Chat Message", root_name)
+	if root.channel != message.channel:
+		frappe.throw(_("Thread messages must belong to the same channel."), frappe.ValidationError)
+	limit = min(max(int(limit or 100), 1), 200)
+	filters: dict[str, Any] = {"thread_reference": root_name}
+	if before_sequence is not None:
+		filters["channel_sequence"] = ["<", max(int(before_sequence or 0), 0)]
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
-		filters={"thread_reference": root_name},
+		filters=filters,
 		fields=[
 			"name", "channel", "channel_sequence", "client_message_id", "sender", "message_text", "sent_at", "thread_reference",
 			"mentions", "job_mentions", "attachments", "system_generated", "source_doctype", "source_name",
 			"edited_on", "is_pinned", "pinned_by", "pinned_at",
 		],
-		order_by="channel_sequence asc",
-		limit_page_length=200,
+		order_by="channel_sequence desc",
+		limit_page_length=limit + 1,
 	)
+	has_more = len(rows) > limit
+	rows = rows[:limit]
+	rows.reverse()
 	all_rows = [root.as_dict()] + rows
 	identities = _sender_identities(all_rows)
+	serialized_root = serialize_message(
+		root, sender_identity=identities.get(root.sender)
+	)
+	serialized_replies = _enrich_messages(
+		[serialize_message(row, sender_identity=identities.get(row.sender)) for row in rows]
+	)
+	enriched_root = _enrich_messages([serialized_root])[0]
 	return {
 		"root": root_name,
-		"messages": _enrich_messages(
-			[serialize_message(row, sender_identity=identities.get(row.sender)) for row in all_rows]
-		),
+		"root_message": enriched_root,
+		"messages": ([enriched_root] if before_sequence is None else []) + serialized_replies,
+		"has_more": has_more,
+		"oldest_sequence": int(rows[0].channel_sequence) if rows else None,
 	}
 
 
@@ -792,7 +854,14 @@ def mark_channel_read(channel: str, message_name: str | None = None) -> dict:
 			"Lexocrates Chat Message", message_name, ["channel", "sent_at", "channel_sequence"], as_dict=True
 		)
 		if not message or message.channel != channel:
-			frappe.throw(_("The read marker must belong to this channel."), frappe.ValidationError)
+			# A delayed request from a previously selected channel must not advance
+			# this channel or surface a disruptive error to the user.
+			return {
+				"channel": channel,
+				"user": frappe.session.user,
+				"ignored": True,
+				"reason": "stale_message_marker",
+			}
 	else:
 		message = frappe.db.get_value(
 			"Lexocrates Chat Message",
@@ -1072,8 +1141,8 @@ def _send_mention_notification(message_doc, user: str):
 
 		channel_doc = frappe.get_cached_doc("Lexocrates Chat Channel", message_doc.channel)
 		sender_name = frappe.db.get_value("User", message_doc.sender, "full_name") or message_doc.sender
-		channel_title = channel_doc.display_name or channel_doc.channel_name
-		subject = _("{0} mentioned you in #{1}").format(sender_name, channel_title)
+		channel_title = channel_doc.channel_name
+		subject = _("{0} mentioned you in {1}").format(sender_name, channel_title)
 
 		# Create standard Frappe Notification Log
 		notification = frappe.get_doc({

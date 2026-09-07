@@ -10,6 +10,9 @@ from frappe.utils import get_datetime, now_datetime
 from lex.portal_audit import create_portal_audit_event
 
 
+QA_STEP_MARKERS = {"qa", "quality", "independent review"}
+
+
 @frappe.whitelist()
 def resolve_applicable_sop_steps(sop_version_name: str, work_type: str | None = None, jurisdiction: str | None = None, document_classification: str | None = None):
 	"""Resolve conditional SOP steps based on work type, jurisdiction, and metadata (SOP-004)."""
@@ -90,6 +93,145 @@ def start_sop_run(job_name: str, sop_version_name: str):
 	return sop_run.name
 
 
+def ensure_job_sop_run(job):
+	"""Return the active pinned SOP run, creating it when execution starts."""
+	if not job.sop_version_snapshot:
+		frappe.throw(_("The Job has no pinned SOP version."), frappe.ValidationError)
+	name = frappe.db.get_value(
+		"LPO SOP Run",
+		{"job_id": job.name, "status": ["in", ["In Progress", "Completed"]]},
+		"name",
+		order_by="creation desc",
+	)
+	if name:
+		run = frappe.get_doc("LPO SOP Run", name)
+		if str(run.sop_version) != str(job.sop_version_snapshot):
+			frappe.throw(_("The active SOP Run does not match the Job snapshot."), frappe.ValidationError)
+		return run
+	steps = resolve_applicable_sop_steps(
+		job.sop_version_snapshot,
+		job.get("job_type"),
+		job.get("jurisdictions"),
+	)
+	return frappe.get_doc({
+		"doctype": "LPO SOP Run",
+		"sop_version": job.sop_version_snapshot,
+		"job_id": job.name,
+		"status": "In Progress",
+		"started_at": now_datetime(),
+		"started_by": frappe.session.user,
+		"resolved_steps_json": json.dumps(steps),
+		"completed_steps_json": json.dumps([]),
+		"evidence_manifest_json": json.dumps({}),
+		"exceptions_json": json.dumps([]),
+		"exception_status": "None",
+	}).insert(ignore_permissions=True)
+
+
+def sync_job_sop_evidence(job):
+	"""Refresh objective SOP evidence and invalidate stale document-bound steps."""
+	sop_run = ensure_job_sop_run(job)
+	steps = json.loads(sop_run.resolved_steps_json or "[]")
+	completed = json.loads(sop_run.completed_steps_json or "[]")
+	steps_by_id = {step.get("step_id"): step for step in steps}
+	current_checksums = {
+		"sources": job.get("source_document_checksum"),
+		"deliverable": job.get("delivery_document_checksum"),
+	}
+
+	def has_current_evidence(row):
+		step_id = row.get("step_id")
+		expected_checksum = current_checksums.get(step_id)
+		is_qa_step = _is_qa_step(steps_by_id.get(step_id) or {})
+		is_document_bound = step_id in current_checksums or is_qa_step
+		if not is_document_bound:
+			return True
+		if is_qa_step and row.get("completion_type") == "Policy Waiver" and not job.get("qa_required"):
+			return True
+		if is_qa_step:
+			expected_checksum = job.get("delivery_document_checksum")
+		return bool(expected_checksum and row.get("evidence_checksum") == expected_checksum)
+
+	completed = [
+		row for row in completed
+		if has_current_evidence(row)
+	]
+	by_id = {row.get("step_id"): row for row in completed}
+	checks = {
+		"scope": bool(job.get("task_description") and (not job.get("work_intake") or job.get("funding_status") == "Funded")),
+		"sources": bool(job.get("source_document") and job.get("source_document_checksum")),
+		"deliverable": bool(job.get("delivery_document") and job.get("delivery_document_checksum")),
+	}
+	for step in steps:
+		step_id = step.get("step_id")
+		if step_id in by_id or not checks.get(step_id):
+			if step_id in by_id or not (_is_qa_step(step) and not job.get("qa_required")):
+				continue
+		completed.append(_completion_entry(
+			step,
+			completed_by=frappe.session.user,
+			comment=(
+				_("QA waived by the governed Job policy.")
+				if _is_qa_step(step) and not job.get("qa_required")
+				else _("Automatically verified from the governed Job state.")
+			),
+			evidence_doc_id=job.get("source_document") if step_id == "sources" else job.get("delivery_document"),
+			evidence_checksum=(
+				job.get("delivery_document_checksum")
+				if _is_qa_step(step)
+				else current_checksums.get(step_id)
+			),
+			completion_type="Policy Waiver" if _is_qa_step(step) and not job.get("qa_required") else "System Validation",
+		))
+	sop_run.completed_steps_json = json.dumps(completed)
+	_refresh_sop_status(sop_run, steps, completed)
+	sop_run.save(ignore_permissions=True)
+	return sop_run
+
+
+def validate_job_sop_gate(job, gate: str):
+	sop_run = sync_job_sop_evidence(job)
+	steps = json.loads(sop_run.resolved_steps_json or "[]")
+	completed_ids = {
+		row.get("step_id") for row in json.loads(sop_run.completed_steps_json or "[]")
+	}
+	required = [
+		step for step in steps
+		if step.get("is_mandatory") and (gate != "pre_qa" or not _is_qa_step(step))
+	]
+	pending = [step.get("title") or step.get("step_id") for step in required if step.get("step_id") not in completed_ids]
+	if pending:
+		frappe.throw(
+			_("Complete mandatory SOP steps before continuing: {0}").format(", ".join(pending)),
+			frappe.ValidationError,
+		)
+	if gate == "delivery" and sop_run.status != "Completed":
+		frappe.throw(_("The pinned SOP Run must be completed before client delivery."), frappe.ValidationError)
+	return sop_run
+
+
+def complete_qa_sop_steps(job, review):
+	sop_run = sync_job_sop_evidence(job)
+	steps = json.loads(sop_run.resolved_steps_json or "[]")
+	completed = json.loads(sop_run.completed_steps_json or "[]")
+	completed_ids = {row.get("step_id") for row in completed}
+	for step in steps:
+		if not _is_qa_step(step) or step.get("step_id") in completed_ids:
+			continue
+		completed.append(_completion_entry(
+			step,
+			completed_by=review.reviewer,
+			comment=_("Completed by independent QA Review {0}.").format(review.name),
+			evidence_doc_id=review.reviewed_document,
+			evidence_checksum=review.reviewed_document_checksum,
+			completion_type="Independent QA",
+		))
+	sop_run.completed_steps_json = json.dumps(completed)
+	_refresh_sop_status(sop_run, steps, completed)
+	sop_run.save(ignore_permissions=True)
+	return sop_run
+
+
 @frappe.whitelist()
 def record_sop_step_completion(sop_run_name: str, step_id: str, evidence_doc_id: str | None = None, comment: str | None = None):
 	"""Record completed SOP step with evidence validation (SOP-003, SOP-005)."""
@@ -106,6 +248,7 @@ def record_sop_step_completion(sop_run_name: str, step_id: str, evidence_doc_id:
 	target_step = next((s for s in resolved_steps if s["step_id"] == step_id), None)
 	if not target_step:
 		frappe.throw(_("Invalid step ID for this SOP Run."), frappe.ValidationError)
+	_assert_step_actor(job, target_step)
 
 	if target_step["requires_evidence"] and not evidence_doc_id:
 		frappe.throw(_("Evidence is required for step '{0}'.").format(target_step["title"]), frappe.MandatoryError)
@@ -114,15 +257,14 @@ def record_sop_step_completion(sop_run_name: str, step_id: str, evidence_doc_id:
 		frappe.throw(_("This SOP step is already complete."), frappe.DuplicateEntryError)
 	evidence = _validate_sop_evidence(job, evidence_doc_id) if evidence_doc_id else None
 
-	completed_entry = {
-		"step_id": step_id,
-		"title": target_step["title"],
-		"completed_by": frappe.session.user,
-		"completed_at": str(now_datetime()),
-		"evidence_doc_id": evidence_doc_id,
-		"evidence_checksum": evidence.get("checksum") if evidence else None,
-		"comment": comment,
-	}
+	completed_entry = _completion_entry(
+		target_step,
+		completed_by=frappe.session.user,
+		comment=comment,
+		evidence_doc_id=evidence_doc_id,
+		evidence_checksum=evidence.get("checksum") if evidence else None,
+		completion_type="Manual",
+	)
 
 	completed_steps.append(completed_entry)
 	if evidence_doc_id:
@@ -131,17 +273,60 @@ def record_sop_step_completion(sop_run_name: str, step_id: str, evidence_doc_id:
 	sop_run.completed_steps_json = json.dumps(completed_steps)
 	sop_run.evidence_manifest_json = json.dumps(evidence_manifest)
 
-	# Check if all mandatory steps are complete
-	completed_ids = {c["step_id"] for c in completed_steps}
-	all_mandatory_done = all(s["step_id"] in completed_ids for s in resolved_steps if s["is_mandatory"])
-
-	if all_mandatory_done:
-		sop_run.status = "Completed"
-		sop_run.completed_at = now_datetime()
+	_refresh_sop_status(sop_run, resolved_steps, completed_steps)
 
 	sop_run.save(ignore_permissions=True)
 
 	return {"status": sop_run.status, "completed_step": step_id}
+
+
+def _completion_entry(
+	step,
+	*,
+	completed_by,
+	comment,
+	evidence_doc_id=None,
+	evidence_checksum=None,
+	completion_type,
+):
+	return {
+		"step_id": step.get("step_id"),
+		"title": step.get("title"),
+		"completed_by": completed_by,
+		"completed_at": str(now_datetime()),
+		"evidence_doc_id": evidence_doc_id,
+		"evidence_checksum": evidence_checksum,
+		"comment": comment,
+		"completion_type": completion_type,
+	}
+
+
+def _refresh_sop_status(sop_run, steps, completed):
+	completed_ids = {row.get("step_id") for row in completed}
+	all_done = all(step.get("step_id") in completed_ids for step in steps if step.get("is_mandatory"))
+	sop_run.status = "Completed" if all_done else "In Progress"
+	sop_run.completed_at = now_datetime() if all_done else None
+
+
+def _is_qa_step(step) -> bool:
+	text = f"{step.get('step_id') or ''} {step.get('title') or ''}".lower()
+	return any(marker in text for marker in QA_STEP_MARKERS)
+
+
+def _assert_step_actor(job, step):
+	user = frappe.session.user
+	if user == "Administrator":
+		return
+	roles = set(frappe.get_roles(user))
+	role_scope = str(step.get("role_scope") or "").lower()
+	if "manager" in role_scope or _is_qa_step(step):
+		allowed = bool(roles.intersection({"LPO_Admin", "LPO_Manager", "System Manager"}))
+	else:
+		allowed = user == job.assigned_analyst or bool(
+			roles.intersection({"LPO_Admin", "LPO_Manager", "System Manager"})
+		)
+	if not allowed:
+		frappe.throw(_("Your operational role cannot complete this SOP step."), frappe.PermissionError)
 
 
 @frappe.whitelist()

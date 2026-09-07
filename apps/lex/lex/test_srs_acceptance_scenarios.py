@@ -35,15 +35,10 @@ class TestSRSAcceptanceScenarios(FrappeTestCase):
 		)
 		self.assertIn("test_token", req)
 
-		# Step 3 & 4: Email verification, compliance approval, then activation
-		verified = portal_management.verify_client_registration(req["test_token"])
-		self.assertFalse(frappe.db.exists("User", email))
-		approved = portal_management.record_registration_compliance(
-			verified["registration"], "Passed", "Passed", "Passed", "Approved", "Acceptance scenario"
-		)
+		# Step 3 & 4: Email verification, password creation, then direct activation
 		frappe.set_user("Guest")
-		activated = portal_management.activate_approved_registration(
-			approved["test_activation_token"], "Correct-Scenario-A-Password-2026!"
+		activated = portal_management.verify_client_registration(
+			req["test_token"], "Correct-Scenario-A-Password-2026!"
 		)
 		client_id = activated["client"]
 		self.assertTrue(activated["portal_user"])

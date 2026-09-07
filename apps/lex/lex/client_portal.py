@@ -5,6 +5,7 @@ from frappe import _
 from frappe.utils import add_days, cint, get_datetime, now_datetime, nowdate
 
 from lex.client_access import (
+	can_approve_deliverables,
 	get_portal_user,
 	has_matter_access,
 	has_portal_capability,
@@ -57,7 +58,7 @@ def get_portal_dashboard():
 			if (
 				job.job_status == "Ready for Delivery"
 				and job.delivery_document
-				and portal_user.approval_authority not in {None, "", "None"}
+				and can_approve_deliverables()
 				and has_matter_access(job.engagement, "approve")
 			)
 			else None
@@ -81,7 +82,8 @@ def get_portal_dashboard():
 		row for row in jobs
 		if row.job_status == "Ready for Delivery"
 		and row.client_approval_status not in {"Approved"}
-	] if portal_user.approval_authority not in {None, "", "None"} else []
+		and has_matter_access(row.engagement, "approve")
+	] if can_approve_deliverables() else []
 
 	return {
 		"profile": {
@@ -287,7 +289,7 @@ def _navigation(portal_user):
 		))
 	if portal_user.can_upload_documents or portal_user.matter_access_scope != "No Matter Access":
 		items.append({"label": "Documents", "section": "documents", "icon": "file"})
-	if portal_user.approval_authority not in {None, "", "None"}:
+	if can_approve_deliverables():
 		items.append({"label": "Approvals", "section": "approvals", "icon": "check"})
 	if portal_user.report_access not in {None, "", "None"}:
 		items.append({"label": "Reports", "section": "reports", "icon": "chart"})
@@ -353,7 +355,11 @@ def submit_client_approval(job: str, decision: str, notes: str | None = None):
 	if decision not in {"Approved", "Changes Requested"}:
 		frappe.throw(_("Choose Approved or Changes Requested."), frappe.ValidationError)
 	job_doc = frappe.get_doc("LPO Job", job)
-	if job_doc.job_status != "Ready for Delivery" or not has_matter_access(job_doc.engagement, "approve"):
+	if (
+		job_doc.job_status != "Ready for Delivery"
+		or not can_approve_deliverables()
+		or not has_matter_access(job_doc.engagement, "approve")
+	):
 		frappe.throw(_("This deliverable is not available for your approval."), frappe.PermissionError)
 	job_doc.client_approval_status = decision
 	job_doc.client_approved_by = frappe.session.user
@@ -363,6 +369,9 @@ def submit_client_approval(job: str, decision: str, notes: str | None = None):
 	job_doc.delivery_acknowledged_by = frappe.session.user
 	job_doc.delivery_acknowledged_on = now_datetime()
 	job_doc.job_status = "Completed" if decision == "Approved" else "In Progress"
+	if decision == "Changes Requested":
+		# A rejected artifact cannot satisfy the next delivery/QA cycle.
+		job_doc.delivery_document = None
 	previous_flag = getattr(frappe.flags, "lexocrates_portal_service", False)
 	frappe.flags.lexocrates_portal_service = True
 	try:

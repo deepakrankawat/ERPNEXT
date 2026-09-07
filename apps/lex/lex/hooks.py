@@ -112,6 +112,7 @@ after_migrate = [
 	"lex.install.ensure_home_workspace_actions",
 	"lex.install.ensure_lexpack_master_data",
 	"lex.install.ensure_lexpack_catalog",
+	"lex.install.ensure_lexocrates_email_templates",
 	"lex.install.ensure_accounting_workspace_actions",
 	"lex.install.ensure_default_chat_channels",
 	"lex.install.migrate_legacy_chat_records",
@@ -243,6 +244,7 @@ doc_events = {
 	},
 }
 
+on_login = "lex.portal_management.validate_login_surface"
 on_session_creation = "lex.portal_audit.audit_login"
 on_logout = "lex.portal_audit.audit_logout"
 

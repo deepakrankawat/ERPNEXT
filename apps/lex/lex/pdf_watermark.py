@@ -18,7 +18,7 @@ from werkzeug.exceptions import Forbidden
 from werkzeug.http import dump_options_header
 from werkzeug.wrappers import Response
 
-from lex.client_access import get_portal_user, has_matter_access
+from lex.client_access import can_approve_deliverables, get_portal_user, has_matter_access
 from lex.portal_audit import create_portal_audit_event
 
 
@@ -468,9 +468,10 @@ def _resolve_downloadable_file(*, file_id: str | None = None, file_url: str | No
 def _enforce_portal_download_policy(file_doc):
 	"""Apply the client document policy to every protected download path.
 
-	Clients can retrieve their organization's own uploads.  A Job attachment is
-	never downloadable unless it is the canonical delivery document and the Job
-	is Completed.  Internal System Users retain their normal permissions.
+	Clients can retrieve their organization's own uploads. Other Job attachments
+	are available only when they are the canonical delivery document and the Job
+	is at the applicable approval or completion gate. Internal System Users retain
+	their normal permissions.
 	"""
 	portal_user = get_portal_user()
 	if not portal_user:
@@ -485,8 +486,21 @@ def _enforce_portal_download_policy(file_doc):
 			["customer", "engagement", "job_status", "delivery_document"],
 			as_dict=True,
 		)
+		client_upload_access = bool(
+			job
+			and job.customer == portal_user.client
+			and has_matter_access(job.engagement, "view")
+			and _is_client_owned_upload(file_doc, portal_user.client)
+		)
+		if client_upload_access:
+			return
 		completed_access = job and job.job_status == "Completed" and has_matter_access(job.engagement, "view")
-		approval_preview = job and job.job_status == "Ready for Delivery" and has_matter_access(job.engagement, "approve")
+		approval_preview = (
+			job
+			and job.job_status == "Ready for Delivery"
+			and can_approve_deliverables()
+			and has_matter_access(job.engagement, "approve")
+		)
 		if not (
 			job
 			and job.customer == portal_user.client
