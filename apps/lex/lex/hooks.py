@@ -26,17 +26,17 @@ add_to_apps_screen = [
 # Includes in <head>
 # ------------------
 
-# include js, css files in header of desk.html
-app_include_css = "/assets/lex/css/lexocrates_branding.css?v=20260903-1"
+# Keep Frappe's standard Desk and website theme. Lex functionality scripts are
+# still loaded below, but the old global branding stylesheet is intentionally
+# not injected because it replaced Frappe's standard colors and controls.
 app_include_js = [
 	"/assets/lex/js/lexocrates_realtime_transport.js?v=20260901-2",
 	"/assets/lex/js/lexocrates_chat_sound.js?v=20260825-1",
 	"/assets/lex/js/lexocrates_desk_navbar.js?v=20260901-1",
 ]
 
-# include js, css files in header of web template
-web_include_css = "/assets/lex/css/lexocrates_branding.css?v=20260818-1"
-web_include_js = "/assets/lex/js/lexocrates_login_enhance.js?v=20260826-2"
+# Do not inject a global website stylesheet or login enhancer. Frappe's
+# standard website/login theme should be used on every web route.
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "lex/public/scss/website"

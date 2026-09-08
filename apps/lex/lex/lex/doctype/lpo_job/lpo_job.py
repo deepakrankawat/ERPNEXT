@@ -260,6 +260,8 @@ class LPOJob(Document):
 
 		if not frappe.db.get_value("User", self.assigned_analyst, "enabled"):
 			frappe.throw(_("Assigned Analyst must be an enabled user."), frappe.ValidationError)
+		if frappe.db.get_value("User", self.assigned_analyst, "user_type") != "System User":
+			frappe.throw(_("Assigned Analyst must be a System User."), frappe.ValidationError)
 		roles = set(frappe.get_roles(self.assigned_analyst))
 		if self.assigned_analyst != "Administrator" and not roles.intersection(ASSIGNABLE_ROLES):
 			frappe.throw(

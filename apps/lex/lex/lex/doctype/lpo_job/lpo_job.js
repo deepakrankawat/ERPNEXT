@@ -3,6 +3,9 @@ frappe.ui.form.on("LPO Job", {
 		frm.set_query("engagement", () => ({
 			filters: { status: ["in", ["Draft", "Active"]] },
 		}));
+		frm.set_query("assigned_analyst", () => ({
+			filters: { enabled: 1, user_type: "System User" },
+		}));
 	},
 
 	refresh(frm) {

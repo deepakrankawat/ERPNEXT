@@ -49,3 +49,6 @@ tmp/
 output/
 scratch/
 *.swp
+
+# Required Frappe schema for fresh site installation
+!apps/frappe/frappe/database/mariadb/framework_mariadb.sql

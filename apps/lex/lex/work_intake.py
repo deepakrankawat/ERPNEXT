@@ -1711,7 +1711,9 @@ def _notify_ceo_of_pending_pricing(doc):
 		return
 	ceo_users = [
 		user for user in frappe.get_all("Has Role", filters={"role": "CEO", "parenttype": "User"}, pluck="parent")
-		if user not in ("Administrator", "Guest") and frappe.db.get_value("User", user, "enabled")
+		if user not in ("Administrator", "Guest")
+		and frappe.db.get_value("User", user, "enabled")
+		and frappe.db.get_value("User", user, "user_type") == "System User"
 	]
 	if not ceo_users:
 		frappe.log_error("No enabled CEO user found to notify for pricing approval.", "Work Intake Pricing Approval")

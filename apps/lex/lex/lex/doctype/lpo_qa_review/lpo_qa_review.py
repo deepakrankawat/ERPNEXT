@@ -44,6 +44,8 @@ class LPOQAReview(Document):
 	def _validate_reviewer(self):
 		if not frappe.db.get_value("User", self.reviewer, "enabled"):
 			frappe.throw(_("Reviewer must be an enabled user."), frappe.ValidationError)
+		if frappe.db.get_value("User", self.reviewer, "user_type") != "System User":
+			frappe.throw(_("Reviewer must be a System User."), frappe.ValidationError)
 		roles = set(frappe.get_roles(self.reviewer))
 		if self.reviewer != "Administrator" and not roles.intersection(
 			MANAGEMENT_ROLES | {"LPO_Analyst"}

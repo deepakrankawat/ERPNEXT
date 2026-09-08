@@ -17,3 +17,6 @@ apps/frappe/frappe/public/node_modules
 apps/erpnext/erpnext/public/node_modules
 env
 venv
+
+# Required Frappe schema for fresh site installation
+!apps/frappe/frappe/database/mariadb/framework_mariadb.sql

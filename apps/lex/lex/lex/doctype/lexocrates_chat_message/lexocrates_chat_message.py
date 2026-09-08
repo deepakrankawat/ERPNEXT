@@ -15,6 +15,7 @@ from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 	can_post_to_channel,
 	can_view_channel,
 	get_user_chat_identity,
+	is_client_only_user,
 	get_permission_query_conditions as get_channel_permission_query_conditions,
 )
 
@@ -408,6 +409,14 @@ def serialize_message(
 		sender_identity = get_user_chat_identity(get("sender"))
 	if sender_full_name is None:
 		sender_full_name = sender_identity.get("full_name")
+	channel = frappe.get_doc("Lexocrates Chat Channel", get("channel"))
+	redact_internal_identity = (
+		is_client_only_user()
+		and channel.reference_doctype in {"LPO Matter", "LPO Job"}
+		and sender_identity.get("user_type") == "System User"
+	)
+	if redact_internal_identity:
+		sender_full_name = sender_identity.get("primary_role") or _("System User")
 	timestamp = get("sent_at")
 	return {
 		"protocol_version": CHAT_PROTOCOL_VERSION,
@@ -418,11 +427,11 @@ def serialize_message(
 		"channel_sequence": int(get("channel_sequence") or 0),
 		"client_message_id": get("client_message_id"),
 		"sender": get("sender"),
-		"sender_full_name": sender_full_name or get("sender"),
+		"sender_full_name": sender_full_name or (_("System User") if redact_internal_identity else get("sender")),
 		"sender_role": sender_identity.get("primary_role"),
 		"sender_roles": sender_identity.get("roles") or [],
 		"sender_user_type": sender_identity.get("user_type"),
-		"sender_image": sender_identity.get("user_image"),
+		"sender_image": None if redact_internal_identity else sender_identity.get("user_image"),
 		"message_text": get("message_text"),
 		"sent_at": str(timestamp),
 		"formatted_timestamp": format_datetime(timestamp),
@@ -1078,11 +1087,11 @@ def publish_typing(channel: str, is_typing: int = 1) -> dict:
 	channel_doc = frappe.get_doc("Lexocrates Chat Channel", channel)
 	if not can_view_channel(channel_doc):
 		frappe.throw(_("You cannot access this channel."), frappe.PermissionError)
+	identity = get_user_chat_identity(frappe.session.user)
 	payload = {
 		"channel": channel,
 		"user": frappe.session.user,
-		"full_name": frappe.db.get_value("User", frappe.session.user, "full_name")
-		or frappe.session.user,
+		"full_name": identity.get("full_name") or frappe.session.user,
 		"is_typing": bool(int(is_typing or 0)),
 	}
 	frappe.publish_realtime(

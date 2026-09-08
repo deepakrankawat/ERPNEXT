@@ -922,7 +922,7 @@ def send_email_login_link(email: str, redirect_to: str | None = None):
 				message=_(
 					"Click the link below to sign in to Lexocrates (valid for 15 minutes):<br><br><a href=\"{0}\"><strong>Sign In to Lexocrates</strong></a>"
 				).format(login_url),
-				now=False,
+				now=True,
 			)
 		except Exception:
 			frappe.cache().delete_value(cache_key)
@@ -1066,7 +1066,7 @@ def send_client_email_login_link(email: str, redirect_to: str | None = None):
 				message=_(
 					"Click the link below to sign in to your Lexocrates Client Workspace (valid for 15 minutes):<br><br><a href=\"{0}\"><strong>Sign In to Client Portal</strong></a>"
 				).format(login_url),
-				now=False,
+				now=True,
 			)
 		except Exception:
 			frappe.cache().delete_value(cache_key)

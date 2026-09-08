@@ -68,6 +68,7 @@ bench_exec() {
 }
 
 echo "[4/6] Preparing common Frappe configuration and site..."
+bench_exec python -c 'from pathlib import Path; p = Path("sites/common_site_config.json"); p.exists() or p.write_text("{}\n")'
 bench_exec bench set-config -g db_host mariadb
 bench_exec bench set-config -g redis_cache redis://redis-cache:6379
 bench_exec bench set-config -g redis_queue redis://redis-queue:6379
@@ -80,7 +81,9 @@ if ! bench_exec test -f "sites/$SITE_NAME/site_config.json"; then
 	bench_exec bench new-site "$SITE_NAME" \
 		--admin-password "$ADMIN_PASSWORD" \
 		--db-root-password "$DB_ROOT_PASSWORD" \
-		--no-mariadb-socket
+		--mariadb-user-host-login-scope="%"
+	bench_exec bench --site "$SITE_NAME" execute frappe.db.set_single_value \
+		--args '["System Settings", {"language": "en", "time_zone": "UTC"}]'
 fi
 
 echo "[5/6] Installing apps and applying migrations..."
@@ -92,6 +95,8 @@ done
 bench_exec bench --site "$SITE_NAME" set-config developer_mode 0
 bench_exec bench --site "$SITE_NAME" set-config allow_tests 0
 bench_exec bench --site "$SITE_NAME" set-config host_name "https://$SITE_NAME"
+bench_exec bench --site "$SITE_NAME" set-config restart_supervisor_on_update 1
+bench_exec bench --site "$SITE_NAME" set-config disable_website_cache 1
 bench_exec bench --site "$SITE_NAME" migrate
 bench_exec bench --site "$SITE_NAME" enable-scheduler
 bench_exec bench --site "$SITE_NAME" clear-cache

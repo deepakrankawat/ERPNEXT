@@ -123,10 +123,14 @@ def _serialize_presence(user: str, row=None, details=None, *, at=None) -> dict:
 	last_activity = row.get("last_activity_at") if row else None
 	if status == "Offline":
 		last_seen = last_heartbeat or last_seen or details.get("last_active")
+	from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import get_user_chat_identity, is_client_only_user
+	identity = get_user_chat_identity(user)
+	client_viewer = is_client_only_user() and identity.get("user_type") == "System User"
 	return {
 		"user": user,
-		"full_name": details.get("full_name") or user,
-		"user_image": details.get("user_image"),
+		"full_name": identity.get("primary_role") if client_viewer else (details.get("full_name") or user),
+		"user_image": None if client_viewer else details.get("user_image"),
+		"role": identity.get("primary_role"),
 		"status": status,
 		"preferred_status": row.get("preferred_status") if row else "Online",
 		"last_seen_at": str(last_seen) if last_seen else None,

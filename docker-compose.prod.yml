@@ -95,7 +95,7 @@ services:
       # callback to 127.0.0.1:8000 reaches Gunicorn, as required by Frappe v15.
       - 127.0.0.1:${SOCKETIO_PORT:-9000}:9000
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/method/ping"]
+      test: ["CMD", "curl", "--fail", "--silent", "--header", "Host: ${SITE_NAME:?Set SITE_NAME in .env}", "http://127.0.0.1:8000/api/method/ping"]
       interval: 30s
       timeout: 10s
       retries: 10

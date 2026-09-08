@@ -339,6 +339,19 @@ def get_user_chat_identity(user: str) -> dict:
 		ordered_roles = [role for role in CHAT_ROLE_PRIORITY if role in roles]
 		if not ordered_roles:
 			ordered_roles = [primary_role]
+	# Client users may participate in matter chats, but internal staff identity
+	# remains role-based. Keep the actual User value server-side for authorization;
+	# the presentation payload contains only the business role.
+	client_viewer = is_client_only_user()
+	if client_viewer and account.user_type == "System User":
+		return frappe._dict({
+			"name": primary_role,
+			"full_name": primary_role,
+			"user_image": None,
+			"user_type": "System User",
+			"primary_role": primary_role,
+			"roles": [primary_role],
+		})
 	return frappe._dict({
 		"name": account.name,
 		"full_name": account.full_name or account.name,
@@ -365,6 +378,10 @@ def can_view_channel(doc, user: str | None = None, debug: bool = False) -> bool:
 			and can_start_direct_message(user)
 			and all(can_start_direct_message(row.user) for row in doc.members)
 		)
+	# Private channels are strictly member-scoped. This check deliberately comes
+	# before management access so Administrator and managers cannot bypass it.
+	if doc.channel_type == "Private":
+		return bool(member)
 	# Clients are isolated from all internal/global channels. They only enter a
 	# deliberately provisioned private or client-owned contextual channel.
 	if is_client_only_user(user):
@@ -421,9 +438,11 @@ def can_post_to_channel(doc, user: str | None = None) -> bool:
 
 def can_manage_channel(doc, user: str | None = None) -> bool:
 	user = user or frappe.session.user
+	member = _member_row(doc, user)
+	if doc.channel_type == "Private":
+		return bool(member and member.channel_role in {"Owner", "Moderator"} and member.can_invite_members)
 	if is_management_user(user):
 		return True
-	member = _member_row(doc, user)
 	return bool(
 		member
 		and member.channel_role in {"Owner", "Moderator"}
@@ -445,7 +464,16 @@ def has_permission(doc, ptype="read", user=None, debug=False):
 def get_permission_query_conditions(user=None):
 	user = user or frappe.session.user
 	if is_management_user(user):
-		return ""
+		escaped_user = frappe.db.escape(user)
+		return f"""
+			`tabLexocrates Chat Channel`.channel_type != 'Private'
+			or exists (
+				select 1 from `tabLexocrates Chat Member` member
+				where member.parent = `tabLexocrates Chat Channel`.name
+					and member.parenttype = 'Lexocrates Chat Channel'
+					and member.user = {escaped_user}
+			)
+		"""
 	if not is_chat_user(user):
 		return "1=0"
 

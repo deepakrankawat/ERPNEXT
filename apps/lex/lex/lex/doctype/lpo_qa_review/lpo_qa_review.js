@@ -13,3 +13,10 @@ frappe.ui.form.on("LPO QA Review", {
 		}
 	},
 });
+frappe.ui.form.on("LPO QA Review", {
+	setup(frm) {
+		frm.set_query("reviewer", () => ({
+			filters: { enabled: 1, user_type: "System User" },
+		}));
+	},
+});
