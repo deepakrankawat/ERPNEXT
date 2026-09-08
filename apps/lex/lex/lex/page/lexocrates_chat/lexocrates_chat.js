@@ -107,8 +107,8 @@ class LexocratesChatPage {
 							</div>
 						</div>
 						<div class="lex-chat__brand-actions">
-							<button class="btn btn-default btn-sm lex-chat__new-dm hidden" title="${__("New direct message")}">${frappe.utils.icon("user-plus", "sm")}</button>
-							<button class="btn btn-primary btn-sm lex-chat__new-channel hidden" title="${__("Create channel")}">+</button>
+							<button type="button" class="btn btn-default btn-sm lex-chat__new-dm hidden" aria-label="${__("New direct message")}" title="${__("New direct message")}">${frappe.utils.icon("users", "sm")}<span>${__("Message user")}</span></button>
+							<button type="button" class="btn btn-primary btn-sm lex-chat__new-channel hidden" aria-label="${__("Create channel")}" title="${__("Create channel")}">${frappe.utils.icon("add", "sm")}<span>${__("New channel")}</span></button>
 						</div>
 					</div>
 					<div class="lex-chat__self-presence">
@@ -1863,6 +1863,7 @@ class LexocratesChatPage {
 				if (created.message?.name) await this.open_channel(created.message.name);
 			},
 		});
+		dialog.$wrapper.addClass("lex-chat__dm-dialog");
 		dialog.show();
 	}
 

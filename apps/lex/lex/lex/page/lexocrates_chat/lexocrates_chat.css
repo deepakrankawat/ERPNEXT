@@ -1393,12 +1393,15 @@ body[data-route="lexocrates-chat"] .lex-floating-chat-container {
 .lex-chat__brand {
 	min-height: 88px;
 	padding: 14px 16px;
+	align-items: flex-start;
+	flex-wrap: wrap;
 	border-bottom-color: var(--lex-border, #e1e6ea);
 	background: linear-gradient(135deg, var(--lex-surface, #ffffff), var(--lex-accent-soft, #e1f5f2));
 }
 
 .lex-chat__brand-identity {
 	display: flex;
+	width: 100%;
 	min-width: 0;
 	flex-direction: column;
 	gap: 4px;
@@ -1430,13 +1433,69 @@ body[data-route="lexocrates-chat"] .lex-floating-chat-container {
 	letter-spacing: 0.08em;
 }
 
+.lex-chat__brand-actions {
+	display: grid;
+	width: 100%;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+}
+
 .lex-chat__brand-actions .btn {
-	width: 32px;
-	height: 32px;
-	padding: 0;
+	display: inline-flex;
+	width: 100%;
+	height: 34px;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	padding: 0 10px;
+	border: 1px solid var(--lex-border-strong, #ccd4db);
 	border-radius: 9px;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.lex-chat__brand-actions .btn .icon {
+	display: block !important;
+	width: 16px;
+	height: 16px;
+	flex: 0 0 16px;
+}
+
+.lex-chat__brand-actions .btn-default {
+	background: var(--lex-surface, #ffffff);
 	color: var(--lex-primary, #1e293b) !important;
 	--icon-stroke: var(--lex-primary, #1e293b);
+}
+
+.lex-chat__brand-actions .btn-primary {
+	border-color: var(--lex-primary, #1e293b);
+	background: var(--lex-primary, #1e293b);
+	color: #ffffff !important;
+	--icon-stroke: #ffffff;
+}
+
+.lex-chat__brand-actions .btn-primary:hover,
+.lex-chat__brand-actions .btn-primary:focus-visible {
+	border-color: var(--lex-primary-hover, #0f172a);
+	background: var(--lex-primary-hover, #0f172a);
+}
+
+.lex-chat__dm-dialog .modal-body {
+	min-height: 260px;
+}
+
+.lex-chat__dm-dialog .awesomplete [role="listbox"],
+.lex-chat__dm-dialog .awesomplete ul {
+	max-height: 180px;
+	overflow-y: auto;
+}
+
+.lex-chat__dm-dialog .modal-footer {
+	position: relative;
+	z-index: 3;
+	border-top-color: var(--lex-border, #e1e6ea);
+	background: var(--lex-surface, #ffffff);
 }
 
 .lex-chat__self-presence {
@@ -1529,12 +1588,17 @@ body[data-route="lexocrates-chat"] .lex-floating-chat-container {
 	font-weight: 700;
 }
 
-.lex-chat__unread {
+.lex-chat__unread.indicator-pill {
 	min-width: 21px;
 	border: 0;
 	background: var(--lex-red, #b42318) !important;
-	color: #ffffff;
+	color: #ffffff !important;
 	font-weight: 700;
+	text-align: center;
+}
+
+.lex-chat__unread.indicator-pill::before {
+	display: none;
 }
 
 .lex-chat__conversation,
@@ -1602,6 +1666,31 @@ body[data-route="lexocrates-chat"] .lex-floating-chat-container {
 	border-radius: 5px 15px 15px 15px;
 	background: var(--lex-surface, #ffffff);
 	box-shadow: var(--lex-shadow-sm, 0 1px 2px rgba(16, 24, 40, 0.05));
+}
+
+.lex-chat__message:not(.is-own):not(.is-system) .lex-chat__bubble {
+	border-color: var(--lex-border-strong, #ccd4db);
+	border-left: 3px solid var(--lex-accent, #0d9488);
+	background: var(--lex-surface, #ffffff);
+	color: var(--lex-ink, #101828);
+	box-shadow: 0 4px 14px rgba(16, 24, 40, 0.1);
+}
+
+.lex-chat__message:not(.is-own):not(.is-system) .lex-chat__message-head strong,
+.lex-chat__message:not(.is-own):not(.is-system) .lex-chat__message-body {
+	color: var(--lex-ink, #101828);
+}
+
+.lex-chat__message:not(.is-own):not(.is-system) .lex-chat__message-head time,
+.lex-chat__message:not(.is-own):not(.is-system) .lex-chat__message-footer {
+	color: var(--lex-ink-muted, #5c6b7a);
+}
+
+.lex-chat__message:not(.is-own):not(.is-system) .lex-chat__avatar .standard-image {
+	border: 1px solid color-mix(in srgb, var(--lex-accent, #0d9488) 38%, var(--lex-border, #e1e6ea));
+	background: var(--lex-accent-soft, #e1f5f2) !important;
+	color: var(--lex-accent, #0d9488) !important;
+	font-weight: 700;
 }
 
 .lex-chat__message.is-own .lex-chat__bubble {
