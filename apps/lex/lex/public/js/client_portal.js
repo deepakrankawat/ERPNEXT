@@ -384,7 +384,7 @@
 	}
 
 	function messagesSection() {
-		return `<section class="lex-section" data-panel="messages">${sectionHeader("Secure Messages", "Real-time, contextual and auditable communication")}<article class="lex-card widget border"><div class="lex-chat"><div id="lex-chat-channels" class="lex-chat-sidebar">${empty("Loading Matter conversations...")}</div><div class="lex-chat-main"><div id="lex-chat-header" class="lex-chat-header"><strong>Choose a Matter conversation</strong><span>Your Matter rooms and approved conversations</span></div><div id="lex-chat-messages" class="lex-chat-messages" role="log" aria-live="polite" tabindex="0" aria-label="Conversation history">${empty("Choose a Matter room to view messages.")}</div><form id="lex-chat-compose" class="lex-chat-compose"><select class="form-control lex-chat-job-picker" name="job_mention" aria-label="Mention a related Job" disabled><option value="">@ Job</option></select><input class="form-control" name="message" maxlength="10000" placeholder="Write a secure message" autocomplete="off" disabled><button class="lex-button btn btn-primary btn-sm" type="submit" disabled>Send</button></form></div></div></article></section>`;
+		return `<section class="lex-section" data-panel="messages">${sectionHeader("Secure Messages", "Real-time, contextual and auditable communication")}<article class="lex-card widget border lex-chat-card"><div class="lex-chat"><aside id="lex-chat-channels" class="lex-chat-sidebar" aria-label="Matter conversations">${empty("Loading Matter conversations...")}</aside><main class="lex-chat-main"><header id="lex-chat-header" class="lex-chat-header"><button class="lex-chat-mobile-back" type="button" aria-label="Back to conversations"><span aria-hidden="true">&#8592;</span></button><div class="lex-chat-header-copy"><strong>Choose a Matter conversation</strong><span>Your Matter rooms and approved conversations</span></div><span class="lex-chat-security">Private channel</span></header><div id="lex-chat-messages" class="lex-chat-messages" role="log" aria-live="polite" tabindex="0" aria-label="Conversation history">${empty("Choose a Matter room to view messages.")}</div><form id="lex-chat-compose" class="lex-chat-compose"><select class="form-control lex-chat-job-picker" name="job_mention" aria-label="Mention a related Job" disabled><option value="">@ Job</option></select><input class="form-control" name="message" maxlength="10000" placeholder="Write a secure message" aria-label="Message" autocomplete="off" disabled><button class="lex-button btn btn-primary btn-sm" type="submit" disabled>Send</button></form></main></div></article></section>`;
 	}
 
 	function billingSection(data) {
@@ -748,6 +748,12 @@
 		const header = document.getElementById("lex-chat-header");
 		const form = document.getElementById("lex-chat-compose");
 		if (!channelBox || !messageBox || !form) return;
+		const chat = channelBox.closest(".lex-chat");
+		const headerTitle = header?.querySelector("strong");
+		const headerSubtitle = header?.querySelector(".lex-chat-header-copy span");
+		header?.querySelector(".lex-chat-mobile-back")?.addEventListener("click", () => {
+			chat?.classList.remove("is-conversation-open");
+		});
 		bindChatWheel(messageBox.closest(".lex-chat-main"), messageBox);
 		let selected = null;
 		let realtimeUnsubscribe = null;
@@ -803,13 +809,20 @@
 				button.classList.toggle("hidden", Boolean(value) && !button.dataset.matterSearch.includes(value));
 			});
 		});
+		let initializingChannel = true;
 		for (const button of channelBox.querySelectorAll("[data-channel]")) button.addEventListener("click", async () => {
 			const generation = ++channelGeneration;
 			realtimeUnsubscribe?.();
 			realtimeUnsubscribe = null;
 			selected = channels.find((item) => item.name === button.dataset.channel); if (!selected) return;
+			if (!initializingChannel) chat?.classList.add("is-conversation-open");
 			channelBox.querySelectorAll("[data-channel]").forEach((item) => item.classList.remove("active")); button.classList.add("active"); button.querySelector(".lex-nav-badge")?.remove();
-			header.innerHTML = `<strong>${escapeHTML(selected.display_name || selected.channel_name)}</strong><span>${escapeHTML(selected.description || selected.reference_name || "Secure conversation")}</span>`;
+			if (headerTitle) headerTitle.textContent = selected.matter_title || selected.display_name || selected.channel_name;
+			if (headerSubtitle) {
+				headerSubtitle.textContent = selected.is_matter_channel
+					? [selected.matter_id, selected.organization_name || selected.organization_id].filter(Boolean).join(" / ")
+					: selected.description || selected.reference_name || "Secure conversation";
+			}
 			const messages = await call("lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message.get_messages", { channel: selected.name, limit: 100 });
 			if (generation !== channelGeneration) return;
 			renderMessages(messages, messageBox);
@@ -841,6 +854,7 @@
 			input.focus();
 		});
 		channelBox.querySelector("[data-channel]")?.click();
+		initializingChannel = false;
 		form.addEventListener("submit", async (event) => {
 			event.preventDefault(); const text = form.elements.message.value.trim(); if (!selected || !text) return; const button = form.querySelector("button"); button.disabled = true;
 			const sendChannel = selected;

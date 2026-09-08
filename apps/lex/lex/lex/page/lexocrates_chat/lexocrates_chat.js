@@ -99,9 +99,12 @@ class LexocratesChatPage {
 			`<div class="lex-chat" aria-label="${__("Lexocrates internal communication")}">
 				<aside class="lex-chat__sidebar">
 					<div class="lex-chat__brand">
-						<div>
-							<div class="lex-chat__eyebrow">${__("Lexocrates Legal Services")}</div>
-							<h2>${__("Internal Channels")}</h2>
+						<div class="lex-chat__brand-identity">
+							<img class="lex-chat__brand-logo" src="/assets/lex/images/lexocrates-logo-dark.svg" alt="Lexocrates">
+							<div>
+								<div class="lex-chat__eyebrow">${__("Secure team workspace")}</div>
+								<h2>${__("Conversations")}</h2>
+							</div>
 						</div>
 						<div class="lex-chat__brand-actions">
 							<button class="btn btn-default btn-sm lex-chat__new-dm hidden" title="${__("New direct message")}">${frappe.utils.icon("user-plus", "sm")}</button>
@@ -137,6 +140,7 @@ class LexocratesChatPage {
 				</div>
 				<div class="lex-chat__active hidden">
 					<header class="lex-chat__header">
+						<button class="btn btn-default btn-sm lex-chat__mobile-back" type="button" aria-label="${__("Back to conversations")}"><span aria-hidden="true">&#8592;</span></button>
 						<div class="lex-chat__header-copy">
 							<div class="lex-chat__channel-title"></div>
 							<div class="lex-chat__channel-meta text-muted"></div>
@@ -225,6 +229,9 @@ class LexocratesChatPage {
 		});
 		this.$root.find(".lex-chat__new-channel").on("click", () => this.open_channel_dialog());
 		this.$root.find(".lex-chat__new-dm").on("click", () => this.open_direct_message_dialog());
+		this.$root.find(".lex-chat__mobile-back").on("click", () => {
+			this.$root.removeClass("is-conversation-open");
+		});
 		this.$root.find(".lex-chat__members").on("click", () => this.open_channel_members_dialog());
 		this.$root.find(".lex-chat__presence-select").on("change", (event) => {
 			this.set_manual_presence($(event.currentTarget).val());
@@ -1120,6 +1127,7 @@ class LexocratesChatPage {
 		this.realtime_unsubscribe = null;
 		this.selected_channel = channel_name;
 		this.selected_channel_doc = channel;
+		this.$root.addClass("is-conversation-open");
 		this.messages.clear();
 		this.typing_users.clear();
 		this.attachments = [];

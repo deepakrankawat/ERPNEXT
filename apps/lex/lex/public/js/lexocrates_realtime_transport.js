@@ -1,4 +1,5 @@
-frappe.provide("lex.chat");
+window.lex = window.lex || {};
+window.lex.chat = window.lex.chat || {};
 
 (() => {
 	if (window.lexocratesReliableChat) return;
@@ -212,5 +213,5 @@ frappe.provide("lex.chat");
 	}
 
 	window.lexocratesReliableChat = new ReliableChatTransport();
-	lex.chat.realtime = window.lexocratesReliableChat;
+	window.lex.chat.realtime = window.lexocratesReliableChat;
 })();

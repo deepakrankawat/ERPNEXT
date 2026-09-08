@@ -1,5 +1,186 @@
 /* Canonical Lexocrates branding shared by Desk and Website surfaces. */
 
+/* Shared product tokens. The app uses classic Frappe assets, so these map the
+   Lexocrates palette directly onto the semantic variables used by Desk. */
+:root,
+[data-theme="light"] {
+	--lex-bg: #f4f6f8;
+	--lex-surface: #ffffff;
+	--lex-surface-2: #eef1f4;
+	--lex-surface-3: #e4e9ee;
+	--lex-border: #e1e6ea;
+	--lex-border-strong: #ccd4db;
+	--lex-ink: #101828;
+	--lex-ink-muted: #5c6b7a;
+	--lex-ink-faint: #8a97a3;
+	--lex-primary: #1e293b;
+	--lex-primary-hover: #0f172a;
+	--lex-primary-soft: #e8ecf1;
+	--lex-accent: #0d9488;
+	--lex-accent-soft: #e1f5f2;
+	--lex-green: #157347;
+	--lex-green-bg: #dcf5e6;
+	--lex-red: #b42318;
+	--lex-red-bg: #fde3e0;
+	--lex-orange: #b45309;
+	--lex-orange-bg: #fef1d6;
+	--lex-blue: #1d4ed8;
+	--lex-blue-bg: #e1eaff;
+	--lex-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+	--lex-shadow-md: 0 6px 18px rgba(16, 24, 40, 0.08);
+	--lex-shadow-lg: 0 20px 44px rgba(16, 24, 40, 0.14);
+	--lex-radius-sm: 8px;
+	--lex-radius-md: 12px;
+	--lex-radius-lg: 18px;
+	--lex-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+	--gray-50: #f4f6f8;
+	--gray-100: #eef1f4;
+	--gray-200: #e1e6ea;
+	--gray-300: #ccd4db;
+	--gray-500: #8a97a3;
+	--gray-600: #8a97a3;
+	--gray-700: #5c6b7a;
+	--gray-800: #344054;
+	--gray-900: #101828;
+	--text-color: #101828;
+	--heading-color: #101828;
+	--text-muted: #5c6b7a;
+	--bg-color: #f4f6f8;
+	--fg-color: #ffffff;
+	--subtle-accent: #f4f6f8;
+	--subtle-fg: #eef1f4;
+	--navbar-bg: #ffffff;
+	--fg-hover-color: #eef1f4;
+	--card-bg: #ffffff;
+	--control-bg: #ffffff;
+	--control-bg-on-gray: #eef1f4;
+	--disabled-control-bg: #eef1f4;
+	--modal-bg: #ffffff;
+	--popover-bg: #ffffff;
+	--border-color: #e1e6ea;
+	--dark-border-color: #ccd4db;
+	--table-border-color: #e1e6ea;
+	--btn-default-bg: #eef1f4;
+	--btn-default-hover-bg: #e4e9ee;
+	--scrollbar-thumb-color: #8a97a3;
+	--scrollbar-track-color: #eef1f4;
+	--input-height: 36px;
+	--btn-height: 34px;
+	--navbar-height: 70px;
+}
+
+[data-theme="dark"] {
+	--lex-bg: #0a0f1a;
+	--lex-surface: #121a29;
+	--lex-surface-2: #182335;
+	--lex-surface-3: #223047;
+	--lex-border: #263248;
+	--lex-border-strong: #3a4962;
+	--lex-ink: #eaf0f6;
+	--lex-ink-muted: #a9b8c9;
+	--lex-ink-faint: #7f90a6;
+	--lex-primary: #9cbfe6;
+	--lex-primary-hover: #b7d1ed;
+	--lex-primary-soft: #1c2a3f;
+	--lex-accent: #2dd4bf;
+	--lex-accent-soft: #10312d;
+	--lex-green: #65d493;
+	--lex-green-bg: #123524;
+	--lex-red: #f68f85;
+	--lex-red-bg: #3a1614;
+	--lex-orange: #f2b56d;
+	--lex-orange-bg: #3b2915;
+	--lex-blue: #8eb5ff;
+	--lex-blue-bg: #172b54;
+	--lex-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+	--lex-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+	--lex-shadow-lg: 0 22px 54px rgba(0, 0, 0, 0.4);
+	--text-color: #eaf0f6;
+	--heading-color: #eaf0f6;
+	--text-muted: #a9b8c9;
+	--bg-color: #0a0f1a;
+	--fg-color: #121a29;
+	--subtle-accent: #121a29;
+	--subtle-fg: #182335;
+	--navbar-bg: #121a29;
+	--fg-hover-color: #223047;
+	--card-bg: #121a29;
+	--control-bg: #182335;
+	--control-bg-on-gray: #223047;
+	--disabled-control-bg: #182335;
+	--modal-bg: #121a29;
+	--popover-bg: #121a29;
+	--border-color: #263248;
+	--dark-border-color: #3a4962;
+	--table-border-color: #263248;
+	--btn-default-bg: #182335;
+	--btn-default-hover-bg: #223047;
+	--scrollbar-thumb-color: #60738c;
+	--scrollbar-track-color: #182335;
+	--input-height: 36px;
+	--btn-height: 34px;
+	--navbar-height: 70px;
+}
+
+html,
+body {
+	font-family: var(--lex-font);
+}
+
+body {
+	background-color: var(--lex-bg);
+	color: var(--lex-ink);
+}
+
+.page-head,
+.navbar,
+.web-header {
+	background-color: var(--lex-surface) !important;
+	border-color: var(--lex-border) !important;
+}
+
+.frappe-card,
+.widget,
+.modal-content,
+.dropdown-menu {
+	border-color: var(--lex-border) !important;
+	background-color: var(--lex-surface) !important;
+	box-shadow: var(--lex-shadow-sm);
+}
+
+.btn-primary {
+	background-color: var(--lex-primary) !important;
+	border-color: var(--lex-primary) !important;
+	color: #ffffff !important;
+	box-shadow: var(--lex-shadow-sm);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+	background-color: var(--lex-primary-hover) !important;
+	border-color: var(--lex-primary-hover) !important;
+}
+
+.btn-default {
+	border-color: var(--lex-border) !important;
+}
+
+.standard-sidebar-item.selected,
+.standard-sidebar-item.active,
+.desk-sidebar .sidebar-item.selected {
+	background: var(--lex-primary-soft) !important;
+	color: var(--lex-primary) !important;
+	box-shadow: inset 3px 0 0 var(--lex-accent);
+}
+
+a:not(.btn):focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible {
+	outline: 2px solid var(--lex-accent) !important;
+	outline-offset: 2px;
+}
+
 /* Desk brand color pass: overrides Frappe's own semantic color variables
    (frappe/public/scss/common/css_variables.scss + desk/dark.scss) so
    buttons, links, the active sidebar item and borders pick up the same
@@ -13,8 +194,8 @@
 	--btn-primary: #1e293b !important;
 	--border-primary: #1e293b !important;
 	--sidebar-select-color: #e2e8f0 !important;
-	--lex-field-border: #94a3b8;
-	--lex-field-border-hover: #64748b;
+	--lex-field-border: #ccd4db;
+	--lex-field-border-hover: #8a97a3;
 	--lex-field-border-focus: #1e293b;
 }
 
@@ -25,8 +206,8 @@
 	--btn-primary: #7fa8d9 !important;
 	--border-primary: #7fa8d9 !important;
 	--sidebar-select-color: #1c2a3f !important;
-	--lex-field-border: #64748b;
-	--lex-field-border-hover: #94a3b8;
+	--lex-field-border: #3a4962;
+	--lex-field-border-hover: #7f90a6;
 	--lex-field-border-focus: #7fa8d9;
 }
 
@@ -57,7 +238,7 @@ html[data-theme="dark"] .btn-primary,
 .navbar .app-logo,
 .navbar-home .app-logo {
 	height: 58px !important;
-	max-height: 66px !important;
+	max-height: 64px !important;
 	width: auto !important;
 	object-fit: contain;
 }
@@ -107,10 +288,10 @@ html[data-theme="dark"] .lexocrates-logo-light,
 .grid-row .like-disabled-input,
 .grid-form .like-disabled-input,
 .form-in-grid .like-disabled-input {
-	background-color: var(--control-bg, #f3f4f6) !important;
+	background-color: var(--control-bg, #ffffff) !important;
 	border: 1px solid var(--lex-field-border) !important;
 	border-radius: 8px !important;
-	box-shadow: none !important;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
 	color: var(--text-color, #1f2937) !important;
 }
 
@@ -383,8 +564,10 @@ body:not([data-route]) .web-header-container,
 	position: absolute;
 	bottom: 64px;
 	right: 0;
-	width: 580px;
-	height: 480px;
+	width: 90vw;
+	max-width: 580px;
+	height: 80vh;
+	max-height: 480px;
 	background: var(--card-bg, #ffffff);
 	border: 1px solid var(--border-color, #e2e8f0);
 	border-radius: 14px;

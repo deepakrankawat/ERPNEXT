@@ -516,18 +516,22 @@ body.lex-client-workspace-page {
 
 .form-control {
 	width: 100%;
-	min-height: 36px;
-	padding: 6px 10px;
+	min-height: 40px;
+	padding: 8px 12px;
 	border: 1px solid var(--lex-border-strong);
 	border-radius: var(--lex-radius-sm);
 	background: var(--lex-surface);
 	color: var(--lex-ink);
 	font-family: inherit;
-	font-size: 13px;
+	font-size: 13.5px;
+	box-shadow: inset 0 1px 2px rgba(16, 24, 40, 0.05);
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .form-control:focus {
 	border-color: var(--lex-primary);
+	box-shadow: 0 0 0 3px var(--lex-primary-soft), inset 0 1px 2px rgba(16, 24, 40, 0.05);
+	outline: none;
 }
 
 .form-control.input-xs {
@@ -1052,9 +1056,9 @@ body.lex-portal-sidebar-open {
 .lex-card,
 .frappe-card {
 	background: var(--lex-surface);
-	border: 1px solid var(--lex-border);
+	border: 1px solid var(--lex-border-strong);
 	border-radius: var(--lex-radius-md);
-	box-shadow: var(--lex-shadow-sm);
+	box-shadow: var(--lex-shadow-md);
 	overflow: hidden;
 }
 
@@ -2478,4 +2482,292 @@ body.lex-portal-sidebar-open {
 
 @media (min-width: 768px) {
 	.d-md-block { display: block !important; }
+}
+
+/* ---------- Secure chat workspace ---------- */
+
+.lex-chat-card {
+	border-color: var(--lex-border-strong);
+	border-radius: var(--lex-radius-lg);
+	box-shadow: var(--lex-shadow-md);
+}
+
+.lex-chat-card .lex-chat {
+	height: clamp(580px, calc(100vh - 205px), 880px);
+	background: var(--lex-surface);
+}
+
+.lex-chat-card .lex-chat-sidebar {
+	background: var(--lex-surface);
+}
+
+@media (min-width: 780px) {
+	.lex-chat-card .lex-chat-sidebar {
+		width: 310px;
+	}
+}
+
+.lex-chat-card .lex-chat-matter-search {
+	padding: 14px 12px 10px;
+	background: var(--lex-surface);
+}
+
+.lex-chat-card .lex-chat-matter-search input {
+	height: 40px;
+	padding: 0 12px;
+	border-color: var(--lex-border-strong);
+	border-radius: 10px;
+	background: var(--lex-surface-2);
+}
+
+.lex-chat-card .lex-chat-matter-search input:focus {
+	border-color: var(--lex-accent);
+	box-shadow: 0 0 0 3px var(--lex-accent-soft);
+	outline: none;
+}
+
+.lex-chat-card .lex-chat-channel-list {
+	gap: 3px;
+	padding: 0 9px 14px;
+}
+
+.lex-chat-card .lex-chat-channel {
+	position: relative;
+	min-height: 62px;
+	padding: 10px;
+	border: 1px solid transparent;
+	border-radius: 11px;
+	transition: background 140ms ease, border-color 140ms ease;
+}
+
+.lex-chat-card .lex-chat-channel:hover {
+	border-color: var(--lex-border);
+	background: var(--lex-surface-2);
+}
+
+.lex-chat-card .lex-chat-channel.active {
+	border-color: var(--lex-border-strong);
+	background: var(--lex-primary-soft);
+	box-shadow: inset 3px 0 0 var(--lex-accent);
+}
+
+.lex-chat-card .lex-channel-mark {
+	width: 36px;
+	height: 36px;
+	border-radius: 11px;
+	background: var(--lex-surface-3);
+	color: var(--lex-primary);
+}
+
+.lex-chat-card .lex-channel-text strong {
+	color: var(--lex-ink);
+	font-size: 13px;
+}
+
+.lex-chat-card .lex-chat-main {
+	background: var(--lex-surface);
+}
+
+.lex-chat-card .lex-chat-header {
+	display: flex;
+	min-height: 72px;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 18px;
+	background: var(--lex-surface);
+	box-shadow: 0 1px 0 var(--lex-border);
+}
+
+.lex-chat-header-copy {
+	display: flex;
+	min-width: 0;
+	flex: 1 1 auto;
+	flex-direction: column;
+}
+
+.lex-chat-card .lex-chat-header-copy strong {
+	overflow: hidden;
+	color: var(--lex-ink);
+	font-size: 15px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.lex-chat-card .lex-chat-header-copy span {
+	overflow: hidden;
+	color: var(--lex-ink-muted);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.lex-chat-security {
+	display: inline-flex;
+	align-items: center;
+	flex: 0 0 auto;
+	padding: 5px 9px;
+	border: 1px solid color-mix(in srgb, var(--lex-accent) 28%, var(--lex-border));
+	border-radius: 999px;
+	background: var(--lex-accent-soft);
+	color: var(--lex-accent);
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+.lex-chat-mobile-back {
+	display: none;
+	width: 38px;
+	height: 38px;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 38px;
+	border: 1px solid var(--lex-border-strong);
+	border-radius: 10px;
+	background: var(--lex-surface-2);
+	color: var(--lex-primary);
+	font-size: 18px;
+	cursor: pointer;
+}
+
+.lex-chat-card .lex-chat-messages {
+	padding: 22px clamp(14px, 3vw, 36px);
+	gap: 13px;
+	background-color: var(--lex-bg);
+	background-image: radial-gradient(var(--lex-border) 0.7px, transparent 0.7px);
+	background-size: 18px 18px;
+}
+
+.lex-chat-card .lex-message {
+	max-width: min(78%, 620px);
+}
+
+.lex-chat-card .lex-message-content {
+	padding: 10px 14px;
+	border-color: var(--lex-border);
+	border-radius: 5px 15px 15px 15px;
+	background: var(--lex-surface);
+	box-shadow: var(--lex-shadow-sm);
+}
+
+.lex-chat-card .lex-message.own .lex-message-content {
+	border-color: var(--lex-primary);
+	border-radius: 15px 5px 15px 15px;
+	background: var(--lex-primary);
+	color: var(--lex-on-primary);
+}
+
+.lex-chat-card .lex-message.own .lex-message-meta strong,
+.lex-chat-card .lex-message.own .lex-message-content p {
+	color: var(--lex-on-primary);
+}
+
+.lex-chat-card .lex-message.own .lex-message-meta span {
+	color: rgba(255, 255, 255, 0.68);
+}
+
+.lex-chat-card .lex-message.system .lex-message-content {
+	border-color: color-mix(in srgb, var(--lex-orange) 28%, var(--lex-border));
+	background: var(--lex-orange-bg);
+}
+
+.lex-chat-card .lex-chat-compose {
+	gap: 9px;
+	padding: 12px 14px;
+	background: var(--lex-surface);
+	box-shadow: 0 -8px 22px rgba(16, 24, 40, 0.05);
+}
+
+.lex-chat-card .lex-chat-compose input[name="message"] {
+	min-height: 46px;
+	border-color: var(--lex-border-strong);
+	border-radius: 13px;
+	background: var(--lex-surface-2);
+}
+
+.lex-chat-card .lex-chat-compose input[name="message"]:focus {
+	border-color: var(--lex-accent);
+	box-shadow: 0 0 0 3px var(--lex-accent-soft);
+}
+
+.lex-chat-card .lex-chat-job-picker {
+	height: 42px;
+	border-radius: 10px;
+}
+
+.lex-chat-card .lex-chat-compose button {
+	min-width: 82px;
+	height: 42px;
+	border-radius: 10px;
+}
+
+@media (max-width: 779px) {
+	.lex-chat-card .lex-chat {
+		display: block;
+		height: max(560px, calc(100dvh - 180px));
+	}
+
+	.lex-chat-card .lex-chat-sidebar {
+		display: flex;
+		height: 100%;
+		max-height: none;
+		border: 0;
+	}
+
+	.lex-chat-card .lex-chat-main {
+		display: none;
+		height: 100%;
+	}
+
+	.lex-chat-card .lex-chat.is-conversation-open .lex-chat-sidebar {
+		display: none;
+	}
+
+	.lex-chat-card .lex-chat.is-conversation-open .lex-chat-main {
+		display: flex;
+	}
+
+	.lex-chat-card .lex-chat-mobile-back {
+		display: inline-flex;
+	}
+
+	.lex-chat-card .lex-chat-header {
+		min-height: 64px;
+		padding: 9px 10px;
+	}
+
+	.lex-chat-card .lex-chat-security {
+		display: none;
+	}
+
+	.lex-chat-card .lex-chat-messages {
+		padding: 16px 11px;
+	}
+
+	.lex-chat-card .lex-message {
+		max-width: 94%;
+	}
+
+	.lex-chat-card .lex-chat-compose {
+		padding: 9px;
+	}
+
+	.lex-chat-card .lex-chat-compose input[name="message"] {
+		order: 1;
+		min-width: 0;
+		flex: 1 1 0;
+	}
+
+	.lex-chat-card .lex-chat-compose button {
+		order: 2;
+		min-width: 72px;
+		padding-inline: 14px;
+	}
+
+	.lex-chat-card .lex-chat-job-picker {
+		order: 3;
+		width: 100%;
+		max-width: none;
+	}
 }
