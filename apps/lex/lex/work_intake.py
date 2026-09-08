@@ -712,6 +712,7 @@ def approve_quote_pricing(intake: str, decision: str, notes: str | None = None):
 		"Matter Pricing Approval Decision",
 		{"decision": decision, "notes": notes, "quoted_amount": doc.quoted_amount, "required_lexpoints": doc.required_lexpoints},
 	)
+	_post_ceo_approval_decision(doc, decision, notes)
 	return {"intake": doc.name, "status": doc.status, "pricing_approval_status": doc.pricing_approval_status}
 
 
@@ -735,7 +736,10 @@ def fund_with_existing_lexpoints(intake: str):
 		doc.quote_status = "Accepted"
 		doc.status = "Funded"
 		doc.save(ignore_permissions=True)
-	return _confirm_funded_intake(doc)
+	result = _confirm_funded_intake(doc)
+	doc.reload()
+	_post_ceo_payment_confirmation(doc)
+	return result
 
 
 def prepare_lexpack_purchase(intake: str, plan: str, actor=None):
@@ -788,6 +792,8 @@ def complete_lexpack_funding(purchase_doc):
 			doc.save(ignore_permissions=True)
 		_sync_job_commercial(doc)
 		result = _confirm_funded_intake(doc)
+		doc.reload()
+		_post_ceo_payment_confirmation(doc)
 		frappe.db.release_savepoint("lexpack_intake_activation")
 		return result
 	except Exception:
@@ -949,6 +955,8 @@ def complete_direct_payment(doc, payment: dict, source: str):
 		failure_reason=None,
 	)
 	result = _confirm_funded_intake(doc)
+	doc.reload()
+	_post_ceo_payment_confirmation(doc)
 	_audit(doc, "Direct Quote Paid", {"source": source, "amount": doc.quoted_amount, "currency": doc.currency})
 	return result
 
@@ -1753,6 +1761,127 @@ def _notify_ceo_of_pending_pricing(doc):
 		"CEO Pricing Approval Requested",
 		{"quoted_amount": doc.quoted_amount, "required_lexpoints": doc.required_lexpoints, "notified": ceo_users},
 	)
+	_post_ceo_approval_card(doc)
+
+
+def _post_ceo_approval_card(doc):
+	"""Post executive pricing approval card with clean document links into #ceo-pricing-approvals."""
+	try:
+		from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import ensure_ceo_approval_channel
+		from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import create_system_message
+
+		channel = ensure_ceo_approval_channel()
+		if not channel:
+			return
+
+		files = _intake_files(doc.name)
+		doc_lines = []
+		attachments = []
+		for f in files:
+			if f.custom_lex_scan_status == "Clean":
+				file_url = secure_download_url_for_file_url(f.file_url) or f.file_url
+				size_kb = max(1, round((f.file_size or 0) / 1024))
+				doc_lines.append(f"- [{f.file_name}]({file_url}) ({size_kb} KB, Clean)")
+				attachments.append(file_url)
+
+		docs_text = "\n".join(doc_lines) if doc_lines else "_No clean documents attached._"
+		instructions_snippet = (frappe.utils.strip_html(doc.detailed_instructions or doc.preliminary_details or ""))[:300]
+		if instructions_snippet:
+			instructions_snippet = f"\n> **Instructions:** {instructions_snippet}"
+
+		client_name = frappe.db.get_value("Customer", doc.client, "customer_name") or doc.client
+		desk_url = frappe.utils.get_url(f"/app/lexocrates-work-intake/{doc.name}")
+
+		msg = (
+			f"### 📋 Matter Pricing Approval Request: [{doc.intake_title}]({desk_url})\n\n"
+			f"- **Client:** {client_name} ({doc.client}) | **Submitted by:** {doc.submitted_by or 'Client'}\n"
+			f"- **Service Type:** {doc.service_type} | **Jurisdiction:** {doc.jurisdiction or 'N/A'}\n"
+			f"- **Estimated Price:** **{flt(doc.quoted_amount):,.2f} {doc.currency}**\n"
+			f"- **Required LexPoints:** **{cint(doc.required_lexpoints)} LexPoints**\n"
+			f"- **Delivery Timeline:** **{cint(doc.delivery_timeline_hours)} hours**\n"
+			f"- **Estimate Method:** {doc.estimate_method or 'Formula'}\n"
+			f"{instructions_snippet}\n\n"
+			f"**Source Documents:**\n{docs_text}\n\n"
+			f"_Awaiting CEO approval to release fixed quote to client._"
+		)
+
+		create_system_message(
+			channel=channel.name,
+			message_text=msg,
+			source_doctype="Lexocrates Work Intake",
+			source_name=doc.name,
+			automation_key=f"ceo_pricing_approval:{doc.name}:{doc.quote_version}",
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"CEO Pricing Approval Chat Notification Failed for {doc.name}")
+
+
+def _post_ceo_approval_decision(doc, decision: str, notes: str | None = None):
+	try:
+		from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import ensure_ceo_approval_channel
+		from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import create_system_message
+
+		channel = ensure_ceo_approval_channel()
+		if not channel:
+			return
+
+		desk_url = frappe.utils.get_url(f"/app/lexocrates-work-intake/{doc.name}")
+		if decision == "Approved":
+			msg = (
+				f"✅ **Matter Pricing Approved** for [{doc.intake_title}]({desk_url}) by **{frappe.session.user}**!\n"
+				f"- **Approved Amount:** **{flt(doc.quoted_amount):,.2f} {doc.currency}** ({cint(doc.required_lexpoints)} LexPoints)\n"
+				f"- **Delivery Timeline:** **{cint(doc.delivery_timeline_hours)} hours**\n"
+				f"Client payment gateway (Razorpay / LexPack) is now **unlocked** on Client Portal."
+			)
+		else:
+			msg = (
+				f"❌ **Matter Pricing Rejected** for [{doc.intake_title}]({desk_url}) by **{frappe.session.user}**.\n"
+				f"- **Reason:** {notes or 'No reason provided'}\n"
+				f"Intake returned to **Operations Review**."
+			)
+
+		create_system_message(
+			channel=channel.name,
+			message_text=msg,
+			source_doctype="Lexocrates Work Intake",
+			source_name=doc.name,
+			automation_key=f"ceo_pricing_decision:{doc.name}:{doc.quote_version}:{decision.lower()}",
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"CEO Pricing Decision Chat Notification Failed for {doc.name}")
+
+
+def _post_ceo_payment_confirmation(doc):
+	try:
+		from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import ensure_ceo_approval_channel
+		from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import create_system_message
+
+		channel = ensure_ceo_approval_channel()
+		if not channel:
+			return
+
+		desk_url = frappe.utils.get_url(f"/app/lexocrates-work-intake/{doc.name}")
+		payment_id_info = f"- **Payment Reference:** `{doc.razorpay_payment_id}`\n" if doc.razorpay_payment_id else ""
+		invoice_info = f"- **Sales Invoice:** **{doc.sales_invoice}**\n" if doc.sales_invoice else ""
+		entry_info = f"- **Payment Entry:** **{doc.payment_entry}**\n" if doc.payment_entry else ""
+		msg = (
+			f"🎉 **Work Funded & Activated** for [{doc.intake_title}]({desk_url})!\n"
+			f"- **Funding Route:** {doc.funding_route}\n"
+			f"- **Amount:** **{flt(doc.quoted_amount):,.2f} {doc.currency}** ({cint(doc.required_lexpoints)} LexPoints)\n"
+			f"{payment_id_info}{invoice_info}{entry_info}"
+			f"- **Operational SLA:** Started on `{doc.sla_started_on}` | Delivery due `{doc.delivery_due_on}`\n"
+			f"Job **{doc.job}** under Matter **{doc.matter}** is now **Active**."
+		)
+
+		create_system_message(
+			channel=channel.name,
+			message_text=msg,
+			source_doctype="Lexocrates Work Intake",
+			source_name=doc.name,
+			automation_key=f"ceo_payment_confirmed:{doc.name}:{doc.sales_invoice or doc.wallet_reservation or 'funded'}",
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"CEO Payment Confirmation Chat Notification Failed for {doc.name}")
 
 
 def _outgoing_email_is_ready() -> bool:

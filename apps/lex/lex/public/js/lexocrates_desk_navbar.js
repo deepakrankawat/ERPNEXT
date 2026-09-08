@@ -4,6 +4,7 @@
 	const CHAT_ROUTE = "/app/lexocrates-chat";
 	const API_ROOT = "lex.lex.page.lexocrates_chat.lexocrates_chat";
 	const CHAT_ROLES = new Set([
+		"CEO",
 		"LPO_Admin",
 		"LPO_Manager",
 		"LPO_Analyst",

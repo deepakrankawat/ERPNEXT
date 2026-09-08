@@ -282,6 +282,49 @@ class LexocratesChatPage {
 		this.$root.on("click", ".lex-chat__copy", (event) => {
 			this.copy_message_text($(event.currentTarget).attr("data-message"));
 		});
+		this.$root.on("click", ".lex-chat__approve-pricing", (event) => {
+			const intake = $(event.currentTarget).attr("data-intake");
+			if (!intake) return;
+			frappe.confirm(
+				__("Approve matter pricing for {0}? The client payment gateway will unlock immediately.", [intake]),
+				() => {
+					frappe.call({
+						method: "lex.work_intake.approve_quote_pricing",
+						args: { intake, decision: "Approved" },
+						freeze: true,
+						freeze_message: __("Recording pricing approval..."),
+						callback: () => {
+							frappe.show_alert({ message: __("Pricing approved; payment unlocked for client."), indicator: "green" });
+						},
+					});
+				}
+			);
+		});
+		this.$root.on("click", ".lex-chat__reject-pricing", (event) => {
+			const intake = $(event.currentTarget).attr("data-intake");
+			if (!intake) return;
+			frappe.prompt(
+				{ fieldname: "notes", label: __("Reason for rejection"), fieldtype: "Small Text", reqd: 1 },
+				(values) => {
+					frappe.call({
+						method: "lex.work_intake.approve_quote_pricing",
+						args: { intake, decision: "Rejected", notes: values.notes },
+						freeze: true,
+						freeze_message: __("Recording pricing rejection..."),
+						callback: () => {
+							frappe.show_alert({ message: __("Pricing rejected; intake returned to Operations Review."), indicator: "orange" });
+						},
+					});
+				},
+				__("Reject Matter Pricing"),
+				__("Reject")
+			);
+		});
+		this.$root.on("click", ".lex-chat__adjust-pricing", (event) => {
+			const intake = $(event.currentTarget).attr("data-intake");
+			if (!intake) return;
+			frappe.set_route("Form", "Lexocrates Work Intake", intake);
+		});
 		this.$root.find(".lex-chat__cancel-reply").on("click", () => this.clear_reply());
 		this.$root.find(".lex-chat__mention").on("click", () => this.open_mention_dialog());
 		this.$root.find(".lex-chat__job-mention").on("click", () => this.open_job_mention_dialog());
@@ -791,6 +834,25 @@ class LexocratesChatPage {
 			${message.can_edit ? `<button class="btn btn-link btn-xs lex-chat__edit" data-message="${frappe.utils.escape_html(message.name)}">${__("Edit")}</button>` : ""}
 		</div>`;
 
+		let approval_toolbar = "";
+		if (
+			message.source_doctype === "Lexocrates Work Intake" &&
+			(message.automation_key || "").startsWith("ceo_pricing_approval:") &&
+			(frappe.session.user === "Administrator" || frappe.user.has_role("CEO") || frappe.user.has_role("LPO_Admin"))
+		) {
+			approval_toolbar = `<div class="lex-chat__approval-box mt-2 pt-2 border-top" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+				<button class="btn btn-primary btn-xs lex-chat__approve-pricing" data-intake="${frappe.utils.escape_html(message.source_name)}">
+					✓ ${__("Approve Pricing")}
+				</button>
+				<button class="btn btn-default btn-xs lex-chat__adjust-pricing" data-intake="${frappe.utils.escape_html(message.source_name)}">
+					✏️ ${__("Open Intake / Adjust")}
+				</button>
+				<button class="btn btn-danger btn-xs lex-chat__reject-pricing" data-intake="${frappe.utils.escape_html(message.source_name)}">
+					✕ ${__("Reject")}
+				</button>
+			</div>`;
+		}
+
 		return `<article class="lex-chat__message ${own} ${reply} ${system}" data-message="${frappe.utils.escape_html(message.name)}" data-sender="${frappe.utils.escape_html(message.sender || "")}" data-sent-at="${frappe.utils.escape_html(message.sent_at || "")}">
 			<div class="lex-chat__avatar" title="${frappe.utils.escape_html(this.presence_title(this.presence_for(message.sender)))}">${frappe.avatar(message.sender, "avatar-medium")}${this.presence_dot(message.sender)}</div>
 			<div class="lex-chat__bubble">
@@ -800,6 +862,7 @@ class LexocratesChatPage {
 					<time title="${frappe.utils.escape_html(message.sent_at)}">${frappe.utils.escape_html(message.formatted_timestamp || message.sent_at)}</time>
 				</div>
 				<div class="lex-chat__message-body">${formatted_body}</div>
+				${approval_toolbar}
 				${job_mentions ? `<div class="lex-chat__job-refs">${job_mentions}</div>` : ""}
 				${attachments ? `<div class="lex-chat__files">${attachments}</div>` : ""}
 				${reactions ? `<div class="lex-chat__reactions">${reactions}</div>` : ""}

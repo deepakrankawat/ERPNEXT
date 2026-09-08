@@ -34,6 +34,7 @@ INTERNAL_CHAT_ROLES = {
 APP_ROLES = INTERNAL_CHAT_ROLES | {CLIENT_ROLE}
 MATTER_CONTEXT_DOCTYPES = {"LPO Matter"}
 MANAGEMENT_ROLES = {
+	"CEO",
 	"LPO_Admin",
 	"LPO_Manager",
 	"System Manager",
@@ -995,3 +996,73 @@ def _users_share_channel(first_user: str, second_user: str) -> bool:
 			(first_user, second_user),
 		)
 	)
+
+
+@frappe.whitelist()
+def ensure_ceo_approval_channel():
+	"""Provision or get the private internal CEO pricing approval channel."""
+	channel_name = "#ceo-pricing-approvals"
+	existing = frappe.db.get_value("Lexocrates Chat Channel", {"channel_name": channel_name}, "name")
+	ceo_roles = frappe.get_all(
+		"Has Role",
+		filters={"role": "CEO", "parenttype": "User"},
+		pluck="parent",
+		ignore_permissions=True,
+	)
+	ceo_users = (
+		frappe.get_all(
+			"User",
+			filters={"name": ["in", list(set(ceo_roles) - {"Guest"})], "enabled": 1},
+			pluck="name",
+			ignore_permissions=True,
+		)
+		if ceo_roles
+		else []
+	)
+	all_members = {"Administrator": "Owner"}
+	for u in ceo_users:
+		all_members.setdefault(u, "Moderator")
+
+	previous_flag = getattr(frappe.flags, "lexocrates_chat_automation", False)
+	frappe.flags.lexocrates_chat_automation = True
+	try:
+		if existing:
+			channel = frappe.get_doc("Lexocrates Chat Channel", existing)
+			existing_members = {m.user for m in channel.members}
+			changed = False
+			for u, role in all_members.items():
+				if u not in existing_members:
+					channel.append("members", {
+						"user": u,
+						"channel_role": role,
+						"can_post_messages": 1,
+						"can_invite_members": 1 if role in {"Owner", "Moderator"} else 0,
+						"joined_on": now_datetime(),
+					})
+					changed = True
+			if changed:
+				channel.save(ignore_permissions=True)
+			return channel
+
+		channel = frappe.get_doc({
+			"doctype": "Lexocrates Chat Channel",
+			"channel_name": channel_name,
+			"channel_type": "Private",
+			"status": "Active",
+			"system_user_only": 1,
+			"description": _("Confidential executive channel for matter pricing and LexPoint quote approvals."),
+			"members": [
+				{
+					"user": user,
+					"channel_role": role,
+					"can_post_messages": 1,
+					"can_invite_members": 1 if role in {"Owner", "Moderator"} else 0,
+					"joined_on": now_datetime(),
+				}
+				for user, role in all_members.items()
+			],
+		}).insert(ignore_permissions=True)
+		return channel
+	finally:
+		frappe.flags.lexocrates_chat_automation = previous_flag
+

@@ -127,6 +127,8 @@ def backfill_matter_chat_channels():
 	previous_flag = getattr(frappe.flags, "lexocrates_chat_automation", False)
 	frappe.flags.lexocrates_chat_automation = True
 	try:
+		from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import ensure_ceo_approval_channel
+		ensure_ceo_approval_channel()
 		for matter_id in frappe.get_all("LPO Matter", pluck="name", limit_page_length=0):
 			ensure_matter_chat_channel(matter_id)
 		for channel_name in frappe.get_all(

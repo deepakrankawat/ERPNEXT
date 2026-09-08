@@ -528,6 +528,57 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		self.assertTrue(result["enabled"])
 		self.assertEqual(result["credential_name"], "OpenAI Test")
 
+	def test_ceo_pricing_approval_chat_workflow(self):
+		from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
+			can_view_channel,
+			ensure_ceo_approval_channel,
+		)
+		# 1. Verify channel provisioning & client isolation
+		ceo_channel = ensure_ceo_approval_channel()
+		self.assertEqual(ceo_channel.channel_name, "#ceo-pricing-approvals")
+		self.assertTrue(ceo_channel.system_user_only)
+		self.assertEqual(ceo_channel.channel_type, "Private")
+		self.assertFalse(can_view_channel(ceo_channel, user=self.user.name))
+
+		# 2. Upload document to intake
+		intake = _new_intake()
+		work_intake.accept_sla(intake["name"], 1)
+		work_intake.save_detailed_instructions(intake["name"], "Review these vendor terms for unlimited liability risk.")
+		content = " ".join(["commercial clause indemnity limitation liability termination"] * 30)
+		with patch("lex.file_quarantine._run_malware_scan", return_value=("Clean", "Unit Test Scanner", "Clean")):
+			work_intake.upload_document(intake["name"], "sample-nda.txt", _text_upload(content))
+		analysis = work_intake.request_cost_estimate(intake["name"])
+		self.assertEqual(analysis["pricing_approval_status"], "Pending CEO Approval")
+
+		# 3. Check intake went to Pending CEO Approval and message posted to CEO channel
+		doc = frappe.get_doc("Lexocrates Work Intake", intake["name"])
+		self.assertEqual(doc.pricing_approval_status, "Pending CEO Approval")
+		approval_msg = frappe.db.get_value(
+			"Lexocrates Chat Message",
+			{"channel": ceo_channel.name, "source_doctype": "Lexocrates Work Intake", "source_name": doc.name},
+			["name", "message_text"],
+			as_dict=True,
+		)
+		self.assertIsNotNone(approval_msg)
+		self.assertIn("Matter Pricing Approval Request", approval_msg.message_text)
+		self.assertIn("sample-nda", approval_msg.message_text)
+
+		# 4. CEO / Administrator approves pricing
+		frappe.set_user("Administrator")
+
+		decision = work_intake.approve_quote_pricing(doc.name, "Approved")
+		self.assertEqual(decision["status"], "Quote Ready")
+		self.assertEqual(decision["pricing_approval_status"], "Approved")
+
+		# 5. Check decision message in CEO channel
+		decision_msg = frappe.db.get_value(
+			"Lexocrates Chat Message",
+			{"channel": ceo_channel.name, "automation_key": f"ceo_pricing_decision:{doc.name}:{doc.quote_version}:approved"},
+			"message_text",
+		)
+		self.assertIsNotNone(decision_msg)
+		self.assertIn("Matter Pricing Approved", decision_msg)
+
 
 def _new_intake():
 	return work_intake.create_work_intake(

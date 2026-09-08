@@ -383,11 +383,11 @@ def _normalize_attachments(value) -> list[str]:
 
 def _bind_uploaded_files(message):
 	for url in parse_json_list(message.attachments):
-		file_name = frappe.db.get_value("File", {"file_url": url}, "name")
-		if file_name:
+		file_data = frappe.db.get_value("File", {"file_url": url}, ["name", "attached_to_doctype"], as_dict=True)
+		if file_data and (not file_data.attached_to_doctype or file_data.attached_to_doctype == "Lexocrates Chat Message"):
 			frappe.db.set_value(
 				"File",
-				file_name,
+				file_data.name,
 				{
 					"attached_to_doctype": "Lexocrates Chat Message",
 					"attached_to_name": message.name,
