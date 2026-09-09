@@ -24,6 +24,10 @@
   "source_name",
   "automation_key",
   "edited_on",
+  "deletion_section",
+  "is_deleted",
+  "deleted_by",
+  "deleted_on",
   "pin_section",
   "is_pinned",
   "pinned_by",
@@ -161,6 +165,33 @@
    "fieldname": "edited_on",
    "fieldtype": "Datetime",
    "label": "Edited On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deletion_section",
+   "fieldtype": "Section Break",
+   "label": "Soft Deletion Audit"
+  },
+  {
+   "default": "0",
+   "description": "Hides the message from chat while preserving its audited database record.",
+   "fieldname": "is_deleted",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Deleted",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deleted_by",
+   "fieldtype": "Link",
+   "label": "Deleted By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deleted_on",
+   "fieldtype": "Datetime",
+   "label": "Deleted On",
    "read_only": 1
   },
   {

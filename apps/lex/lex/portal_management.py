@@ -20,6 +20,8 @@ from lex.portal_audit import create_portal_audit_event
 INVITATION_HOURS = 72
 REGISTRATION_HOURS = 24
 REGISTRATION_ACTIVATION_HOURS = 48
+LOGIN_LINK_MINUTES = 30
+LEXOCRATES_PUBLIC_URL = "https://engine.lexocrates.com"
 MANAGEMENT_ROLES = {"LPO_Admin", "LPO_Manager", "System Manager", "Lexocrates Compliance Officer"}
 
 
@@ -30,6 +32,25 @@ def _is_internal(user: str | None = None) -> bool:
 
 def _token_hash(token: str) -> str:
 	return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _public_portal_url(path: str) -> str:
+	base_url = str(frappe.conf.get("lexocrates_public_url") or LEXOCRATES_PUBLIC_URL).rstrip("/")
+	return f"{base_url}/{path.lstrip('/')}"
+
+
+def _send_security_email_now(*, recipient: str, subject: str, message: str):
+	"""Hand security mail to SMTP immediately after commit, without scheduler latency."""
+	return frappe.sendmail(
+		recipients=[recipient],
+		subject=subject,
+		message=message,
+		delayed=False,
+		send_priority=1,
+		x_priority=1,
+		add_unsubscribe_link=0,
+		redact_message_after_send=True,
+	)
 
 
 def _validate_password(password: str, user_inputs: list[str]):
@@ -105,7 +126,7 @@ def invite_portal_user(
 			}
 		).insert(ignore_permissions=True)
 	)
-	activation_url = frappe.utils.get_url(f"/client-invitation?token={token}")
+	activation_url = _public_portal_url(f"/client-invitation?token={token}")
 	email_sent = False
 	if not getattr(frappe.flags, "in_test", False) and _outgoing_email_is_ready():
 		try:
@@ -431,7 +452,7 @@ def request_client_registration(
 			}
 		).insert(ignore_permissions=True)
 	)
-	verification_url = frappe.utils.get_url(f"/client-registration?token={token}")
+	verification_url = _public_portal_url(f"/client-registration?token={token}")
 	email_sent = False
 	if not is_test and _outgoing_email_is_ready():
 		try:
@@ -559,7 +580,7 @@ def record_registration_compliance(
 
 	result = {"registration": doc.name, "status": doc.status, "approved": approved, "email_sent": False}
 	if activation_token:
-		activation_url = frappe.utils.get_url(f"/client-registration?activation={activation_token}")
+		activation_url = _public_portal_url(f"/client-registration?activation={activation_token}")
 		if not getattr(frappe.flags, "in_test", False) and _outgoing_email_is_ready():
 			try:
 				frappe.sendmail(
@@ -902,27 +923,25 @@ def send_email_login_link(email: str, redirect_to: str | None = None):
 
 	token = secrets.token_urlsafe(32)
 	now = now_datetime()
-	expires_on = add_to_date(now, minutes=15)
+	expires_on = add_to_date(now, minutes=LOGIN_LINK_MINUTES)
 
-	# Store token in Cache for 15 minutes
 	cache_key = f"email_login_token_{_token_hash(token)}"
 	frappe.cache().set_value(
 		cache_key,
 		{"user": email, "redirect_to": _safe_local_redirect(redirect_to, "/client-portal")},
-		expires_in_sec=900,
+		expires_in_sec=LOGIN_LINK_MINUTES * 60,
 	)
 
-	login_url = frappe.utils.get_url(f"/login-link?token={token}")
+	login_url = _public_portal_url(f"/login-link?token={token}")
 
 	if not getattr(frappe.flags, "in_test", False):
 		try:
-			frappe.sendmail(
-				recipients=[email],
+			_send_security_email_now(
+				recipient=email,
 				subject=_("Your Lexocrates Secure Login Link"),
 				message=_(
-					"Click the link below to sign in to Lexocrates (valid for 15 minutes):<br><br><a href=\"{0}\"><strong>Sign In to Lexocrates</strong></a>"
-				).format(login_url),
-				now=True,
+					"Click the link below to sign in to Lexocrates (valid for {0} minutes):<br><br><a href=\"{1}\"><strong>Sign In to Lexocrates</strong></a>"
+				).format(LOGIN_LINK_MINUTES, login_url),
 			)
 		except Exception:
 			frappe.cache().delete_value(cache_key)
@@ -938,7 +957,7 @@ def send_email_login_link(email: str, redirect_to: str | None = None):
 		new_value={"expires_on": str(expires_on)},
 	)
 
-	result = {"status": "sent", "email": email, "expires_in_minutes": 15}
+	result = {"status": "sent", "email": email, "expires_in_minutes": LOGIN_LINK_MINUTES}
 	if getattr(frappe.flags, "in_test", False):
 		result["test_token"] = token
 	return result
@@ -1038,7 +1057,7 @@ def send_client_email_login_link(email: str, redirect_to: str | None = None):
 
 	token = secrets.token_urlsafe(32)
 	now = now_datetime()
-	expires_on = add_to_date(now, minutes=15)
+	expires_on = add_to_date(now, minutes=LOGIN_LINK_MINUTES)
 
 	cache_key = f"email_login_token_{_token_hash(token)}"
 	frappe.cache().set_value(
@@ -1048,10 +1067,10 @@ def send_client_email_login_link(email: str, redirect_to: str | None = None):
 			"portal_client": True,
 			"redirect_to": _safe_client_redirect(redirect_to),
 		},
-		expires_in_sec=900,
+		expires_in_sec=LOGIN_LINK_MINUTES * 60,
 	)
 
-	login_url = frappe.utils.get_url(f"/login-link?token={token}")
+	login_url = _public_portal_url(f"/login-link?token={token}")
 
 	if not getattr(frappe.flags, "in_test", False):
 		if not _outgoing_email_is_ready():
@@ -1060,13 +1079,12 @@ def send_client_email_login_link(email: str, redirect_to: str | None = None):
 				frappe.ValidationError,
 			)
 		try:
-			frappe.sendmail(
-				recipients=[email],
+			_send_security_email_now(
+				recipient=email,
 				subject=_("Your Lexocrates Client Portal Secure Login Link"),
 				message=_(
-					"Click the link below to sign in to your Lexocrates Client Workspace (valid for 15 minutes):<br><br><a href=\"{0}\"><strong>Sign In to Client Portal</strong></a>"
-				).format(login_url),
-				now=True,
+					"Click the link below to sign in to your Lexocrates Client Portal (valid for {0} minutes):<br><br><a href=\"{1}\"><strong>Sign In to Client Portal</strong></a>"
+				).format(LOGIN_LINK_MINUTES, login_url),
 			)
 		except Exception:
 			frappe.cache().delete_value(cache_key)
@@ -1082,7 +1100,7 @@ def send_client_email_login_link(email: str, redirect_to: str | None = None):
 		new_value={"expires_on": str(expires_on)},
 	)
 
-	result = {"status": "sent", "email": email, "expires_in_minutes": 15}
+	result = {"status": "sent", "email": email, "expires_in_minutes": LOGIN_LINK_MINUTES}
 	if getattr(frappe.flags, "in_test", False):
 		result["test_token"] = token
 	return result

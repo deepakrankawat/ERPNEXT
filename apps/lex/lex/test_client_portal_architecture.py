@@ -111,6 +111,31 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("{% block navbar %}{% endblock %}", template)
 		self.assertIn("{% block footer %}{% endblock %}", template)
 		self.assertIn("Lexocrates Client Portal Login", controller)
+		self.assertIn("lexocrates-logo-dark.svg", template)
+		self.assertNotIn("lexocrates-mark-dark.png", template)
+		self.assertNotIn("<span>Lexocrates</span>", template)
+
+	def test_security_email_uses_immediate_high_priority_delivery(self):
+		with patch("lex.portal_management.frappe.sendmail") as sendmail:
+			portal_management._send_security_email_now(
+				recipient="client@example.invalid",
+				subject="Secure login",
+				message="One-time link",
+			)
+
+		kwargs = sendmail.call_args.kwargs
+		self.assertFalse(kwargs["delayed"])
+		self.assertEqual(kwargs["send_priority"], 1)
+		self.assertEqual(kwargs["x_priority"], 1)
+		self.assertFalse(kwargs["add_unsubscribe_link"])
+		self.assertTrue(kwargs["redact_message_after_send"])
+
+	def test_auth_email_links_use_the_production_engine_origin(self):
+		url = portal_management._public_portal_url("/login-link?token=test-token")
+		self.assertEqual(
+			url,
+			"https://engine.lexocrates.com/login-link?token=test-token",
+		)
 
 	def test_client_login_endpoint_rejects_staff_user(self):
 		staff_email = f"staff-{frappe.generate_hash(length=8).lower()}@example.invalid"
@@ -201,6 +226,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			user.name,
 			redirect_to="/app",
 		)
+		self.assertEqual(result["expires_in_minutes"], 30)
 
 		verified = portal_management.verify_email_login_token(result["test_token"])
 		self.assertEqual(verified["user"], user.name)

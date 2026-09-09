@@ -1758,6 +1758,33 @@ body[data-route="lexocrates-chat"] .lex-floating-chat-container {
 	color: var(--lex-blue, #1d4ed8) !important;
 }
 
+.lex-chat__message.is-deleted .lex-chat__bubble,
+.lex-chat__message.is-deleted.is-own .lex-chat__bubble {
+	border: 1px dashed var(--lex-border-strong, #ccd4db);
+	background: var(--lex-surface-2, #eef1f4);
+	color: var(--lex-ink-muted, #5c6b7a);
+	box-shadow: none;
+}
+
+.lex-chat__message.is-deleted .lex-chat__message-head strong,
+.lex-chat__message.is-deleted .lex-chat__message-head time,
+.lex-chat__message.is-deleted .lex-chat__message-body,
+.lex-chat__message.is-deleted .lex-chat__message-footer {
+	color: var(--lex-ink-muted, #5c6b7a);
+}
+
+.lex-chat__deleted-copy {
+	font-style: italic;
+}
+
+.lex-chat__message-actions .lex-chat__delete {
+	color: var(--lex-red, #b42318) !important;
+}
+
+.lex-chat__remove-channel {
+	white-space: nowrap;
+}
+
 .lex-chat__message-actions {
 	border-color: var(--lex-border, #e1e6ea);
 	border-radius: 10px;

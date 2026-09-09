@@ -6,6 +6,7 @@ from frappe import _
 from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 	CONTEXT_DOCTYPES,
 	can_start_direct_message,
+	archive_channel as _archive_channel,
 	create_channel as _create_channel,
 	ensure_contextual_channel,
 	get_channels,
@@ -19,6 +20,7 @@ from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
 from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import (
 	MESSAGE_EDIT_WINDOW_MINUTES,
 	edit_message as _edit_message,
+	delete_message as _delete_message,
 	get_pinned_messages as _get_pinned_messages,
 	get_channel_jobs as _get_channel_jobs,
 	get_thread as _get_thread,
@@ -148,6 +150,16 @@ def send_message(
 @frappe.whitelist()
 def edit_message(message_name: str, message_text: str):
 	return _edit_message(message_name=message_name, message_text=message_text)
+
+
+@frappe.whitelist()
+def delete_message(message_name: str):
+	return _delete_message(message_name=message_name)
+
+
+@frappe.whitelist()
+def archive_channel(channel: str):
+	return _archive_channel(channel=channel)
 
 
 @frappe.whitelist()

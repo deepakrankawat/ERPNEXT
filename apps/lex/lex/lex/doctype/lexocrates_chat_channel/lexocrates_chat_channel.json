@@ -21,6 +21,9 @@
   "activity_section",
   "last_message_sequence",
   "last_message_at",
+  "archive_column_break",
+  "archived_by",
+  "archived_on",
   "members_section",
   "members"
  ],
@@ -137,6 +140,23 @@
    "label": "Last Message At",
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "archive_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "archived_by",
+   "fieldtype": "Link",
+   "label": "Archived By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archived_on",
+   "fieldtype": "Datetime",
+   "label": "Archived On",
+   "read_only": 1
   },
   {
    "fieldname": "members_section",

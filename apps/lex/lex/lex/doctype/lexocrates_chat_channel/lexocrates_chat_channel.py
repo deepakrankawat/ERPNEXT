@@ -727,6 +727,7 @@ def get_channels(search_text: str | None = None) -> list[dict]:
 
 	rows = frappe.get_all(
 		"Lexocrates Chat Channel",
+		filters={"status": "Active"},
 		fields=[
 			"name",
 			"channel_name",
@@ -742,8 +743,6 @@ def get_channels(search_text: str | None = None) -> list[dict]:
 	)
 	result = []
 	for row in rows:
-		if row.reference_doctype == "LPO Job" and row.status == "Archived":
-			continue
 		doc = frappe.get_doc("Lexocrates Chat Channel", row.name)
 		if can_view_channel(doc):
 			result.append(serialize_channel(doc))
@@ -790,6 +789,7 @@ def _decorate_channel_states(channels: list[dict], user: str | None = None) -> l
 			on state.channel = message.channel and state.user = %s
 		where message.channel in ({placeholders})
 			and message.sender != %s
+			and coalesce(message.is_deleted, 0) = 0
 			and message.channel_sequence > coalesce(state.last_read_sequence, 0)
 		group by message.channel
 		""",
@@ -842,12 +842,53 @@ def serialize_channel(doc) -> dict:
 		"member_count": len(doc.members),
 		"can_post": can_post_to_channel(doc),
 		"can_manage": can_manage_channel(doc),
+		"can_archive": bool(
+			doc.status == "Active"
+			and not doc.get("is_direct_message")
+			and not doc.reference_doctype
+			and can_manage_channel(doc)
+		),
 		"unread_count": 0,
 		"notification_level": "All Messages",
 		"muted": False,
 	}
 	channel.update(_get_matter_context(doc.reference_doctype, doc.reference_name))
 	return channel
+
+
+@frappe.whitelist()
+def archive_channel(channel: str) -> dict:
+	"""Remove a manual channel from active chat without deleting its audit history."""
+	doc = frappe.get_doc("Lexocrates Chat Channel", channel)
+	if not can_manage_channel(doc):
+		frappe.throw(_("Only a channel owner or moderator can remove this channel."), frappe.PermissionError)
+	if doc.get("is_direct_message"):
+		frappe.throw(_("Direct-message conversations cannot be removed globally."), frappe.ValidationError)
+	if doc.reference_doctype or doc.channel_type == "Contextual":
+		frappe.throw(
+			_("Matter and Job channels are managed by their linked record and cannot be removed here."),
+			frappe.ValidationError,
+		)
+	if doc.status == "Archived":
+		return serialize_channel(doc)
+
+	doc.status = "Archived"
+	doc.archived_by = frappe.session.user
+	doc.archived_on = now_datetime()
+	doc.save(ignore_permissions=True)
+	payload = {
+		"channel": doc.name,
+		"channel_name": doc.channel_name,
+		"status": doc.status,
+		"archived_on": str(doc.archived_on),
+	}
+	frappe.publish_realtime(
+		"chat_channel_archived",
+		payload,
+		room=f"doc:Lexocrates Chat Channel/{doc.name}",
+		after_commit=True,
+	)
+	return payload
 
 
 @frappe.whitelist()

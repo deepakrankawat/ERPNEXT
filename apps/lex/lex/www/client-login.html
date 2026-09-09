@@ -47,15 +47,13 @@
 	.lex-login-brand {
 		display: inline-flex;
 		align-items: center;
-		gap: 10px;
-		font-size: 20px;
-		font-weight: 700;
-		color: var(--lex-heading, #0f172a);
 		margin-bottom: 6px;
-		letter-spacing: -0.5px;
 	}
 	.lex-login-brand img {
-		height: 44px;
+		display: block;
+		width: min(240px, 72vw);
+		height: 58px;
+		object-fit: contain;
 	}
 	.lex-login-badge {
 		display: inline-block;
@@ -206,8 +204,7 @@
 		<!-- Brand Header -->
 		<div class="lex-login-header">
 			<div class="lex-login-brand">
-				<img src="/assets/lex/images/lexocrates-mark-dark.png" alt="Lexocrates Logo" onerror="this.style.display='none'">
-				<span>Lexocrates</span>
+				<img src="/assets/lex/images/lexocrates-logo-dark.svg" alt="Lexocrates">
 			</div>
 			<div><span class="lex-login-badge">Client Portal Access</span></div>
 			<p class="lex-login-sub">Sign in to your client workspace, active matters, quotes &amp; LexPacks.</p>

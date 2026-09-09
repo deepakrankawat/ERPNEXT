@@ -7,6 +7,7 @@ from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import (
 	_normalize_attachments,
 	_send_mention_notification,
 	create_system_message,
+	delete_message,
 	edit_message,
 	extract_mentions,
 	get_pinned_messages,
@@ -23,6 +24,10 @@ from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import (
 	toggle_reaction,
 )
 from lex.patches.privatize_chat_attachments import _privatize_attachment
+from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import (
+	archive_channel,
+	get_channels,
+)
 
 
 class TestLexocratesChatMessage(FrappeTestCase):
@@ -192,6 +197,41 @@ class TestLexocratesChatMessage(FrappeTestCase):
 		self.assertEqual(root["sender_full_name"], "Administrator")
 		self.assertEqual(root["sender_role"], "Administrator")
 		self.assertIn("sender_roles", root)
+
+	def test_soft_delete_hides_content_but_preserves_audited_record(self):
+		message = send_message(self.channel.name, "Confidential evidence reference")
+
+		deleted = delete_message(message["name"])
+		stored = frappe.db.get_value(
+			"Lexocrates Chat Message",
+			message["name"],
+			["message_text", "is_deleted", "deleted_by", "deleted_on"],
+			as_dict=True,
+		)
+
+		self.assertEqual(stored.message_text, "Confidential evidence reference")
+		self.assertTrue(stored.is_deleted)
+		self.assertEqual(stored.deleted_by, "Administrator")
+		self.assertTrue(stored.deleted_on)
+		self.assertEqual(deleted["message_text"], "This message was deleted.")
+		self.assertFalse(deleted["can_edit"])
+		self.assertFalse(deleted["can_delete"])
+		self.assertEqual(deleted["attachments"], [])
+		self.assertEqual(get_messages(self.channel.name)[0]["message_text"], "This message was deleted.")
+		self.assertEqual(search_messages("Confidential", self.channel.name), [])
+
+	def test_remove_channel_archives_without_deleting_messages(self):
+		message = send_message(self.channel.name, "Retained channel history")
+
+		result = archive_channel(self.channel.name)
+
+		self.assertEqual(result["status"], "Archived")
+		self.assertEqual(
+			frappe.db.get_value("Lexocrates Chat Channel", self.channel.name, "status"),
+			"Archived",
+		)
+		self.assertTrue(frappe.db.exists("Lexocrates Chat Message", message["name"]))
+		self.assertNotIn(self.channel.name, {channel["name"] for channel in get_channels()})
 
 	def test_realtime_event_is_channel_scoped_and_after_commit(self):
 		with patch("frappe.publish_realtime") as publish:

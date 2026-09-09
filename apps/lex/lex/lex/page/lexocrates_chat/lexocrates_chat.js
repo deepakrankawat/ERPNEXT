@@ -155,6 +155,7 @@ class LexocratesChatPage {
 							<button class="btn btn-default btn-sm lex-chat__pinned" title="${__("Pinned Messages")}">${__("Pinned")}</button>
 							<button class="btn btn-default btn-sm lex-chat__notifications" title="${__("Notification Settings")}">${frappe.utils.icon("notification", "sm")}</button>
 							<button class="btn btn-default btn-sm lex-chat__manage-channel hidden">${__("Manage")}</button>
+							<button class="btn btn-danger btn-sm lex-chat__remove-channel hidden" type="button">${__("Remove channel")}</button>
 						</div>
 					</header>
 					<div class="lex-chat__search-status hidden"></div>
@@ -241,6 +242,7 @@ class LexocratesChatPage {
 				frappe.set_route("Form", "Lexocrates Chat Channel", this.selected_channel);
 			}
 		});
+		this.$root.find(".lex-chat__remove-channel").on("click", () => this.remove_channel());
 		this.$send.on("click", () => {
 			window.lexocratesChatSound?.unlock();
 			this.send_message();
@@ -285,6 +287,9 @@ class LexocratesChatPage {
 		});
 		this.$root.on("click", ".lex-chat__edit", (event) => {
 			this.open_edit_dialog($(event.currentTarget).attr("data-message"));
+		});
+		this.$root.on("click", ".lex-chat__delete", (event) => {
+			this.delete_message($(event.currentTarget).attr("data-message"));
 		});
 		this.$root.on("click", ".lex-chat__copy", (event) => {
 			this.copy_message_text($(event.currentTarget).attr("data-message"));
@@ -791,6 +796,7 @@ class LexocratesChatPage {
 		const own = message.sender === this.bootstrap.current_user ? "is-own" : "";
 		const reply = message.thread_reference ? "is-reply" : "";
 		const system = message.system_generated ? "is-system" : "";
+		const deleted = message.is_deleted ? "is-deleted" : "";
 		const source = message.source_doctype && message.source_name
 			? `<a class="lex-chat__source" href="/app/${frappe.router.slug(message.source_doctype)}/${encodeURIComponent(message.source_name)}">${frappe.utils.escape_html(message.source_doctype)} · ${frappe.utils.escape_html(message.source_name)}</a>`
 			: "";
@@ -828,21 +834,25 @@ class LexocratesChatPage {
 			: own ? `<span class="lex-chat__seen">✓ ${__("Delivered")}</span>` : "";
 
 		const footer = `${source}${message.edited_on ? `<span class="text-muted">${__("Edited")}</span>` : ""}${seen}`;
-		const formatted_body = this.format_markdown(message.message_text || "");
+		const formatted_body = message.is_deleted
+			? `<span class="lex-chat__deleted-copy">${frappe.utils.escape_html(message.message_text || __("This message was deleted."))}</span>`
+			: this.format_markdown(message.message_text || "");
 		const sender_role = frappe.utils.escape_html(message.sender_role || __("System User"));
 		const role_title = frappe.utils.escape_html((message.sender_roles || []).join(", ") || message.sender_role || "");
 
-		const actions = `<div class="lex-chat__message-actions" role="toolbar" aria-label="${__("Message actions")}">
+		const actions = message.is_deleted ? "" : `<div class="lex-chat__message-actions" role="toolbar" aria-label="${__("Message actions")}">
 			<button class="btn btn-link btn-xs lex-chat__react" data-message="${frappe.utils.escape_html(message.name)}" title="${__("React with emoji")}">😊 ${__("React")}</button>
 			<button class="btn btn-link btn-xs lex-chat__reply" data-message="${frappe.utils.escape_html(message.name)}" title="${__("Reply in thread")}">↩ ${__("Reply")}</button>
 			<button class="btn btn-link btn-xs lex-chat__copy" data-message="${frappe.utils.escape_html(message.name)}" title="${__("Copy text")}">📋 ${__("Copy")}</button>
 			${message.reply_count || message.thread_reference ? `<button class="btn btn-link btn-xs lex-chat__thread" data-message="${frappe.utils.escape_html(message.thread_reference || message.name)}">${message.reply_count || ""} ${__("Thread")}</button>` : ""}
 			${this.selected_channel_doc?.can_manage ? `<button class="btn btn-link btn-xs lex-chat__pin" data-message="${frappe.utils.escape_html(message.name)}">${message.is_pinned ? __("Unpin") : __("Pin")}</button>` : ""}
 			${message.can_edit ? `<button class="btn btn-link btn-xs lex-chat__edit" data-message="${frappe.utils.escape_html(message.name)}">${__("Edit")}</button>` : ""}
+			${message.can_delete ? `<button class="btn btn-link btn-xs lex-chat__delete" data-message="${frappe.utils.escape_html(message.name)}">${__("Delete")}</button>` : ""}
 		</div>`;
 
 		let approval_toolbar = "";
 		if (
+			!message.is_deleted &&
 			message.source_doctype === "Lexocrates Work Intake" &&
 			(message.automation_key || "").startsWith("ceo_pricing_approval:") &&
 			(frappe.session.user === "Administrator" || frappe.user.has_role("CEO") || frappe.user.has_role("LPO_Admin"))
@@ -860,7 +870,7 @@ class LexocratesChatPage {
 			</div>`;
 		}
 
-		return `<article class="lex-chat__message ${own} ${reply} ${system}" data-message="${frappe.utils.escape_html(message.name)}" data-sender="${frappe.utils.escape_html(message.sender || "")}" data-sent-at="${frappe.utils.escape_html(message.sent_at || "")}">
+		return `<article class="lex-chat__message ${own} ${reply} ${system} ${deleted}" data-message="${frappe.utils.escape_html(message.name)}" data-sender="${frappe.utils.escape_html(message.sender || "")}" data-sent-at="${frappe.utils.escape_html(message.sent_at || "")}">
 			<div class="lex-chat__avatar" title="${frappe.utils.escape_html(this.presence_title(this.presence_for(message.sender)))}">${frappe.avatar(message.sender, "avatar-medium")}${this.presence_dot(message.sender)}</div>
 			<div class="lex-chat__bubble">
 				${actions}
@@ -932,6 +942,7 @@ class LexocratesChatPage {
 		this.on_message_pinned = (message) => {
 			if (message.channel === this.selected_channel) this.upsert_message(message, false);
 		};
+		this.on_channel_archived = (payload) => this.handle_archived_channel(payload);
 		this.on_read_receipt = (payload) => {
 			if (payload.channel !== this.selected_channel || payload.user === this.bootstrap?.current_user) return;
 			for (const message of this.messages.values()) {
@@ -978,6 +989,7 @@ class LexocratesChatPage {
 		frappe.realtime.on("chat_job_mention", this.on_job_mention);
 		frappe.realtime.on("chat_reaction_changed", this.on_reaction_changed);
 		frappe.realtime.on("chat_message_pinned", this.on_message_pinned);
+		frappe.realtime.on("chat_channel_archived", this.on_channel_archived);
 		frappe.realtime.on("chat_read_receipt", this.on_read_receipt);
 		frappe.realtime.on("chat_typing", this.on_typing);
 		frappe.realtime.on("chat_presence_changed", this.on_presence_changed);
@@ -1183,6 +1195,7 @@ class LexocratesChatPage {
 		this.$root.find(".lex-chat__members span").text(channel.member_count || 0);
 		this.$root.find(".lex-chat__members").attr("aria-label", __("View {0} channel members", [channel.member_count || 0]));
 		this.$root.find(".lex-chat__manage-channel").toggleClass("hidden", !channel.can_manage);
+		this.$root.find(".lex-chat__remove-channel").toggleClass("hidden", !channel.can_archive);
 		const notification_level = channel.notification_level || "All Messages";
 		this.$root.find(".lex-chat__notifications")
 			.attr("title", __(notification_level))
@@ -1293,6 +1306,58 @@ class LexocratesChatPage {
 			},
 		});
 		dialog.show();
+	}
+
+	delete_message(message_name) {
+		const message = this.messages.get(message_name);
+		if (!message?.can_delete) return;
+		frappe.confirm(
+			__("Delete this message from the conversation? Its original audited record will remain in the database."),
+			async () => {
+				const response = await frappe.call({
+					method: `${this.api}.delete_message`,
+					args: { message_name },
+					freeze: true,
+					freeze_message: __("Removing message..."),
+				});
+				if (response.message) this.upsert_message(response.message, false);
+				frappe.show_alert({ message: __("Message removed; audit record retained."), indicator: "green" });
+			}
+		);
+	}
+
+	remove_channel() {
+		const channel = this.selected_channel_doc;
+		if (!channel?.can_archive) return;
+		frappe.confirm(
+			__("Remove {0} from active chat? The channel and all messages will remain in the database audit trail.", [channel.display_name || channel.channel_name]),
+			async () => {
+				const response = await frappe.call({
+					method: `${this.api}.archive_channel`,
+					args: { channel: channel.name },
+					freeze: true,
+					freeze_message: __("Removing channel..."),
+				});
+				await this.handle_archived_channel(response.message || { channel: channel.name });
+				frappe.show_alert({ message: __("Channel removed; audit history retained."), indicator: "green" });
+			}
+		);
+	}
+
+	async handle_archived_channel(payload) {
+		const channel_name = payload?.channel;
+		if (!channel_name || !this.channels.some((channel) => channel.name === channel_name)) return;
+		this.channels = this.channels.filter((channel) => channel.name !== channel_name);
+		if (this.selected_channel !== channel_name) {
+			this.render_channels(this.$root.find(".lex-chat__channel-filter").val());
+			return;
+		}
+		this.realtime_unsubscribe?.();
+		this.realtime_unsubscribe = null;
+		this.selected_channel = null;
+		this.selected_channel_doc = null;
+		this.loaded = false;
+		await this.load_bootstrap(null);
 	}
 
 	open_mention_dialog() {
@@ -1832,6 +1897,7 @@ class LexocratesChatPage {
 			</article>`;
 		}).join("");
 		const can_manage = Boolean(this.selected_channel_doc?.can_manage);
+		const can_archive = Boolean(this.selected_channel_doc?.can_archive);
 		const dialog = new frappe.ui.Dialog({
 			title: __("Channel members ({0})", [members.length]),
 			size: "large",
@@ -1841,6 +1907,11 @@ class LexocratesChatPage {
 				dialog.hide();
 				if (can_manage) frappe.set_route("Form", "Lexocrates Chat Channel", this.selected_channel);
 			},
+			secondary_action_label: can_archive ? __("Remove channel") : undefined,
+			secondary_action: can_archive ? () => {
+				dialog.hide();
+				this.remove_channel();
+			} : undefined,
 		});
 		dialog.fields_dict.member_list.$wrapper.html(
 			`<div class="lex-chat__member-list">${member_markup || `<div class="text-muted">${__("No members found")}</div>`}</div>`

@@ -132,8 +132,18 @@ class LexocratesChatMessage(Document):
 			"source_name",
 			"automation_key",
 			"attachments",
+			"is_deleted",
+			"deleted_by",
+			"deleted_on",
 		}
 		changed = [field for field in protected if self.get(field) != previous.get(field)]
+		deletion_fields = {"is_deleted", "deleted_by", "deleted_on"}
+		if (
+			changed
+			and getattr(frappe.flags, "lexocrates_chat_soft_delete", False)
+			and set(changed).issubset(deletion_fields)
+		):
+			return
 		if changed:
 			frappe.throw(
 				_("Audited message fields cannot be changed: {0}.").format(", ".join(changed)),
@@ -142,6 +152,8 @@ class LexocratesChatMessage(Document):
 
 	def before_save(self):
 		if self.is_new():
+			return
+		if getattr(frappe.flags, "lexocrates_chat_soft_delete", False):
 			return
 		if self.system_generated:
 			frappe.throw(_("System-generated messages are immutable."), frappe.PermissionError)
@@ -207,7 +219,7 @@ class LexocratesChatMessage(Document):
 					)
 
 	def on_update(self):
-		if self.edited_on:
+		if self.edited_on or self.is_deleted:
 			frappe.publish_realtime(
 				"chat_message_updated",
 				serialize_message(self),
@@ -418,10 +430,12 @@ def serialize_message(
 	if redact_internal_identity:
 		sender_full_name = sender_identity.get("primary_role") or _("System User")
 	timestamp = get("sent_at")
+	is_deleted = bool(get("is_deleted"))
+	event_marker = get("deleted_on") or get("edited_on") or "created"
 	return {
 		"protocol_version": CHAT_PROTOCOL_VERSION,
-		"event_id": f"chat-message:{get('name')}:{get('edited_on') or 'created'}",
-		"event_type": "message.updated" if get("edited_on") else "message.created",
+		"event_id": f"chat-message:{get('name')}:{event_marker}",
+		"event_type": "message.deleted" if is_deleted else ("message.updated" if get("edited_on") else "message.created"),
 		"name": get("name"),
 		"channel": get("channel"),
 		"channel_sequence": int(get("channel_sequence") or 0),
@@ -432,18 +446,20 @@ def serialize_message(
 		"sender_roles": sender_identity.get("roles") or [],
 		"sender_user_type": sender_identity.get("user_type"),
 		"sender_image": None if redact_internal_identity else sender_identity.get("user_image"),
-		"message_text": get("message_text"),
+		"message_text": _("This message was deleted.") if is_deleted else get("message_text"),
 		"sent_at": str(timestamp),
 		"formatted_timestamp": format_datetime(timestamp),
 		"server_time": str(now_datetime()),
 		"thread_reference": get("thread_reference"),
-		"mentions": parse_json_list(get("mentions")),
-		"job_mentions": parse_json_list(get("job_mentions")),
-		"attachments": parse_json_list(get("attachments")),
+		"mentions": [] if is_deleted else parse_json_list(get("mentions")),
+		"job_mentions": [] if is_deleted else parse_json_list(get("job_mentions")),
+		"attachments": [] if is_deleted else parse_json_list(get("attachments")),
 		"system_generated": bool(get("system_generated")),
-		"source_doctype": get("source_doctype"),
-		"source_name": get("source_name"),
+		"source_doctype": None if is_deleted else get("source_doctype"),
+		"source_name": None if is_deleted else get("source_name"),
 		"edited_on": str(get("edited_on")) if get("edited_on") else None,
+		"is_deleted": is_deleted,
+		"deleted_on": str(get("deleted_on")) if get("deleted_on") else None,
 		"is_pinned": bool(get("is_pinned")),
 		"pinned_by": get("pinned_by"),
 		"pinned_at": str(get("pinned_at")) if get("pinned_at") else None,
@@ -451,9 +467,15 @@ def serialize_message(
 		"reply_count": 0,
 		"read_by": [],
 		"can_edit": bool(
-			not get("system_generated")
+			not is_deleted
+			and not get("system_generated")
 			and get("sender") == frappe.session.user
 			and is_within_edit_window(timestamp)
+		),
+		"can_delete": bool(
+			not is_deleted
+			and not get("system_generated")
+			and (get("sender") == frappe.session.user or can_manage_channel(channel))
 		),
 	}
 
@@ -470,6 +492,7 @@ def has_permission(doc, ptype="read", user=None, debug=False):
 	if ptype in {"write", "share"}:
 		return bool(
 			ptype == "write"
+			and not doc.is_deleted
 			and doc.sender == user
 			and not doc.system_generated
 			and is_within_edit_window(doc.sent_at)
@@ -577,10 +600,41 @@ def get_channel_jobs(channel: str, search_text: str | None = None, limit: int = 
 @frappe.whitelist()
 def edit_message(message_name: str, message_text: str) -> dict:
 	doc = frappe.get_doc("Lexocrates Chat Message", message_name)
+	if doc.is_deleted:
+		frappe.throw(_("Deleted messages cannot be edited."), frappe.PermissionError)
 	if not has_permission(doc, "write"):
 		frappe.throw(_("This message is outside your edit window."), frappe.PermissionError)
 	doc.message_text = message_text
 	doc.save(ignore_permissions=True)
+	return serialize_message(doc)
+
+
+@frappe.whitelist()
+def delete_message(message_name: str) -> dict:
+	"""Soft-delete a message while retaining its original audited database record."""
+	doc = frappe.get_doc("Lexocrates Chat Message", message_name)
+	channel = frappe.get_doc("Lexocrates Chat Channel", doc.channel)
+	if not can_view_channel(channel):
+		frappe.throw(_("You cannot view this channel."), frappe.PermissionError)
+	if doc.is_deleted:
+		return serialize_message(doc)
+	if doc.system_generated:
+		frappe.throw(_("System-generated messages cannot be deleted."), frappe.PermissionError)
+	if doc.sender != frappe.session.user and not can_manage_channel(channel):
+		frappe.throw(_("Only the sender or a channel manager can delete this message."), frappe.PermissionError)
+
+	doc.is_deleted = 1
+	doc.deleted_by = frappe.session.user
+	doc.deleted_on = now_datetime()
+	doc.is_pinned = 0
+	doc.pinned_by = None
+	doc.pinned_at = None
+	previous_flag = getattr(frappe.flags, "lexocrates_chat_soft_delete", False)
+	frappe.flags.lexocrates_chat_soft_delete = True
+	try:
+		doc.save(ignore_permissions=True)
+	finally:
+		frappe.flags.lexocrates_chat_soft_delete = previous_flag
 	return serialize_message(doc)
 
 
@@ -617,6 +671,9 @@ def get_messages(
 			"source_doctype",
 			"source_name",
 			"edited_on",
+			"is_deleted",
+			"deleted_by",
+			"deleted_on",
 			"is_pinned",
 			"pinned_by",
 			"pinned_at",
@@ -648,6 +705,7 @@ def sync_messages(channel: str, after_sequence: int = 0, limit: int = 200) -> di
 			"name", "channel", "channel_sequence", "client_message_id", "sender",
 			"message_text", "sent_at", "thread_reference", "mentions", "job_mentions",
 			"attachments", "system_generated", "source_doctype", "source_name", "edited_on",
+			"is_deleted", "deleted_by", "deleted_on",
 			"is_pinned", "pinned_by", "pinned_at",
 		],
 		order_by="channel_sequence asc",
@@ -697,6 +755,7 @@ def get_message_states(channel: str, message_names=None) -> list[dict]:
 			"name", "channel", "channel_sequence", "client_message_id", "sender",
 			"message_text", "sent_at", "thread_reference", "mentions", "job_mentions",
 			"attachments", "system_generated", "source_doctype", "source_name", "edited_on",
+			"is_deleted", "deleted_by", "deleted_on",
 			"is_pinned", "pinned_by", "pinned_at",
 		],
 		order_by="channel_sequence asc",
@@ -715,7 +774,10 @@ def search_messages(search_text: str, channel: str | None = None, limit: int = 5
 		return []
 	if not channel:
 		frappe.throw(_("A channel is required to search chat messages."), frappe.MandatoryError)
-	filters: dict[str, Any] = {"message_text": ["like", f"%{search_text}%"]}
+	filters: dict[str, Any] = {
+		"message_text": ["like", f"%{search_text}%"],
+		"is_deleted": 0,
+	}
 	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
 	filters["channel"] = channel
 	rows = frappe.get_all(
@@ -737,6 +799,9 @@ def search_messages(search_text: str, channel: str | None = None, limit: int = 5
 			"source_doctype",
 			"source_name",
 			"edited_on",
+			"is_deleted",
+			"deleted_by",
+			"deleted_on",
 			"is_pinned",
 			"pinned_by",
 			"pinned_at",
@@ -788,7 +853,7 @@ def _enrich_messages(messages: list[dict]) -> list[dict]:
 		read_state.setdefault(state.channel, []).append(state)
 
 	for message in messages:
-		message["reactions"] = [
+		message["reactions"] = [] if message.get("is_deleted") else [
 			{
 				"emoji": emoji,
 				"count": len(users),
@@ -829,7 +894,8 @@ def get_thread(
 		fields=[
 			"name", "channel", "channel_sequence", "client_message_id", "sender", "message_text", "sent_at", "thread_reference",
 			"mentions", "job_mentions", "attachments", "system_generated", "source_doctype", "source_name",
-			"edited_on", "is_pinned", "pinned_by", "pinned_at",
+			"edited_on", "is_deleted", "deleted_by", "deleted_on",
+			"is_pinned", "pinned_by", "pinned_at",
 		],
 		order_by="channel_sequence desc",
 		limit_page_length=limit + 1,
@@ -983,6 +1049,8 @@ def toggle_reaction(message_name: str, emoji: str) -> dict:
 		frappe.throw(_("This reaction is not supported."), frappe.ValidationError)
 	message = frappe.get_doc("Lexocrates Chat Message", message_name)
 	frappe.has_permission("Lexocrates Chat Channel", "read", doc=message.channel, throw=True)
+	if message.is_deleted:
+		frappe.throw(_("Deleted messages cannot receive reactions."), frappe.ValidationError)
 	existing = frappe.db.get_value(
 		"Lexocrates Chat Reaction",
 		{"message": message_name, "user": frappe.session.user, "emoji": emoji},
@@ -1041,6 +1109,8 @@ def _reaction_payload(message_name: str, channel: str) -> dict:
 @frappe.whitelist()
 def set_message_pinned(message_name: str, pinned: int = 1) -> dict:
 	message = frappe.get_doc("Lexocrates Chat Message", message_name)
+	if message.is_deleted:
+		frappe.throw(_("Deleted messages cannot be pinned."), frappe.ValidationError)
 	channel = frappe.get_doc("Lexocrates Chat Channel", message.channel)
 	if not can_manage_channel(channel):
 		frappe.throw(_("Only channel owners and moderators can pin messages."), frappe.PermissionError)
@@ -1067,11 +1137,12 @@ def get_pinned_messages(channel: str) -> list[dict]:
 	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
-		filters={"channel": channel, "is_pinned": 1},
+		filters={"channel": channel, "is_pinned": 1, "is_deleted": 0},
 		fields=[
 			"name", "channel", "channel_sequence", "client_message_id", "sender", "message_text", "sent_at", "thread_reference",
 			"mentions", "job_mentions", "attachments", "system_generated", "source_doctype", "source_name",
-			"edited_on", "is_pinned", "pinned_by", "pinned_at",
+			"edited_on", "is_deleted", "deleted_by", "deleted_on",
+			"is_pinned", "pinned_by", "pinned_at",
 		],
 		order_by="pinned_at desc",
 		limit_page_length=100,
