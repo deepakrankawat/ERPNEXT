@@ -13,6 +13,7 @@
   "sender",
   "sent_at",
   "system_generated",
+  "internal_only",
   "message_section",
   "message_text",
   "thread_reference",
@@ -92,6 +93,14 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "System Generated",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Visible only to internal System Users. Used for pricing, approval and operational control messages inside shared Matter rooms.",
+   "fieldname": "internal_only",
+   "fieldtype": "Check",
+   "label": "Internal Only",
    "read_only": 1
   },
   {

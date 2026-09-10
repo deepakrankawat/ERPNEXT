@@ -128,6 +128,7 @@ class LexocratesChatMessage(Document):
 			"sent_at",
 			"thread_reference",
 			"system_generated",
+			"internal_only",
 			"source_doctype",
 			"source_name",
 			"automation_key",
@@ -181,12 +182,21 @@ class LexocratesChatMessage(Document):
 			return
 		payload = serialize_message(self)
 		channel = frappe.get_doc("Lexocrates Chat Channel", self.channel)
-		frappe.publish_realtime(
-			"new_chat_message",
-			payload,
-			room=f"doc:Lexocrates Chat Channel/{self.channel}",
-			after_commit=True,
-		)
+		if self.internal_only:
+			for user in _internal_channel_viewers(channel):
+				frappe.publish_realtime(
+					"new_chat_message",
+					payload,
+					user=user,
+					after_commit=True,
+				)
+		else:
+			frappe.publish_realtime(
+				"new_chat_message",
+				payload,
+				room=f"doc:Lexocrates Chat Channel/{self.channel}",
+				after_commit=True,
+			)
 		for user in parse_json_list(self.mentions):
 			if user != self.sender and can_view_channel(channel, user=user):
 				frappe.publish_realtime(
@@ -220,9 +230,20 @@ class LexocratesChatMessage(Document):
 
 	def on_update(self):
 		if self.edited_on or self.is_deleted:
+			payload = serialize_message(self)
+			channel = frappe.get_doc("Lexocrates Chat Channel", self.channel)
+			if self.internal_only:
+				for user in _internal_channel_viewers(channel):
+					frappe.publish_realtime(
+						"chat_message_updated",
+						payload,
+						user=user,
+						after_commit=True,
+					)
+				return
 			frappe.publish_realtime(
 				"chat_message_updated",
-				serialize_message(self),
+				payload,
 				room=f"doc:Lexocrates Chat Channel/{self.channel}",
 				after_commit=True,
 			)
@@ -422,6 +443,9 @@ def serialize_message(
 	if sender_full_name is None:
 		sender_full_name = sender_identity.get("full_name")
 	channel = frappe.get_doc("Lexocrates Chat Channel", get("channel"))
+	internal_only = bool(get("internal_only"))
+	if internal_only and is_client_only_user() and not getattr(frappe.flags, "lexocrates_chat_automation", False):
+		frappe.throw(_("This message is visible only to the internal Lexocrates team."), frappe.PermissionError)
 	redact_internal_identity = (
 		is_client_only_user()
 		and channel.reference_doctype in {"LPO Matter", "LPO Job"}
@@ -455,8 +479,10 @@ def serialize_message(
 		"job_mentions": [] if is_deleted else parse_json_list(get("job_mentions")),
 		"attachments": [] if is_deleted else parse_json_list(get("attachments")),
 		"system_generated": bool(get("system_generated")),
+		"internal_only": internal_only,
 		"source_doctype": None if is_deleted else get("source_doctype"),
 		"source_name": None if is_deleted else get("source_name"),
+		"automation_key": None if is_deleted else get("automation_key"),
 		"edited_on": str(get("edited_on")) if get("edited_on") else None,
 		"is_deleted": is_deleted,
 		"deleted_on": str(get("deleted_on")) if get("deleted_on") else None,
@@ -504,15 +530,21 @@ def get_permission_query_conditions(user=None):
 	user = user or frappe.session.user
 	channel_condition = get_channel_permission_query_conditions(user)
 	if not channel_condition:
-		return ""
+		return "`tabLexocrates Chat Message`.internal_only = 0" if is_client_only_user(user) else ""
 	if channel_condition == "1=0":
 		return "1=0"
+	internal_message_condition = (
+		"and `tabLexocrates Chat Message`.internal_only = 0"
+		if is_client_only_user(user)
+		else ""
+	)
 	return f"""
 		exists (
 			select 1 from `tabLexocrates Chat Channel`
 			where `tabLexocrates Chat Channel`.name = `tabLexocrates Chat Message`.channel
 				and ({channel_condition})
 		)
+		{internal_message_condition}
 	"""
 
 
@@ -654,7 +686,7 @@ def get_messages(
 		filters["sent_at"] = ["<", get_datetime(before)]
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
-		filters=filters,
+		filters=_message_visibility_filters(filters),
 		fields=[
 			"name",
 			"channel",
@@ -670,6 +702,8 @@ def get_messages(
 			"system_generated",
 			"source_doctype",
 			"source_name",
+			"automation_key",
+			"internal_only",
 			"edited_on",
 			"is_deleted",
 			"deleted_by",
@@ -700,11 +734,11 @@ def sync_messages(channel: str, after_sequence: int = 0, limit: int = 200) -> di
 	limit = min(max(int(limit or 200), 1), 500)
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
-		filters={"channel": channel, "channel_sequence": [">", after_sequence]},
+		filters=_message_visibility_filters({"channel": channel, "channel_sequence": [">", after_sequence]}),
 		fields=[
 			"name", "channel", "channel_sequence", "client_message_id", "sender",
 			"message_text", "sent_at", "thread_reference", "mentions", "job_mentions",
-			"attachments", "system_generated", "source_doctype", "source_name", "edited_on",
+			"attachments", "system_generated", "source_doctype", "source_name", "automation_key", "internal_only", "edited_on",
 			"is_deleted", "deleted_by", "deleted_on",
 			"is_pinned", "pinned_by", "pinned_at",
 		],
@@ -750,11 +784,11 @@ def get_message_states(channel: str, message_names=None) -> list[dict]:
 		return []
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
-		filters={"channel": channel, "name": ["in", names]},
+		filters=_message_visibility_filters({"channel": channel, "name": ["in", names]}),
 		fields=[
 			"name", "channel", "channel_sequence", "client_message_id", "sender",
 			"message_text", "sent_at", "thread_reference", "mentions", "job_mentions",
-			"attachments", "system_generated", "source_doctype", "source_name", "edited_on",
+			"attachments", "system_generated", "source_doctype", "source_name", "automation_key", "internal_only", "edited_on",
 			"is_deleted", "deleted_by", "deleted_on",
 			"is_pinned", "pinned_by", "pinned_at",
 		],
@@ -782,7 +816,7 @@ def search_messages(search_text: str, channel: str | None = None, limit: int = 5
 	filters["channel"] = channel
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
-		filters=filters,
+		filters=_message_visibility_filters(filters),
 		fields=[
 			"name",
 			"channel",
@@ -798,6 +832,8 @@ def search_messages(search_text: str, channel: str | None = None, limit: int = 5
 			"system_generated",
 			"source_doctype",
 			"source_name",
+			"automation_key",
+			"internal_only",
 			"edited_on",
 			"is_deleted",
 			"deleted_by",
@@ -834,7 +870,7 @@ def _enrich_messages(messages: list[dict]) -> list[dict]:
 
 	replies = frappe.get_all(
 		"Lexocrates Chat Message",
-		filters={"thread_reference": ["in", message_names]},
+		filters=_message_visibility_filters({"thread_reference": ["in", message_names]}),
 		fields=["thread_reference", "count(name) as reply_count"],
 		group_by="thread_reference",
 		limit_page_length=0,
@@ -884,16 +920,18 @@ def get_thread(
 	root = frappe.get_doc("Lexocrates Chat Message", root_name)
 	if root.channel != message.channel:
 		frappe.throw(_("Thread messages must belong to the same channel."), frappe.ValidationError)
+	if root.internal_only and is_client_only_user():
+		frappe.throw(_("This thread is visible only to the internal Lexocrates team."), frappe.PermissionError)
 	limit = min(max(int(limit or 100), 1), 200)
 	filters: dict[str, Any] = {"thread_reference": root_name}
 	if before_sequence is not None:
 		filters["channel_sequence"] = ["<", max(int(before_sequence or 0), 0)]
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
-		filters=filters,
+		filters=_message_visibility_filters(filters),
 		fields=[
 			"name", "channel", "channel_sequence", "client_message_id", "sender", "message_text", "sent_at", "thread_reference",
-			"mentions", "job_mentions", "attachments", "system_generated", "source_doctype", "source_name",
+			"mentions", "job_mentions", "attachments", "system_generated", "source_doctype", "source_name", "automation_key", "internal_only",
 			"edited_on", "is_deleted", "deleted_by", "deleted_on",
 			"is_pinned", "pinned_by", "pinned_at",
 		],
@@ -926,9 +964,9 @@ def mark_channel_read(channel: str, message_name: str | None = None) -> dict:
 	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
 	if message_name:
 		message = frappe.db.get_value(
-			"Lexocrates Chat Message", message_name, ["channel", "sent_at", "channel_sequence"], as_dict=True
+			"Lexocrates Chat Message", message_name, ["channel", "sent_at", "channel_sequence", "internal_only"], as_dict=True
 		)
-		if not message or message.channel != channel:
+		if not message or message.channel != channel or (message.internal_only and is_client_only_user()):
 			# A delayed request from a previously selected channel must not advance
 			# this channel or surface a disruptive error to the user.
 			return {
@@ -940,7 +978,7 @@ def mark_channel_read(channel: str, message_name: str | None = None) -> dict:
 	else:
 		message = frappe.db.get_value(
 			"Lexocrates Chat Message",
-			{"channel": channel},
+			_message_visibility_filters({"channel": channel}),
 			["name", "channel", "sent_at", "channel_sequence"],
 			order_by="channel_sequence desc",
 			as_dict=True,
@@ -1049,6 +1087,8 @@ def toggle_reaction(message_name: str, emoji: str) -> dict:
 		frappe.throw(_("This reaction is not supported."), frappe.ValidationError)
 	message = frappe.get_doc("Lexocrates Chat Message", message_name)
 	frappe.has_permission("Lexocrates Chat Channel", "read", doc=message.channel, throw=True)
+	if message.internal_only and is_client_only_user():
+		frappe.throw(_("This message is visible only to the internal Lexocrates team."), frappe.PermissionError)
 	if message.is_deleted:
 		frappe.throw(_("Deleted messages cannot receive reactions."), frappe.ValidationError)
 	existing = frappe.db.get_value(
@@ -1071,12 +1111,22 @@ def toggle_reaction(message_name: str, emoji: str) -> dict:
 		active = True
 	payload = _reaction_payload(message_name, message.channel)
 	payload.update({"actor": frappe.session.user, "emoji": emoji, "active": active})
-	frappe.publish_realtime(
-		"chat_reaction_changed",
-		payload,
-		room=f"doc:Lexocrates Chat Channel/{message.channel}",
-		after_commit=True,
-	)
+	if message.internal_only:
+		channel_doc = frappe.get_doc("Lexocrates Chat Channel", message.channel)
+		for user in _internal_channel_viewers(channel_doc):
+			frappe.publish_realtime(
+				"chat_reaction_changed",
+				payload,
+				user=user,
+				after_commit=True,
+			)
+	else:
+		frappe.publish_realtime(
+			"chat_reaction_changed",
+			payload,
+			room=f"doc:Lexocrates Chat Channel/{message.channel}",
+			after_commit=True,
+		)
 	return payload
 
 
@@ -1109,6 +1159,8 @@ def _reaction_payload(message_name: str, channel: str) -> dict:
 @frappe.whitelist()
 def set_message_pinned(message_name: str, pinned: int = 1) -> dict:
 	message = frappe.get_doc("Lexocrates Chat Message", message_name)
+	if message.internal_only and is_client_only_user():
+		frappe.throw(_("This message is visible only to the internal Lexocrates team."), frappe.PermissionError)
 	if message.is_deleted:
 		frappe.throw(_("Deleted messages cannot be pinned."), frappe.ValidationError)
 	channel = frappe.get_doc("Lexocrates Chat Channel", message.channel)
@@ -1123,12 +1175,21 @@ def set_message_pinned(message_name: str, pinned: int = 1) -> dict:
 	frappe.db.set_value("Lexocrates Chat Message", message_name, values, update_modified=False)
 	message.reload()
 	payload = serialize_message(message)
-	frappe.publish_realtime(
-		"chat_message_pinned",
-		payload,
-		room=f"doc:Lexocrates Chat Channel/{message.channel}",
-		after_commit=True,
-	)
+	if message.internal_only:
+		for user in _internal_channel_viewers(channel):
+			frappe.publish_realtime(
+				"chat_message_pinned",
+				payload,
+				user=user,
+				after_commit=True,
+			)
+	else:
+		frappe.publish_realtime(
+			"chat_message_pinned",
+			payload,
+			room=f"doc:Lexocrates Chat Channel/{message.channel}",
+			after_commit=True,
+		)
 	return payload
 
 
@@ -1137,10 +1198,10 @@ def get_pinned_messages(channel: str) -> list[dict]:
 	frappe.has_permission("Lexocrates Chat Channel", "read", doc=channel, throw=True)
 	rows = frappe.get_all(
 		"Lexocrates Chat Message",
-		filters={"channel": channel, "is_pinned": 1, "is_deleted": 0},
+		filters=_message_visibility_filters({"channel": channel, "is_pinned": 1, "is_deleted": 0}),
 		fields=[
 			"name", "channel", "channel_sequence", "client_message_id", "sender", "message_text", "sent_at", "thread_reference",
-			"mentions", "job_mentions", "attachments", "system_generated", "source_doctype", "source_name",
+			"mentions", "job_mentions", "attachments", "system_generated", "source_doctype", "source_name", "automation_key", "internal_only",
 			"edited_on", "is_deleted", "deleted_by", "deleted_on",
 			"is_pinned", "pinned_by", "pinned_at",
 		],
@@ -1178,6 +1239,23 @@ def _sender_identities(rows) -> dict[str, dict]:
 	return {sender: get_user_chat_identity(sender) for sender in senders}
 
 
+def _internal_channel_viewers(channel) -> list[str]:
+	"""Users who may receive internal-only operational cards in shared rooms."""
+	users = []
+	for member in channel.members:
+		user = member.user
+		if user and can_view_channel(channel, user=user) and not is_client_only_user(user):
+			users.append(user)
+	return list(dict.fromkeys(users))
+
+
+def _message_visibility_filters(filters: dict[str, Any] | None = None) -> dict[str, Any]:
+	filters = dict(filters or {})
+	if is_client_only_user():
+		filters["internal_only"] = 0
+	return filters
+
+
 def create_system_message(
 	channel: str,
 	message_text: str,
@@ -1187,6 +1265,7 @@ def create_system_message(
 	automation_key: str | None = None,
 	thread_reference: str | None = None,
 	attachments=None,
+	internal_only: int = 0,
 ) -> dict | None:
 	if automation_key and frappe.db.exists(
 		"Lexocrates Chat Message", {"automation_key": automation_key}
@@ -1203,14 +1282,16 @@ def create_system_message(
 				"thread_reference": thread_reference,
 				"attachments": json.dumps(parse_json_list(attachments)),
 				"system_generated": 1,
+				"internal_only": int(bool(internal_only)),
 				"source_doctype": source_doctype,
 				"source_name": source_name,
 				"automation_key": automation_key,
 			}
 		).insert(ignore_permissions=True)
+		payload = serialize_message(doc)
 	finally:
 		frappe.flags.lexocrates_chat_automation = previous_flag
-	return serialize_message(doc)
+	return payload
 
 
 def _send_mention_notification(message_doc, user: str):

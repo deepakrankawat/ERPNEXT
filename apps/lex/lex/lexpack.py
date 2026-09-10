@@ -18,12 +18,40 @@ RAZORPAY_API_ROOT = "https://api.razorpay.com/v1"
 PURCHASE_ROLES = {"System Manager", "Accounts Manager", "Accounts User", "Lexocrates Finance", "LPO_Admin"}
 RAZORPAY_SETUP_ROLES = {"System Manager", "Accounts Manager"}
 PAID_STATES = {"Paid", "Refund Pending", "Refunded"}
+LEXPACK_CHECKOUT_CURRENCIES = {
+	"CAD": {
+		"code": "CAD",
+		"symbol": "CA$",
+		"name": "Canadian Dollar",
+		"country": "Canada",
+	},
+	"USD": {
+		"code": "USD",
+		"symbol": "$",
+		"name": "US Dollar",
+		"country": "United States",
+	},
+	"GBP": {
+		"code": "GBP",
+		"symbol": "\u00a3",
+		"name": "British Pound",
+		"country": "United Kingdom",
+	},
+}
+LEXPACK_PUBLIC_PRICES = {
+	"STARTER": {"USD": 299, "CAD": 399, "GBP": 239},
+	"GROWTH": {"USD": 899, "CAD": 1199, "GBP": 719},
+	"PROFESSIONAL": {"USD": 1999, "CAD": 2699, "GBP": 1599},
+	"BUSINESS": {"USD": 3999, "CAD": 5399, "GBP": 3199},
+}
+DEFAULT_CHECKOUT_CURRENCY = "CAD"
 
 
 def get_lexpack_portal_data(portal_user=None):
 	portal_user = portal_user or get_portal_user()
 	if not portal_user or not portal_user.lexpack_view_access:
 		return {"plans": [], "purchases": [], "payment_enabled": False}
+	selected_currency = _resolve_checkout_currency(portal_user=portal_user)
 	plans = frappe.get_all(
 		"LexPack Plan",
 		filters={"status": "Active"},
@@ -35,6 +63,7 @@ def get_lexpack_portal_data(portal_user=None):
 		order_by="display_order asc",
 		limit_page_length=50,
 	)
+	plans = [_plan_for_checkout_currency(plan, selected_currency) for plan in plans]
 	purchases = frappe.get_all(
 		"LexPack Purchase",
 		filters={"client": portal_user.client},
@@ -47,49 +76,62 @@ def get_lexpack_portal_data(portal_user=None):
 	)
 	settings = _load_settings()
 	readiness = get_razorpay_readiness(settings)
+	company = _resolve_company(settings) if readiness["accounting_ready"] else None
+	accounting_currency = frappe.get_cached_value("Company", company, "default_currency") if company else "INR"
 	return {
 		"plans": plans,
 		"purchases": purchases,
 		"payment_enabled": readiness["payment_enabled"],
 		"purchase_access": bool(portal_user.lexpack_purchase_access),
+		"selected_currency": selected_currency,
+		"currency_options": list(LEXPACK_CHECKOUT_CURRENCIES.values()),
+		"accounting_currency": accounting_currency or "INR",
 		"fair_pricing_note": _("Rolling 12-month tier upgrades are automatic. LexPoints never expire."),
-		"commercial_note": _("Bundle pricing is illustrative and remains subject to final commercial approval."),
+		"commercial_note": _("LexPack bundle checkout is available directly from the dashboard. Job quote payments remain inside the Job funding flow."),
 	}
 
 
 @frappe.whitelist()
-def create_razorpay_order(plan: str, work_intake: str | None = None):
+def create_razorpay_order(plan: str, work_intake: str | None = None, currency: str | None = None):
 	client, portal_user = _require_purchase_authority()
-	if not work_intake:
-		frappe.throw(
-			_("Start a Work Intake, accept the SLA, upload documents and receive a quote before buying a LexPack."),
-			frappe.ValidationError,
-		)
-	from lex.work_intake import prepare_lexpack_purchase
-
-	intake_doc, portal_user = prepare_lexpack_purchase(work_intake, plan, actor=portal_user)
-	client = intake_doc.client
 	plan_doc = frappe.get_doc("LexPack Plan", plan)
 	if plan_doc.status != "Active" or not plan_doc.self_service or plan_doc.enterprise_custom:
 		frappe.throw(_("This LexPack is not available for self-service purchase."), frappe.ValidationError)
+	intake_doc = None
+	if work_intake:
+		from lex.work_intake import prepare_lexpack_purchase
+
+		intake_doc, portal_user = prepare_lexpack_purchase(work_intake, plan, actor=portal_user)
+		client = intake_doc.client
+	checkout = _checkout_pricing_for_plan(plan_doc, portal_user=portal_user, requested_currency=currency)
 	settings = _get_settings(require_enabled=True)
 	company = _resolve_company(settings)
-	exchange_rate = _resolve_exchange_rate(plan_doc.currency, company)
-	purchase = _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=intake_doc.name)
-	from lex.work_intake import link_lexpack_purchase
+	exchange_rate = _resolve_exchange_rate(checkout["currency"], company)
+	purchase = _new_purchase(
+		client,
+		portal_user,
+		plan_doc,
+		exchange_rate,
+		work_intake=intake_doc.name if intake_doc else None,
+		amount=checkout["price"],
+		currency=checkout["currency"],
+	)
+	if intake_doc:
+		from lex.work_intake import link_lexpack_purchase
 
-	link_lexpack_purchase(intake_doc.name, purchase.name)
+		link_lexpack_purchase(intake_doc.name, purchase.name)
 	payload = {
-		"amount": _minor_units(plan_doc.price, plan_doc.currency),
-		"currency": plan_doc.currency,
+		"amount": _minor_units(checkout["price"], checkout["currency"]),
+		"currency": checkout["currency"],
 		"receipt": purchase.name,
 		"notes": {
 			"lexpack_purchase": purchase.name,
-			"work_intake": intake_doc.name,
 			"client": client,
 			"plan": plan_doc.name,
 		},
 	}
+	if intake_doc:
+		payload["notes"]["work_intake"] = intake_doc.name
 	try:
 		order = _razorpay_request("POST", "/orders", settings, payload)
 		_validate_order_response(order, payload)
@@ -109,15 +151,15 @@ def create_razorpay_order(plan: str, work_intake: str | None = None):
 		action="LexPack Razorpay Order Created",
 		object_type="LexPack Purchase",
 		object_id=purchase.name,
-		new_value={"plan": plan_doc.name, "amount": flt(plan_doc.price), "currency": plan_doc.currency},
+		new_value={"plan": plan_doc.name, "amount": flt(checkout["price"]), "currency": checkout["currency"]},
 	)
 	return {
 		"purchase": purchase.name,
-		"work_intake": intake_doc.name,
+		"work_intake": intake_doc.name if intake_doc else None,
 		"key": settings.key_id,
 		"order_id": purchase.razorpay_order_id,
 		"amount": payload["amount"],
-		"currency": plan_doc.currency,
+		"currency": checkout["currency"],
 		"name": settings.checkout_name or "Lexocrates Legal Services Pvt. Ltd.",
 		"description": f"{plan_doc.plan_name} LexPack - {cint(plan_doc.lexpoints):,} LexPoints",
 		"image": "/assets/lex/images/lexocrates-mark-dark.png",
@@ -255,10 +297,12 @@ def _event_already_processed(event_id: str) -> bool:
 	)
 
 
-def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None):
+def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None, amount=None, currency=None):
 	previous_flag = getattr(frappe.flags, "lexpack_purchase_service", False)
 	frappe.flags.lexpack_purchase_service = True
 	try:
+		checkout_currency = currency or plan_doc.currency
+		checkout_amount = flt(amount if amount is not None else plan_doc.price)
 		return frappe.get_doc(
 			{
 				"doctype": "LexPack Purchase",
@@ -270,8 +314,8 @@ def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None
 				"status": "Created",
 				"gateway": "Razorpay",
 				"created_on": now_datetime(),
-				"currency": plan_doc.currency,
-				"amount": flt(plan_doc.price),
+				"currency": checkout_currency,
+				"amount": checkout_amount,
 				"exchange_rate": exchange_rate,
 				"base_lexpoints": cint(plan_doc.lexpoints),
 				"bonus_lexpoints": 0,
@@ -280,6 +324,63 @@ def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None
 		).insert(ignore_permissions=True)
 	finally:
 		frappe.flags.lexpack_purchase_service = previous_flag
+
+
+def _plan_for_checkout_currency(plan, currency: str):
+	plan = frappe._dict(plan)
+	checkout = _checkout_pricing_for_plan(plan, requested_currency=currency)
+	plan.currency = checkout["currency"]
+	plan.price = checkout["price"]
+	plan.currency_symbol = checkout["symbol"]
+	plan.currency_country = checkout["country"]
+	plan.display_currency = f"{checkout['currency']} ({checkout['symbol']})"
+	return plan
+
+
+def _checkout_pricing_for_plan(plan_doc, portal_user=None, requested_currency: str | None = None):
+	currency = _resolve_checkout_currency(portal_user=portal_user, requested_currency=requested_currency)
+	plan_code = str(plan_doc.get("plan_code") or plan_doc.name or "").upper()
+	prices = LEXPACK_PUBLIC_PRICES.get(plan_code)
+	if not prices:
+		return {
+			"currency": plan_doc.get("currency") or currency,
+			"price": flt(plan_doc.get("price")),
+			**LEXPACK_CHECKOUT_CURRENCIES.get(plan_doc.get("currency") or currency, {}),
+		}
+	info = LEXPACK_CHECKOUT_CURRENCIES[currency]
+	return {"currency": currency, "price": flt(prices[currency]), **info}
+
+
+def _resolve_checkout_currency(portal_user=None, requested_currency: str | None = None) -> str:
+	requested_currency = (requested_currency or "").strip().upper()
+	if requested_currency in LEXPACK_CHECKOUT_CURRENCIES:
+		return requested_currency
+	client = portal_user.client if portal_user else None
+	if not client:
+		return DEFAULT_CHECKOUT_CURRENCY
+	fields = ["default_currency", "territory"]
+	if frappe.get_meta("Customer").has_field("custom_primary_jurisdiction"):
+		fields.insert(1, "custom_primary_jurisdiction")
+	customer = frappe.db.get_value(
+		"Customer",
+		client,
+		fields,
+		as_dict=True,
+	) or {}
+	default_currency = (customer.get("default_currency") or "").strip().upper()
+	if default_currency in LEXPACK_CHECKOUT_CURRENCIES:
+		return default_currency
+	text = " ".join(
+		str(customer.get(fieldname) or "").lower()
+		for fieldname in ("custom_primary_jurisdiction", "territory")
+	)
+	if any(token in text for token in ("canada", "canadian", "ontario", "british columbia", "alberta")):
+		return "CAD"
+	if any(token in text for token in ("united kingdom", "great britain", "england", "scotland", "wales", "uk", "gb")):
+		return "GBP"
+	if any(token in text for token in ("united states", "usa", "u.s.", "america")):
+		return "USD"
+	return DEFAULT_CHECKOUT_CURRENCY
 
 
 def _complete_purchase(purchase_doc, payment, source: str):
@@ -471,60 +572,68 @@ def _create_sales_invoice(purchase_doc, settings):
 
 	from erpnext.accounts.party import get_party_account
 
-	debit_to = get_party_account("Customer", purchase_doc.client, company)
-	party_account_currency = (
-		frappe.db.get_value("Account", debit_to, "account_currency") if debit_to else None
-	) or company_currency
+	previous_ignore = getattr(frappe.flags, "ignore_permissions", False)
+	previous_user = frappe.session.user
+	frappe.flags.ignore_permissions = True
+	frappe.set_user("Administrator")
+	try:
+		debit_to = get_party_account("Customer", purchase_doc.client, company)
+		party_account_currency = (
+			frappe.db.get_value("Account", debit_to, "account_currency") if debit_to else None
+		) or company_currency
 
-	doc_currency = purchase_doc.currency or "USD"
-	exchange_rate = flt(purchase_doc.exchange_rate) or 1.0
+		doc_currency = purchase_doc.currency or "USD"
+		exchange_rate = flt(purchase_doc.exchange_rate) or 1.0
 
-	# If party receivable account (Debtors) currency is INR, convert foreign currency (USD/CAD) invoice to INR
-	if party_account_currency == company_currency and doc_currency != company_currency:
-		invoice_currency = company_currency
-		conversion_rate = 1.0
-		item_rate = flt(purchase_doc.amount * exchange_rate)
-	else:
-		invoice_currency = doc_currency
-		conversion_rate = exchange_rate
-		item_rate = flt(purchase_doc.amount)
+		# If party receivable account is in company currency, post the ERP invoice in company currency.
+		if party_account_currency == company_currency and doc_currency != company_currency:
+			invoice_currency = company_currency
+			conversion_rate = 1.0
+			item_rate = flt(purchase_doc.amount * exchange_rate)
+		else:
+			invoice_currency = doc_currency
+			conversion_rate = exchange_rate
+			item_rate = flt(purchase_doc.amount)
 
-	selling_item = (
-		(settings.get("selling_item") if isinstance(settings, dict) else getattr(settings, "selling_item", None))
-		or frappe.db.get_single_value("LexPack Settings", "selling_item")
-		or frappe.db.get_value("Item", {"item_code": "LEXPACK-LEGAL-CAPACITY"}, "name")
-		or frappe.db.get_value("Item", {"is_sales_item": 1}, "name")
-	)
-	if not selling_item:
-		frappe.throw(_("No selling item configured for LexPack Sales Invoice."), frappe.ValidationError)
+		selling_item = (
+			(settings.get("selling_item") if isinstance(settings, dict) else getattr(settings, "selling_item", None))
+			or frappe.db.get_single_value("LexPack Settings", "selling_item")
+			or frappe.db.get_value("Item", {"item_code": "LEXPACK-LEGAL-CAPACITY"}, "name")
+			or frappe.db.get_value("Item", {"is_sales_item": 1}, "name")
+		)
+		if not selling_item:
+			frappe.throw(_("No selling item configured for LexPack Sales Invoice."), frappe.ValidationError)
 
-	invoice = frappe.new_doc("Sales Invoice")
-	invoice.customer = purchase_doc.client
-	invoice.company = company
-	if debit_to:
-		invoice.debit_to = debit_to
-	invoice.posting_date = nowdate()
-	invoice.due_date = nowdate()
-	invoice.currency = invoice_currency
-	invoice.conversion_rate = conversion_rate
-	invoice.remarks = f"LexPack Purchase {purchase_doc.name}; Order {purchase_doc.get('razorpay_order_id') or ''}"
-	item = {
-		"item_code": selling_item,
-		"qty": 1,
-		"rate": item_rate,
-		"description": f"{purchase_doc.plan_name_snapshot} LexPack - {cint(purchase_doc.base_lexpoints):,} non-expiring LexPoints ({doc_currency} {flt(purchase_doc.amount):,.2f})",
-	}
-	income_account = settings.get("income_account") if isinstance(settings, dict) else getattr(settings, "income_account", None)
-	cost_center = settings.get("cost_center") if isinstance(settings, dict) else getattr(settings, "cost_center", None)
-	if income_account:
-		item["income_account"] = income_account
-	if cost_center:
-		item["cost_center"] = cost_center
-	invoice.append("items", item)
-	invoice.insert(ignore_permissions=True)
-	invoice.flags.ignore_permissions = True
-	invoice.submit()
-	return invoice
+		invoice = frappe.new_doc("Sales Invoice")
+		invoice.customer = purchase_doc.client
+		invoice.company = company
+		if debit_to:
+			invoice.debit_to = debit_to
+		invoice.posting_date = nowdate()
+		invoice.due_date = nowdate()
+		invoice.currency = invoice_currency
+		invoice.conversion_rate = conversion_rate
+		invoice.remarks = f"LexPack Purchase {purchase_doc.name}; Order {purchase_doc.get('razorpay_order_id') or ''}"
+		item = {
+			"item_code": selling_item,
+			"qty": 1,
+			"rate": item_rate,
+			"description": f"{purchase_doc.plan_name_snapshot} LexPack - {cint(purchase_doc.base_lexpoints):,} non-expiring LexPoints ({doc_currency} {flt(purchase_doc.amount):,.2f})",
+		}
+		income_account = settings.get("income_account") if isinstance(settings, dict) else getattr(settings, "income_account", None)
+		cost_center = settings.get("cost_center") if isinstance(settings, dict) else getattr(settings, "cost_center", None)
+		if income_account:
+			item["income_account"] = income_account
+		if cost_center:
+			item["cost_center"] = cost_center
+		invoice.append("items", item)
+		invoice.insert(ignore_permissions=True)
+		invoice.flags.ignore_permissions = True
+		invoice.submit()
+		return invoice
+	finally:
+		frappe.set_user(previous_user)
+		frappe.flags.ignore_permissions = previous_ignore
 
 
 def _format_payment_entry_currencies(entry, purchase_doc, company: str):
@@ -574,31 +683,39 @@ def _create_payment_entry(purchase_doc, settings, payment):
 	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 
 	company = _resolve_company(settings)
-	clearing_acc = settings.get("razorpay_clearing_account") if isinstance(settings, dict) else getattr(settings, "razorpay_clearing_account", None)
-	payment_account = clearing_acc or frappe.db.get_value(
-		"Account", {"account_type": "Bank", "is_group": 0, "company": company}, "name"
-	) or frappe.db.get_value("Account", {"is_group": 0, "company": company}, "name")
+	previous_ignore = getattr(frappe.flags, "ignore_permissions", False)
+	previous_user = frappe.session.user
+	frappe.flags.ignore_permissions = True
+	frappe.set_user("Administrator")
+	try:
+		clearing_acc = settings.get("razorpay_clearing_account") if isinstance(settings, dict) else getattr(settings, "razorpay_clearing_account", None)
+		payment_account = clearing_acc or frappe.db.get_value(
+			"Account", {"account_type": "Bank", "is_group": 0, "company": company}, "name"
+		) or frappe.db.get_value("Account", {"is_group": 0, "company": company}, "name")
 
-	entry = get_payment_entry(
-		"Sales Invoice",
-		purchase_doc.sales_invoice,
-		bank_account=payment_account,
-		reference_date=nowdate(),
-		ignore_permissions=True,
-	)
-	mop = settings.get("mode_of_payment") if isinstance(settings, dict) else getattr(settings, "mode_of_payment", None)
-	entry.mode_of_payment = mop or "Cash"
-	payment_id = (payment.get("id") if isinstance(payment, dict) else str(payment)) if payment else f"MANUAL-{nowdate()}"
-	entry.reference_no = payment_id
-	entry.reference_date = nowdate()
-	entry.remarks = f"Settlement for LexPack Purchase {purchase_doc.name}"
+		entry = get_payment_entry(
+			"Sales Invoice",
+			purchase_doc.sales_invoice,
+			bank_account=payment_account,
+			reference_date=nowdate(),
+			ignore_permissions=True,
+		)
+		mop = settings.get("mode_of_payment") if isinstance(settings, dict) else getattr(settings, "mode_of_payment", None)
+		entry.mode_of_payment = mop or "Cash"
+		payment_id = (payment.get("id") if isinstance(payment, dict) else str(payment)) if payment else f"MANUAL-{nowdate()}"
+		entry.reference_no = payment_id
+		entry.reference_date = nowdate()
+		entry.remarks = f"Settlement for LexPack Purchase {purchase_doc.name}"
 
-	_format_payment_entry_currencies(entry, purchase_doc, company)
+		_format_payment_entry_currencies(entry, purchase_doc, company)
 
-	entry.insert(ignore_permissions=True)
-	entry.flags.ignore_permissions = True
-	entry.submit()
-	return entry
+		entry.insert(ignore_permissions=True)
+		entry.flags.ignore_permissions = True
+		entry.submit()
+		return entry
+	finally:
+		frappe.set_user(previous_user)
+		frappe.flags.ignore_permissions = previous_ignore
 
 
 def _resolve_exchange_rate(plan_currency: str, company: str) -> float:

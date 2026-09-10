@@ -15,6 +15,7 @@ from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction
 class TestLexPackCommerce(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
+		install.ensure_lpo_roles()
 		install.ensure_lexpack_catalog()
 
 	def tearDown(self):
@@ -113,6 +114,72 @@ class TestLexPackCommerce(FrappeTestCase):
 		kwargs = request.call_args.kwargs
 		self.assertEqual(kwargs["params"], {"count": 1})
 		self.assertIsNone(kwargs["json"])
+
+	def test_portal_catalog_uses_client_country_currency(self):
+		client = _make_client()
+		if frappe.get_meta("Customer").has_field("custom_primary_jurisdiction"):
+			frappe.db.set_value("Customer", client, "custom_primary_jurisdiction", "Canada", update_modified=False)
+		user = _make_user()
+		_make_portal_user(user.name, client, "Client Administrator")
+		frappe.set_user(user.name)
+
+		data = lexpack.get_lexpack_portal_data()
+		starter = next(row for row in data["plans"] if row.plan_code == "STARTER")
+
+		self.assertEqual(data["selected_currency"], "CAD")
+		self.assertEqual(starter.currency, "CAD")
+		self.assertEqual(starter.price, 399)
+		self.assertTrue(data["purchase_access"])
+
+	def test_direct_dashboard_razorpay_order_credits_wallet_after_capture(self):
+		_configure_test_gateway(enabled=1)
+		client = _make_client()
+		user = _make_user()
+		_make_portal_user(user.name, client, "Client Administrator")
+		frappe.set_user(user.name)
+		payment_id = "pay_direct_lexpack"
+
+		def fake_gateway(method, path, settings, payload=None):
+			if method == "POST" and path == "/orders":
+				return {
+					"entity": "order",
+					"id": "order_direct_lexpack",
+					"amount": payload["amount"],
+					"currency": payload["currency"],
+					"receipt": payload["receipt"],
+				}
+			if method == "GET" and path == f"/payments/{payment_id}":
+				return {
+					"entity": "payment",
+					"id": payment_id,
+					"order_id": "order_direct_lexpack",
+					"amount": 29900,
+					"currency": "USD",
+					"status": "captured",
+				}
+			raise AssertionError(f"Unexpected Razorpay call: {method} {path}")
+
+		with patch("lex.lexpack._razorpay_request", side_effect=fake_gateway):
+			order = lexpack.create_razorpay_order("STARTER", currency="USD")
+			signature = hmac.new(
+				b"unit-test-key-secret",
+				f"{order['order_id']}|{payment_id}".encode(),
+				hashlib.sha256,
+			).hexdigest()
+			result = lexpack.verify_razorpay_payment(
+				order["purchase"],
+				payment_id,
+				order["order_id"],
+				signature,
+			)
+
+		self.assertIsNone(order["work_intake"])
+		self.assertEqual(order["currency"], "USD")
+		self.assertEqual(result["status"], "Paid")
+		self.assertEqual(
+			frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "current_balance"),
+			100,
+		)
 
 	def test_failed_webhook_processing_is_auditable_and_idempotent(self):
 		_configure_test_gateway(enabled=1)
@@ -284,6 +351,36 @@ def _make_client():
 			"territory": frappe.db.get_value("Territory", {"is_group": 0}, "name"),
 		}
 	).insert(ignore_permissions=True).name
+
+
+def _make_user():
+	email = f"lexpack-{frappe.generate_hash(length=12).lower()}@example.invalid"
+	user = frappe.get_doc(
+		{
+			"doctype": "User",
+			"email": email,
+			"first_name": "LexPack",
+			"last_name": "Buyer",
+			"enabled": 1,
+			"user_type": "Website User",
+			"send_welcome_email": 0,
+		}
+	).insert(ignore_permissions=True)
+	user.add_roles("Lexocrates Client")
+	return user
+
+
+def _make_portal_user(user: str, client: str, portal_role: str):
+	return frappe.get_doc(
+		{
+			"doctype": "Lexocrates Portal User",
+			"user": user,
+			"client": client,
+			"portal_role": portal_role,
+			"account_status": "Active",
+			"matter_access_scope": "All Client Matters",
+		}
+	).insert(ignore_permissions=True)
 
 
 def _service_purchase(client, plan, amount, points):

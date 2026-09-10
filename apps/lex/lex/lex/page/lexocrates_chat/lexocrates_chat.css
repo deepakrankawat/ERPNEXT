@@ -856,6 +856,31 @@
 	margin-top: 8px;
 }
 
+.lex-chat__approval-box {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--border-color);
+}
+
+.lex-chat__pricing-context {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 10px 12px;
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius-md);
+	background: var(--subtle-fg);
+}
+
+.lex-chat__pricing-context span {
+	color: var(--text-muted);
+	font-size: var(--text-xs);
+}
+
 .lex-chat__send-hint,
 .lex-chat__sidebar-empty {
 	font-size: var(--text-xs);

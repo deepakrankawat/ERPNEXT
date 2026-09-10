@@ -683,8 +683,7 @@ def issue_quote(
 @frappe.whitelist()
 def approve_quote_pricing(intake: str, decision: str, notes: str | None = None):
 	"""CEO signs off on (or rejects) the estimated price before the client can fund the matter."""
-	if frappe.session.user != "Administrator" and "CEO" not in frappe.get_roles(frappe.session.user):
-		frappe.throw(_("Only the CEO role can approve or reject matter pricing."), frappe.PermissionError)
+	_require_pricing_authority()
 	doc = frappe.get_doc("Lexocrates Work Intake", intake)
 	if doc.pricing_approval_status != "Pending CEO Approval":
 		frappe.throw(_("This intake is not awaiting pricing approval."), frappe.ValidationError)
@@ -713,7 +712,102 @@ def approve_quote_pricing(intake: str, decision: str, notes: str | None = None):
 		{"decision": decision, "notes": notes, "quoted_amount": doc.quoted_amount, "required_lexpoints": doc.required_lexpoints},
 	)
 	_post_ceo_approval_decision(doc, decision, notes)
+	if decision == "Approved":
+		_notify_client_quote_ready(doc)
 	return {"intake": doc.name, "status": doc.status, "pricing_approval_status": doc.pricing_approval_status}
+
+
+@frappe.whitelist()
+def submit_chat_pricing(
+	intake: str,
+	required_lexpoints: int,
+	quoted_amount: float,
+	delivery_timeline_hours: int,
+	scope_summary: str,
+	review_notes: str | None = None,
+):
+	"""CEO/manual pricing action used by the internal Matter chat approval card."""
+	_require_pricing_authority()
+	doc = frappe.get_doc("Lexocrates Work Intake", intake)
+	if doc.status not in {"Operations Review", "Analysis Pending", "Pending CEO Approval", "Quote Ready"}:
+		frappe.throw(_("This intake is not available for manual pricing."), frappe.ValidationError)
+	if doc.funding_status in {"Payment Pending", "Funded"} or doc.status in {"Funding Pending", "Funded", "Matter Confirmed"}:
+		frappe.throw(_("Pricing is locked after payment or funding starts."), frappe.PermissionError)
+	if cint(required_lexpoints) <= 0 or flt(quoted_amount) <= 0 or cint(delivery_timeline_hours) <= 0:
+		frappe.throw(_("LexPoints, amount and delivery hours must be positive."), frappe.ValidationError)
+	scope_summary = (scope_summary or "").strip()
+	if not scope_summary:
+		frappe.throw(_("Scope summary is required before releasing pricing."), frappe.MandatoryError)
+	with _service_writes():
+		doc.required_lexpoints = cint(required_lexpoints)
+		doc.quoted_amount = flt(quoted_amount, 2)
+		doc.delivery_timeline_hours = cint(delivery_timeline_hours)
+		doc.scope_summary = scope_summary
+		doc.operations_review_notes = (review_notes or "").strip()
+		doc.low_confidence = 0
+		doc.analysis_status = "Complete"
+		doc.estimate_method = "Manual (Operations)"
+		doc.quote_version = cint(doc.quote_version) + 1
+		doc.quote_valid_until = add_days(nowdate(), cint(_setting("quote_validity_days", 7)))
+		doc.recommended_plan = _recommend_plan(doc.client, cint(required_lexpoints))
+		doc.quote_issued_by = frappe.session.user
+		doc.quote_issued_on = now_datetime()
+		doc.pricing_approval_status = "Approved"
+		doc.pricing_approved_by = frappe.session.user
+		doc.pricing_approved_on = now_datetime()
+		doc.pricing_rejection_reason = None
+		doc.quote_status = "Ready"
+		doc.status = "Quote Ready"
+		doc.save(ignore_permissions=True)
+	_sync_estimate_after_quote(doc)
+	_sync_estimate_approval(doc, "Approved")
+	_sync_job_commercial(doc)
+	_audit(
+		doc,
+		"CEO Chat Pricing Released",
+		{
+			"quote_version": doc.quote_version,
+			"required_lexpoints": doc.required_lexpoints,
+			"quoted_amount": doc.quoted_amount,
+			"delivery_timeline_hours": doc.delivery_timeline_hours,
+		},
+	)
+	_post_ceo_approval_decision(doc, "Approved", review_notes)
+	_notify_client_quote_ready(doc)
+	return {
+		"intake": doc.name,
+		"status": doc.status,
+		"quote_status": doc.quote_status,
+		"pricing_approval_status": doc.pricing_approval_status,
+		"required_lexpoints": cint(doc.required_lexpoints),
+		"quoted_amount": flt(doc.quoted_amount, 2),
+		"currency": doc.currency,
+		"delivery_timeline_hours": cint(doc.delivery_timeline_hours),
+		"quote_version": cint(doc.quote_version),
+	}
+
+
+@frappe.whitelist()
+def get_chat_pricing_context(intake: str) -> dict:
+	"""Return the current pricing values for the internal chat pricing dialog."""
+	_require_pricing_authority()
+	doc = frappe.get_doc("Lexocrates Work Intake", intake)
+	files = _intake_files(doc.name)
+	return {
+		"intake": doc.name,
+		"matter": doc.matter,
+		"job": doc.job,
+		"intake_title": doc.intake_title,
+		"status": doc.status,
+		"quote_status": doc.quote_status,
+		"pricing_approval_status": doc.pricing_approval_status,
+		"required_lexpoints": cint(doc.required_lexpoints),
+		"quoted_amount": flt(doc.quoted_amount, 2),
+		"currency": doc.currency,
+		"delivery_timeline_hours": cint(doc.delivery_timeline_hours),
+		"scope_summary": doc.scope_summary or _scope_summary(doc, len(files), len((doc.extracted_text or "").split())),
+		"review_notes": doc.operations_review_notes or "",
+	}
 
 
 @frappe.whitelist()
@@ -1648,20 +1742,11 @@ def _activate_document_estimate(doc, matter: str, job: str):
 
 
 def _route_quote_for_approval(doc, *, ai_profile=None):
-	"""Apply the CEO policy to eligible AI estimates or require individual sign-off.
+	"""Route every client-facing estimate through explicit CEO approval.
 
-	Called with in-memory field changes only (no save) so it composes cleanly
-	into the caller's own _service_writes()/save() block.
+	AI can propose observable pricing factors, but it cannot release pricing
+	or unlock payment without an executive action.
 	"""
-	policy = _eligible_ai_auto_approval(doc, ai_profile)
-	if policy:
-		doc.pricing_approval_status = "Not Required"
-		doc.pricing_approved_by = policy["authorized_by"]
-		doc.pricing_approved_on = now_datetime()
-		doc.pricing_rejection_reason = None
-		doc.quote_status = "Ready"
-		doc.status = "Quote Ready"
-		return True
 	doc.pricing_approval_status = "Pending CEO Approval"
 	doc.pricing_approved_by = None
 	doc.pricing_approved_on = None
@@ -1725,7 +1810,6 @@ def _notify_ceo_of_pending_pricing(doc):
 	]
 	if not ceo_users:
 		frappe.log_error("No enabled CEO user found to notify for pricing approval.", "Work Intake Pricing Approval")
-		return
 
 	link = frappe.utils.get_url(f"/app/lexocrates-work-intake/{doc.name}")
 	subject = _("Matter pricing approval needed: {0}").format(doc.intake_title)
@@ -1765,13 +1849,17 @@ def _notify_ceo_of_pending_pricing(doc):
 
 
 def _post_ceo_approval_card(doc):
-	"""Post executive pricing approval card with clean document links into #ceo-pricing-approvals."""
+	"""Post executive pricing approval cards without exposing them to client chat."""
 	try:
 		from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import ensure_ceo_approval_channel
 		from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import create_system_message
+		from lex.lexocrates_chat_sync import ensure_matter_chat_channel
 
-		channel = ensure_ceo_approval_channel()
-		if not channel:
+		channels = [("global", ensure_ceo_approval_channel(), 1)]
+		if doc.matter:
+			channels.append(("matter", frappe.get_doc("Lexocrates Chat Channel", ensure_matter_chat_channel(doc.matter)), 1))
+		channels = [(key, channel, internal_only) for key, channel, internal_only in channels if channel]
+		if not channels:
 			return
 
 		files = _intake_files(doc.name)
@@ -1805,13 +1893,15 @@ def _post_ceo_approval_card(doc):
 			f"_Awaiting CEO approval to release fixed quote to client._"
 		)
 
-		create_system_message(
-			channel=channel.name,
-			message_text=msg,
-			source_doctype="Lexocrates Work Intake",
-			source_name=doc.name,
-			automation_key=f"ceo_pricing_approval:{doc.name}:{doc.quote_version}",
-		)
+		for key, channel, internal_only in channels:
+			create_system_message(
+				channel=channel.name,
+				message_text=msg,
+				source_doctype="Lexocrates Work Intake",
+				source_name=doc.name,
+				automation_key=f"ceo_pricing_approval:{doc.name}:{doc.quote_version}:{key}",
+				internal_only=internal_only,
+			)
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), f"CEO Pricing Approval Chat Notification Failed for {doc.name}")
 
@@ -1820,9 +1910,13 @@ def _post_ceo_approval_decision(doc, decision: str, notes: str | None = None):
 	try:
 		from lex.lex.doctype.lexocrates_chat_channel.lexocrates_chat_channel import ensure_ceo_approval_channel
 		from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import create_system_message
+		from lex.lexocrates_chat_sync import ensure_matter_chat_channel
 
-		channel = ensure_ceo_approval_channel()
-		if not channel:
+		channels = [("global", ensure_ceo_approval_channel(), 1)]
+		if doc.matter:
+			channels.append(("matter", frappe.get_doc("Lexocrates Chat Channel", ensure_matter_chat_channel(doc.matter)), 1))
+		channels = [(key, channel, internal_only) for key, channel, internal_only in channels if channel]
+		if not channels:
 			return
 
 		desk_url = frappe.utils.get_url(f"/app/lexocrates-work-intake/{doc.name}")
@@ -1840,13 +1934,15 @@ def _post_ceo_approval_decision(doc, decision: str, notes: str | None = None):
 				f"Intake returned to **Operations Review**."
 			)
 
-		create_system_message(
-			channel=channel.name,
-			message_text=msg,
-			source_doctype="Lexocrates Work Intake",
-			source_name=doc.name,
-			automation_key=f"ceo_pricing_decision:{doc.name}:{doc.quote_version}:{decision.lower()}",
-		)
+		for key, channel, internal_only in channels:
+			create_system_message(
+				channel=channel.name,
+				message_text=msg,
+				source_doctype="Lexocrates Work Intake",
+				source_name=doc.name,
+				automation_key=f"ceo_pricing_decision:{doc.name}:{doc.quote_version}:{decision.lower()}:{key}",
+				internal_only=internal_only,
+			)
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), f"CEO Pricing Decision Chat Notification Failed for {doc.name}")
 
@@ -1891,6 +1987,52 @@ def _outgoing_email_is_ready() -> bool:
 			{"enable_outgoing": 1, "default_outgoing": 1},
 		)
 	)
+
+
+def _client_portal_url(section: str = "new-matter") -> str:
+	base = str(frappe.conf.get("lexocrates_public_url") or "https://engine.lexocrates.com").rstrip("/")
+	return f"{base}/client-portal#{section}"
+
+
+def _notify_client_quote_ready(doc):
+	recipients = []
+	if doc.portal_user:
+		user = frappe.db.get_value("Lexocrates Portal User", doc.portal_user, "user")
+		if user:
+			recipients.append(user)
+	if doc.matter:
+		from lex.client_access import get_authorized_portal_users
+
+		recipients.extend(get_authorized_portal_users(doc.matter))
+	recipients = list(dict.fromkeys(filter(None, recipients)))
+	emails = list(filter(None, (frappe.db.get_value("User", user, "email") for user in recipients)))
+	if not emails or not _outgoing_email_is_ready() or getattr(frappe.flags, "in_test", False):
+		return
+	message = _(
+		"<p>Your Lexocrates job pricing is ready for review and payment.</p>"
+		"<p><b>Job:</b> {0}<br><b>Matter:</b> {1}</p>"
+		"<p>Log in to the secure Client Portal to view the approved quote and payment options.</p>"
+		"<p><a href=\"{2}\">Open Client Portal</a></p>"
+	).format(
+		frappe.utils.escape_html(doc.job or doc.name),
+		frappe.utils.escape_html(doc.matter or ""),
+		_client_portal_url("new-matter"),
+	)
+	try:
+		frappe.sendmail(
+			recipients=emails,
+			subject=_("Lexocrates job pricing is ready: {0}").format(doc.intake_title),
+			message=message,
+			reference_doctype=doc.doctype,
+			reference_name=doc.name,
+			delayed=False,
+			send_priority=1,
+			x_priority=1,
+			add_unsubscribe_link=0,
+		)
+		_audit(doc, "Client Quote Ready Email Queued", {"recipients": recipients})
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"Client quote-ready email failed for {doc.name}")
 
 
 def _calculate_estimate(doc, word_count, document_count):
@@ -2126,6 +2268,15 @@ def _require_funding_authority(actor, route):
 def _require_internal():
 	if not _is_internal():
 		frappe.throw(_("Legal Operations authority is required."), frappe.PermissionError)
+
+
+def _require_pricing_authority():
+	if frappe.session.user == "Administrator":
+		return
+	if "CEO" not in frappe.get_roles(frappe.session.user):
+		frappe.throw(_("Only the CEO role can release client pricing."), frappe.PermissionError)
+	if frappe.db.get_value("User", frappe.session.user, "user_type") != "System User":
+		frappe.throw(_("Pricing can be released only by an internal System User."), frappe.PermissionError)
 
 
 def _is_internal():

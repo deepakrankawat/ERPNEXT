@@ -335,7 +335,7 @@ class LexocratesChatPage {
 		this.$root.on("click", ".lex-chat__adjust-pricing", (event) => {
 			const intake = $(event.currentTarget).attr("data-intake");
 			if (!intake) return;
-			frappe.set_route("Form", "Lexocrates Work Intake", intake);
+			this.open_pricing_dialog(intake);
 		});
 		this.$root.find(".lex-chat__cancel-reply").on("click", () => this.clear_reply());
 		this.$root.find(".lex-chat__mention").on("click", () => this.open_mention_dialog());
@@ -1324,6 +1324,57 @@ class LexocratesChatPage {
 				frappe.show_alert({ message: __("Message removed; audit record retained."), indicator: "green" });
 			}
 		);
+	}
+
+	async open_pricing_dialog(intake) {
+		let context = {};
+		try {
+			context = (await frappe.call({
+				method: "lex.work_intake.get_chat_pricing_context",
+				args: { intake },
+			})).message || {};
+		} catch (error) {
+			frappe.msgprint({
+				title: __("Pricing unavailable"),
+				message: error?.message || __("The pricing context could not be loaded."),
+				indicator: "red",
+			});
+			return;
+		}
+		const dialog = new frappe.ui.Dialog({
+			title: __("Set Job Pricing"),
+			fields: [
+				{ fieldname: "job_context", fieldtype: "HTML", options: `<div class="lex-chat__pricing-context"><strong>${frappe.utils.escape_html(context.intake_title || intake)}</strong><span>${frappe.utils.escape_html(context.matter || "")} · ${frappe.utils.escape_html(context.job || "")}</span></div>` },
+				{ fieldname: "required_lexpoints", fieldtype: "Int", label: __("Required LexPoints"), reqd: 1, default: context.required_lexpoints || "" },
+				{ fieldname: "quoted_amount", fieldtype: "Currency", label: __("Fixed Quote Amount"), reqd: 1, default: context.quoted_amount || "" },
+				{ fieldname: "currency", fieldtype: "Data", label: __("Currency"), read_only: 1, default: context.currency || "INR" },
+				{ fieldname: "delivery_timeline_hours", fieldtype: "Int", label: __("Delivery Timeline Hours"), reqd: 1, default: context.delivery_timeline_hours || "" },
+				{ fieldname: "scope_summary", fieldtype: "Small Text", label: __("Scope Summary"), reqd: 1, default: context.scope_summary || "" },
+				{ fieldname: "review_notes", fieldtype: "Small Text", label: __("Internal Pricing Notes"), default: context.review_notes || "" },
+			],
+			primary_action_label: __("Submit Pricing"),
+			primary_action: async (values) => {
+				dialog.get_primary_btn().prop("disabled", true);
+				try {
+					await frappe.call({
+						method: "lex.work_intake.submit_chat_pricing",
+						args: { intake, ...values },
+						freeze: true,
+						freeze_message: __("Releasing pricing..."),
+					});
+					dialog.hide();
+					frappe.show_alert({ message: __("Pricing submitted. Client payment is now available in the portal."), indicator: "green" });
+				} catch (error) {
+					dialog.get_primary_btn().prop("disabled", false);
+					frappe.msgprint({
+						title: __("Pricing not submitted"),
+						message: error?.message || __("The pricing update could not be completed."),
+						indicator: "red",
+					});
+				}
+			},
+		});
+		dialog.show();
 	}
 
 	remove_channel() {

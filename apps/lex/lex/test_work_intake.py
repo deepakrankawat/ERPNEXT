@@ -403,7 +403,7 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		self.assertEqual(analysis["pricing_approval_status"], "Pending CEO Approval")
 		self.assertEqual(analysis["quote_status"], "Pending CEO Approval")
 
-	def test_ceo_policy_auto_approves_only_completed_high_confidence_ai_estimate(self):
+	def test_high_confidence_ai_estimate_still_requires_ceo_approval(self):
 		frappe.set_user("Administrator")
 		frappe.db.set_single_value("LexPack Settings", "enable_ai_intake_analysis", 1)
 		with patch(
@@ -458,18 +458,22 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		with patch("lex.work_intake._estimation_profile_with_ai", return_value=(profile, None)):
 			result = work_intake.request_cost_estimate(intake["name"])
 
-		self.assertEqual(result["status"], "Quote Ready")
-		self.assertEqual(result["quote_status"], "Ready")
-		self.assertEqual(result["pricing_approval_status"], "Not Required")
+		self.assertEqual(result["status"], "Pending CEO Approval")
+		self.assertEqual(result["quote_status"], "Pending CEO Approval")
+		self.assertEqual(result["pricing_approval_status"], "Pending CEO Approval")
 		doc = frappe.get_doc("Lexocrates Work Intake", intake["name"])
 		self.assertEqual(doc.estimate_method, "AI-Assisted Formula")
-		self.assertEqual(doc.pricing_approved_by, "Administrator")
-		self.assertTrue(doc.pricing_approved_on)
+		self.assertIsNone(doc.pricing_approved_by)
+		self.assertIsNone(doc.pricing_approved_on)
 		estimate = frappe.get_doc("LPO AI Document Estimate", doc.ai_document_estimate)
-		self.assertEqual(estimate.status, "Approved")
-		self.assertEqual(estimate.approval_status, "Not Required")
-		# The existing funding gate accepts the auto-ready quote immediately.
-		work_intake._validate_ready_quote(doc)
+		self.assertEqual(estimate.status, "Pending CEO Approval")
+		self.assertEqual(estimate.approval_status, "Pending CEO Approval")
+		with self.assertRaises(frappe.ValidationError):
+			work_intake._validate_ready_quote(doc)
+
+		frappe.set_user("Administrator")
+		approval = work_intake.approve_quote_pricing(intake["name"], "Approved")
+		self.assertEqual(approval["status"], "Quote Ready")
 
 	def test_ai_human_review_flag_blocks_auto_approval(self):
 		frappe.set_user("Administrator")
@@ -550,7 +554,7 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		analysis = work_intake.request_cost_estimate(intake["name"])
 		self.assertEqual(analysis["pricing_approval_status"], "Pending CEO Approval")
 
-		# 3. Check intake went to Pending CEO Approval and message posted to CEO channel
+		# 3. Check intake went to Pending CEO Approval and message posted to CEO and Matter channels
 		doc = frappe.get_doc("Lexocrates Work Intake", intake["name"])
 		self.assertEqual(doc.pricing_approval_status, "Pending CEO Approval")
 		approval_msg = frappe.db.get_value(
@@ -562,6 +566,24 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		self.assertIsNotNone(approval_msg)
 		self.assertIn("Matter Pricing Approval Request", approval_msg.message_text)
 		self.assertIn("sample-nda", approval_msg.message_text)
+		matter_channel = frappe.db.get_value(
+			"Lexocrates Chat Channel",
+			{"reference_doctype": "LPO Matter", "reference_name": doc.matter},
+			"name",
+		)
+		self.assertTrue(matter_channel)
+		matter_msg = frappe.db.get_value(
+			"Lexocrates Chat Message",
+			{"channel": matter_channel, "source_doctype": "Lexocrates Work Intake", "source_name": doc.name},
+			["name", "message_text", "internal_only"],
+			as_dict=True,
+		)
+		self.assertIsNotNone(matter_msg)
+		self.assertTrue(matter_msg.internal_only)
+		frappe.set_user(self.user.name)
+		from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import get_messages
+		client_messages = get_messages(matter_channel)
+		self.assertNotIn(matter_msg.name, {row["name"] for row in client_messages})
 
 		# 4. CEO / Administrator approves pricing
 		frappe.set_user("Administrator")
@@ -573,11 +595,47 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		# 5. Check decision message in CEO channel
 		decision_msg = frappe.db.get_value(
 			"Lexocrates Chat Message",
-			{"channel": ceo_channel.name, "automation_key": f"ceo_pricing_decision:{doc.name}:{doc.quote_version}:approved"},
+			{"channel": ceo_channel.name, "automation_key": f"ceo_pricing_decision:{doc.name}:{doc.quote_version}:approved:global"},
 			"message_text",
 		)
 		self.assertIsNotNone(decision_msg)
 		self.assertIn("Matter Pricing Approved", decision_msg)
+
+	def test_ceo_can_submit_manual_pricing_from_chat(self):
+		intake = _new_intake()
+		work_intake.accept_sla(intake["name"], 1)
+		work_intake.save_detailed_instructions(
+			intake["name"], "Manually price this work after reviewing the source documents."
+		)
+		content = " ".join(["agreement scope liability evidence"] * 25)
+		with patch("lex.file_quarantine._run_malware_scan", return_value=("Clean", "Unit Test Scanner", "Clean")):
+			work_intake.upload_document(intake["name"], "manual-pricing.txt", _text_upload(content))
+
+		with self.assertRaises(frappe.PermissionError):
+			work_intake.submit_chat_pricing(
+				intake["name"],
+				required_lexpoints=80,
+				quoted_amount=240,
+				delivery_timeline_hours=48,
+				scope_summary="Manual client-approved scope.",
+			)
+
+		frappe.set_user("Administrator")
+		result = work_intake.submit_chat_pricing(
+			intake["name"],
+			required_lexpoints=80,
+			quoted_amount=240,
+			delivery_timeline_hours=48,
+			scope_summary="Manual client-approved scope.",
+			review_notes="CEO set pricing from chat.",
+		)
+		self.assertEqual(result["status"], "Quote Ready")
+		self.assertEqual(result["pricing_approval_status"], "Approved")
+		doc = frappe.get_doc("Lexocrates Work Intake", intake["name"])
+		self.assertEqual(doc.required_lexpoints, 80)
+		self.assertEqual(doc.quoted_amount, 240)
+		self.assertEqual(doc.quote_status, "Ready")
+		self.assertEqual(doc.pricing_approved_by, "Administrator")
 
 
 def _new_intake():

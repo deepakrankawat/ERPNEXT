@@ -395,16 +395,23 @@
 
 	function walletCard(data) {
 		if (!data.wallet) return card("LexPack", "Role protected", empty("LexPack balance is not available for your role."));
+		const accountingCurrency = data.lexpack?.accounting_currency || data.client?.default_currency || "INR";
+		return `<article class="lex-card"><div class="lex-wallet"><span class="lex-wallet-label">Available balance · never expires</span><div class="lex-wallet-balance">${fmtNumber(data.wallet.current_balance)} <small>LexPoints</small></div><div class="lex-wallet-meta"><span>${fmtNumber(data.wallet.reserved_balance)} reserved</span><span>${fmtNumber(data.wallet.total_consumed)} consumed</span><span>${fmtNumber(data.wallet.bonus_points_earned)} bonus earned</span></div><div class="lex-wallet-tier"><span><small>Current tier</small><strong>${escapeHTML(data.wallet.current_pricing_tier || "Not qualified")}</strong></span><span><small>Accounting spend</small><strong>${escapeHTML(fmtMoney(data.wallet.rolling_12_month_spend, accountingCurrency))}</strong></span></div></div></article>`;
 		return `<article class="lex-card"><div class="lex-wallet"><span class="lex-wallet-label">Available balance · never expires</span><div class="lex-wallet-balance">${fmtNumber(data.wallet.current_balance)} <small>LexPoints</small></div><div class="lex-wallet-meta"><span>${fmtNumber(data.wallet.reserved_balance)} reserved</span><span>${fmtNumber(data.wallet.total_consumed)} consumed</span><span>${fmtNumber(data.wallet.bonus_points_earned)} bonus earned</span></div><div class="lex-wallet-tier"><span><small>Current tier</small><strong>${escapeHTML(data.wallet.current_pricing_tier || "Not qualified")}</strong></span><span><small>Rolling 12-month spend</small><strong>${escapeHTML(fmtMoney(data.wallet.rolling_12_month_spend, "USD"))}</strong></span></div></div></article>`;
 	}
 	function walletSection(data) {
 		if (!data.wallet) return "";
 		const lexpack = data.lexpack || { plans: [], purchases: [], payment_enabled: false, purchase_access: false };
+		const selectedCurrency = lexpack.selected_currency || "CAD";
+		const selectedOption = (lexpack.currency_options || []).find((row) => row.code === selectedCurrency);
+		const currencyLabel = selectedOption ? `${selectedOption.country} · ${selectedOption.code} (${selectedOption.symbol})` : selectedCurrency;
 		const planCards = lexpack.plans.map((plan) => {
 			const price = plan.enterprise_custom ? "Custom" : fmtMoney(plan.price, plan.currency);
 			const points = plan.enterprise_custom ? "Custom LexPoints" : `${fmtNumber(plan.lexpoints)} LexPoints`;
 			let action = '<a class="lex-button secondary btn btn-default btn-sm" href="mailto:sales@lexocrates.com?subject=LexPack%20Enterprise">Contact sales</a>';
-			if (!plan.enterprise_custom) action = '<button class="lex-button secondary btn btn-default btn-sm" type="button" data-go="new-matter">Available after your work quote</button>';
+			if (!plan.enterprise_custom && !lexpack.purchase_access) action = '<button class="lex-button secondary btn btn-default btn-sm" type="button" disabled>Ask your portal admin to enable purchase access</button>';
+			else if (!plan.enterprise_custom && !lexpack.payment_enabled) action = '<button class="lex-button secondary btn btn-default btn-sm" type="button" disabled>Razorpay setup pending</button>';
+			else if (!plan.enterprise_custom) action = `<button class="lex-button btn btn-primary btn-sm" type="button" title="Checkout in ${escapeHTML(currencyLabel)}" data-buy-lexpack="${escapeHTML(plan.name)}" data-currency="${escapeHTML(plan.currency)}">Buy now · ${escapeHTML(price)}</button>`;
 			return `<article class="lex-plan-card frappe-card ${plan.plan_code === "PROFESSIONAL" ? "recommended" : ""}"><div class="lex-plan-top"><div><span class="lex-plan-code">${escapeHTML(plan.plan_code)}</span><h3>${escapeHTML(plan.plan_name)}</h3></div><span class="lex-plan-advantage">${escapeHTML(plan.value_advantage)}</span></div><div class="lex-plan-price">${escapeHTML(price)}</div><div class="lex-plan-points">${escapeHTML(points)}</div><ul><li>One client-owned wallet</li><li>All practice areas</li><li>No expiry</li><li>Rolling fair-pricing qualification</li></ul><div class="lex-plan-action">${action}</div></article>`;
 		}).join("");
 		const ledger = data.transactions.length ? `<div class="lex-table-wrap"><table class="lex-table table"><thead><tr><th>Transaction</th><th>Points</th><th>Matter</th><th>Balance</th><th>Date</th></tr></thead><tbody>${data.transactions.map((row) => `<tr><td>${escapeHTML(row.transaction_type)}</td><td>${fmtNumber(row.points)}</td><td>${escapeHTML(row.matter || "—")}</td><td>${fmtNumber(row.available_balance_after)}</td><td>${escapeHTML(fmtDate(row.posted_on))}</td></tr>`).join("")}</tbody></table></div>` : empty("No LexPoint transactions yet.");
@@ -618,7 +625,7 @@
 		button.textContent = "Preparing secure payment...";
 		try {
 			await loadRazorpayCheckout();
-			const order = await call("lex.lexpack.create_razorpay_order", { plan: button.dataset.buyLexpack, work_intake: button.dataset.workIntake });
+			const order = await call("lex.lexpack.create_razorpay_order", { plan: button.dataset.buyLexpack, work_intake: button.dataset.workIntake, currency: button.dataset.currency });
 			const checkout = new window.Razorpay({
 				...order,
 				handler: async (response) => {
@@ -631,7 +638,7 @@
 							razorpay_signature: response.razorpay_signature,
 						});
 						notify(result.status === "Paid" ? `${fmtNumber(result.total_lexpoints)} LexPoints credited` : result.message, result.status === "Paid" ? "green" : "orange");
-						reloadSection("new-matter");
+						reloadSection(order.work_intake ? "new-matter" : "wallet");
 					} catch (error) {
 						showError("Payment verification failed", error);
 						button.disabled = false;
