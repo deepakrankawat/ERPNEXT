@@ -43,7 +43,7 @@
 					<div class="lex-client-helper-banner" style="margin-top: 16px; padding: 12px 16px; background: #eff6ff; border: 1px solid #bae6fd; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
 						<div>
 							<h4 style="margin: 0 0 2px 0; font-size: 12px; font-weight: 700; color: #0369a1;">Client Organization?</h4>
-							<p style="margin: 0; font-size: 11px; color: #0c4a6e;">Sign in to review quotes, matters &amp; LexPacks.</p>
+							<p style="margin: 0; font-size: 11px; color: #0c4a6e;">Sign in to review quotes, matters &amp; LexPack<sup class="lex-tm">TM</sup>s.</p>
 						</div>
 						<a href="/client-login" class="btn btn-sm" style="white-space: nowrap; background: #0284c7; color: #ffffff !important; font-weight: 600; font-size: 11px; padding: 6px 12px; border-radius: 6px; text-decoration: none;">
 							Client Login →

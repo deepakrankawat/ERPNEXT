@@ -139,6 +139,12 @@
 			.replace(/</g, "&lt;")
 			.replace(/>/g, "&gt;")
 			.replace(/"/g, "&quot;");
+	const normalizeWebsite = () => {
+		const control = requestForm.elements.website;
+		const value = String(control?.value || "").trim();
+		if (!control || !value || value.includes("://")) return;
+		control.value = `https://${value}`;
+	};
 
 	if (modalCloseBtn) modalCloseBtn.addEventListener("click", closeModal);
 	if (modalDismissBtn) modalDismissBtn.addEventListener("click", closeModal);
@@ -150,6 +156,7 @@
 
 	requestForm.addEventListener("submit", async (event) => {
 		event.preventDefault();
+		normalizeWebsite();
 		const button = requestForm.querySelector("button[type='submit']");
 		button.disabled = true;
 		button.textContent = "Sending…";

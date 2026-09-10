@@ -299,10 +299,7 @@ def _navigation(portal_user):
 	if portal_user.lexpack_view_access:
 		items.append({"label": "LexPack", "section": "wallet", "icon": "wallet"})
 	if portal_user.user_management_authority:
-		items.extend((
-			{"label": "Team & Access", "section": "users", "icon": "users"},
-			{"label": "Organization", "section": "organization", "icon": "settings"},
-		))
+		items.append({"label": "Team & Access", "section": "users", "icon": "users"})
 	items.append({"label": "Support", "href": "mailto:support@lexocrates.com", "icon": "help"})
 	return items
 

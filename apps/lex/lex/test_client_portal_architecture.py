@@ -262,6 +262,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			organization_name=f"Registration Organization {suffix}",
 			organization_type="Law Firm",
 			country=country,
+			website="Example.COM/",
 			primary_user_name="Registration Administrator",
 			designation="Managing Partner",
 			email=email,
@@ -273,6 +274,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		portal_user = frappe.get_doc("Lexocrates Portal User", result["portal_user"])
 		user = frappe.get_doc("User", email)
 		self.assertEqual(client.customer_type, "Company")
+		self.assertEqual(client.website, "https://example.com")
 		self.assertEqual(portal_user.client, client.name)
 		self.assertEqual(portal_user.portal_role, "Client Administrator")
 		self.assertEqual(user.user_type, "Website User")
@@ -288,6 +290,21 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertTrue(frappe.db.exists("Lexocrates Client Wallet", {"client": client.name}))
 		with self.assertRaises(frappe.PermissionError):
 			portal_management.verify_client_registration(request["test_token"], STRONG_TEST_PASSWORD)
+
+	def test_client_registration_website_url_requires_valid_https_domain(self):
+		country = frappe.db.get_value("Country", {}, "name")
+		suffix = frappe.generate_hash(length=8).lower()
+		with self.assertRaises(frappe.ValidationError):
+			portal_management.request_client_registration(
+				organization_name=f"Bad Website Registration {suffix}",
+				organization_type="Law Firm",
+				country=country,
+				website="javascript:alert(1)",
+				primary_user_name="Registration Administrator",
+				designation="Managing Partner",
+				email=f"bad-website-{suffix}@example.invalid",
+				billing_currency=frappe.db.get_default("currency") or "INR",
+			)
 
 	def test_client_administrator_invites_user_to_same_client(self):
 		client = _make_client()

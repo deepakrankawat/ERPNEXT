@@ -1691,6 +1691,16 @@ body.lex-portal-sidebar-open {
 
 /* ---------- LexPack plans ---------- */
 
+.lex-tm {
+	font-size: 0.52em;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	line-height: 0;
+	margin-left: 1px;
+	position: relative;
+	top: -0.48em;
+}
+
 .lex-plan-grid {
 	display: grid;
 	grid-template-columns: 1fr;

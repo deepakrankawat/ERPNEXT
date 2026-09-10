@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from urllib.parse import urlparse, urlunparse
 
 import frappe
 from frappe import _
@@ -410,6 +411,7 @@ def request_client_registration(
 	organization_name = (organization_name or "").strip()
 	primary_user_name = (primary_user_name or "").strip()
 	designation = (designation or "").strip()
+	website = _normalize_website_url(website)
 	email = validate_email_address((email or "").strip().lower(), throw=True)
 	if not all((organization_name, organization_type, country, primary_user_name, designation, email)):
 		frappe.throw(_("Complete every mandatory registration field."), frappe.MandatoryError)
@@ -681,6 +683,30 @@ def _activate_client_registration(registration, password: str, compliance_requir
 		new_value={"client_id": customer.get("custom_lexocrates_client_id"), "organization": customer.customer_name},
 	)
 	return {"activated": True, "client": customer.name, "portal_user": portal_user.name, "redirect": "/client-portal"}
+
+
+def _normalize_website_url(value: str | None) -> str | None:
+	value = str(value or "").strip()
+	if not value:
+		return None
+	if "://" not in value:
+		value = f"https://{value}"
+	parsed = urlparse(value)
+	if parsed.scheme.lower() == "http":
+		parsed = parsed._replace(scheme="https")
+	if parsed.scheme.lower() != "https":
+		frappe.throw(_("Website URL must be in https://example.com format."), frappe.ValidationError)
+	if parsed.username or parsed.password:
+		frappe.throw(_("Website URL cannot include username or password."), frappe.ValidationError)
+	host = (parsed.hostname or "").strip().lower()
+	if not host or " " in host or "." not in host:
+		frappe.throw(_("Website URL must include a valid domain, for example https://example.com."), frappe.ValidationError)
+	netloc = host
+	if parsed.port:
+		netloc = f"{host}:{parsed.port}"
+	path = (parsed.path or "").rstrip("/")
+	normalized = urlunparse(("https", netloc, path, "", parsed.query, ""))
+	return normalized.rstrip("/")
 
 
 def _approved_registration(token: str):

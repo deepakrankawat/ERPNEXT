@@ -29,6 +29,7 @@
 	const escapeHTML = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({
 		"&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
 	})[char]);
+	const brandedText = (value) => escapeHTML(value).replace(/\bLexPack(s?)\b/g, 'LexPack<sup class="lex-tm">TM</sup>$1');
 	const statusClass = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 	const indicatorColor = (value) => {
 		const status = String(value || "").toLowerCase();
@@ -146,7 +147,7 @@
 							<li class="nav-item"><button class="btn-reset nav-link notifications-icon text-muted" type="button" data-go="messages" aria-label="Messages">${icon("message")}</button></li>
 							<li class="vertical-bar d-none d-sm-block"></li>
 							<li class="nav-item d-none d-md-block"><a class="nav-link" href="mailto:support@lexocrates.com">Help</a></li>
-							<li class="nav-item dropdown lex-user-dropdown"><button class="btn-reset nav-link" type="button" data-user-menu-toggle aria-label="User menu"><span class="lex-presence-avatar"><span class="avatar avatar-medium" title="${escapeHTML(data.profile.full_name)}">${escapeHTML(initials(data.profile.full_name))}</span>${presenceDot(data.profile.email)}</span></button><div class="dropdown-menu dropdown-menu-right" data-user-menu><div class="lex-user-menu-head"><strong>${escapeHTML(data.profile.full_name)}</strong><span>${escapeHTML(data.profile.portal_role)}</span><small id="lex-current-presence">Offline</small></div><div class="dropdown-divider"></div><div class="lex-presence-menu"><label for="lex-presence-select">Availability</label><select id="lex-presence-select" class="form-control input-xs"><option value="Online">Online</option><option value="Away">Away</option><option value="Busy">Busy</option><option value="Offline">Offline</option></select></div><div class="dropdown-divider"></div><button class="dropdown-item" type="button" data-go="organization">Organization</button><button id="lex-portal-logout" class="dropdown-item" type="button">Log out</button></div></li>
+							<li class="nav-item dropdown lex-user-dropdown"><button class="btn-reset nav-link" type="button" data-user-menu-toggle aria-label="User menu"><span class="lex-presence-avatar"><span class="avatar avatar-medium" title="${escapeHTML(data.profile.full_name)}">${escapeHTML(initials(data.profile.full_name))}</span>${presenceDot(data.profile.email)}</span></button><div class="dropdown-menu dropdown-menu-right" data-user-menu><div class="lex-user-menu-head"><strong>${escapeHTML(data.profile.full_name)}</strong><span>${escapeHTML(data.profile.portal_role)}</span><small id="lex-current-presence">Offline</small></div><div class="dropdown-divider"></div><div class="lex-presence-menu"><label for="lex-presence-select">Availability</label><select id="lex-presence-select" class="form-control input-xs"><option value="Online">Online</option><option value="Away">Away</option><option value="Busy">Busy</option><option value="Offline">Offline</option></select></div><div class="dropdown-divider"></div><button id="lex-portal-logout" class="dropdown-item" type="button">Log out</button></div></li>
 						</ul>
 					</div>
 				</div>
@@ -162,7 +163,7 @@
 					<header class="lex-topbar page-head"><div class="lex-topbar-inner page-head-content"><div class="lex-topbar-start"><button class="lex-mobile-menu btn btn-default btn-sm" type="button" data-open-sidebar aria-label="Open navigation" aria-controls="lex-client-navigation" aria-expanded="false">${icon("menu")}</button><div class="lex-page-heading"><h1 id="lex-page-title">Dashboard</h1><span>${escapeHTML(data.client.customer_name)}</span></div></div><div class="lex-topbar-end"><span class="indicator-pill blue no-indicator-dot">${escapeHTML(clientId)}</span></div></div></header>
 					<div class="lex-content layout-main-section">
 					${data.profile.mfa_required && !data.profile.mfa_enabled ? '<div class="lex-alert">Multi-factor authentication is required for this account. Contact Lexocrates support before handling sensitive work.</div>' : ''}
-					${overviewSection(data)}${mattersSection(data)}${workIntakeSection(data)}${workRequestsSection(data)}${documentsSection(data)}${approvalsSection(data)}${reportsSection(data)}${messagesSection()}${billingSection(data)}${walletSection(data)}${usersSection(data)}${organizationSection(data)}
+					${overviewSection(data)}${mattersSection(data)}${workIntakeSection(data)}${workRequestsSection(data)}${documentsSection(data)}${approvalsSection(data)}${reportsSection(data)}${messagesSection()}${billingSection(data)}${walletSection(data)}${usersSection(data)}
 					</div>
 				</div>
 			</div>
@@ -239,15 +240,15 @@
 
 	function navItem(item, index, data) {
 		const badge = item.section === "approvals" && data.metrics.approvals ? `<span class="lex-nav-badge">${data.metrics.approvals}</span>` : "";
-		if (item.href) return `<a class="standard-sidebar-item" href="${escapeHTML(item.href)}">${icon(item.icon)}<span class="sidebar-item-label">${escapeHTML(item.label)}</span></a>`;
-		return `<button type="button" data-section="${escapeHTML(item.section)}" data-title="${escapeHTML(item.label)}" class="standard-sidebar-item ${index === 0 ? "active selected" : ""}">${icon(item.icon)}<span class="sidebar-item-label">${escapeHTML(item.label)}</span>${badge}</button>`;
+		if (item.href) return `<a class="standard-sidebar-item" href="${escapeHTML(item.href)}">${icon(item.icon)}<span class="sidebar-item-label">${brandedText(item.label)}</span></a>`;
+		return `<button type="button" data-section="${escapeHTML(item.section)}" data-title="${escapeHTML(item.label)}" class="standard-sidebar-item ${index === 0 ? "active selected" : ""}">${icon(item.icon)}<span class="sidebar-item-label">${brandedText(item.label)}</span>${badge}</button>`;
 	}
 
 	function sectionHeader(title, text, actions = "") {
-		return `<div class="lex-section-header"><div><h2>${escapeHTML(title)}</h2><p>${escapeHTML(text)}</p></div>${actions ? `<div class="lex-section-actions">${actions}</div>` : ""}</div>`;
+		return `<div class="lex-section-header"><div><h2>${brandedText(title)}</h2><p>${brandedText(text)}</p></div>${actions ? `<div class="lex-section-actions">${actions}</div>` : ""}</div>`;
 	}
 	function card(title, note, body, className = "") {
-		return `<article class="lex-card widget border ${className}"><div class="lex-card-head widget-head"><div class="widget-label"><h3 class="widget-title">${escapeHTML(title)}</h3><small>${escapeHTML(note)}</small></div></div>${body}</article>`;
+		return `<article class="lex-card widget border ${className}"><div class="lex-card-head widget-head"><div class="widget-label"><h3 class="widget-title">${brandedText(title)}</h3><small>${brandedText(note)}</small></div></div>${body}</article>`;
 	}
 	function formCard(title, note, formId, body) {
 		return `<article class="lex-form-shell std-form-layout"><div class="form-layout"><div class="form-page"><div class="form-section card-section visible-section"><div class="section-head">${escapeHTML(title)}</div><div class="form-section-description">${escapeHTML(note)}</div><div class="section-body"><form id="${escapeHTML(formId)}" class="lex-form">${body}</form></div></div></div></div></article>`;
@@ -344,9 +345,9 @@
 		if (enough) {
 			options = intake.can_fund_lexpoints ? `<button class="lex-button btn btn-primary btn-sm" type="button" data-fund-existing="${escapeHTML(intake.name)}">Reserve existing ${fmtNumber(intake.required_lexpoints)} LexPoints</button>` : '<span class="text-muted">LexPack funding authority is required.</span>';
 		} else {
-			const packAction = plan && intake.can_fund_lexpoints && paymentEnabled && plan.self_service ? `<button class="lex-button btn btn-primary btn-sm" type="button" data-buy-lexpack="${escapeHTML(plan.name)}" data-work-intake="${escapeHTML(intake.name)}">Buy Recommended LexPack · ${escapeHTML(plan.plan_name)}</button>` : `<button class="lex-button btn btn-primary btn-sm" type="button" disabled>${plan ? `Recommended: ${escapeHTML(plan.plan_name)}` : "Contact Legal Operations for capacity"}</button>`;
+			const packAction = plan && intake.can_fund_lexpoints && paymentEnabled && plan.self_service ? `<button class="lex-button btn btn-primary btn-sm" type="button" data-buy-lexpack="${escapeHTML(plan.name)}" data-work-intake="${escapeHTML(intake.name)}">Buy Recommended LexPack<sup class="lex-tm">TM</sup> · ${escapeHTML(plan.plan_name)}</button>` : `<button class="lex-button btn btn-primary btn-sm" type="button" disabled>${plan ? `Recommended: ${escapeHTML(plan.plan_name)}` : "Contact Legal Operations for capacity"}</button>`;
 			const directAction = intake.can_pay_direct && paymentEnabled ? `<button class="lex-button secondary btn btn-default btn-sm" type="button" data-pay-direct="${escapeHTML(intake.name)}">Pay Fixed Quote Directly · ${escapeHTML(fmtMoney(intake.quoted_amount, intake.currency))}</button>` : '<button class="lex-button secondary btn btn-default btn-sm" type="button" disabled>Direct payment setup/authority required</button>';
-			options = `<div class="lex-funding-choice"><article><strong>Option 1 · Buy Recommended LexPack</strong><p>Razorpay credits ${fmtNumber(plan?.lexpoints || 0)} LexPoints to your wallet, then reserves ${fmtNumber(intake.required_lexpoints)} for this work.</p>${packAction}</article><article><strong>Option 2 · Pay Fixed Quote Directly</strong><p>Razorpay pays only this quote. No LexPack or wallet credit is created.</p>${directAction}</article></div>`;
+			options = `<div class="lex-funding-choice"><article><strong>Option 1 · Buy Recommended LexPack<sup class="lex-tm">TM</sup></strong><p>Razorpay credits ${fmtNumber(plan?.lexpoints || 0)} LexPoints to your wallet, then reserves ${fmtNumber(intake.required_lexpoints)} for this work.</p>${packAction}</article><article><strong>Option 2 · Pay Fixed Quote Directly</strong><p>Razorpay pays only this quote. No LexPack<sup class="lex-tm">TM</sup> or wallet credit is created.</p>${directAction}</article></div>`;
 		}
 		return `<div class="lex-intake-action"><h4>5. Confirm quote and funding</h4><div class="lex-quote-summary"><span><small>Fixed quote</small><strong>${escapeHTML(fmtMoney(intake.quoted_amount, intake.currency))}</strong></span><span><small>Required</small><strong>${fmtNumber(intake.required_lexpoints)} LexPoints</strong></span><span><small>Available</small><strong>${fmtNumber(intake.available_lexpoints)} LexPoints</strong></span><span><small>Delivery</small><strong>${fmtNumber(intake.delivery_timeline_hours)} hours after funding</strong></span></div><div class="lex-scope-box"><strong>Confirmed scope · quote v${fmtNumber(intake.quote_version)}</strong><p>${escapeHTML(intake.scope_summary)}</p><small>Valid until ${escapeHTML(fmtDate(intake.quote_valid_until))}</small></div>${options}${intake.failure_reason ? `<div class="lex-alert">${escapeHTML(intake.failure_reason)}</div>` : ""}</div>`;
 	}

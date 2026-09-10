@@ -1,5 +1,15 @@
 /* Canonical Lexocrates branding shared by Desk and Website surfaces. */
 
+.lex-tm {
+	font-size: 0.52em;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	line-height: 0;
+	margin-left: 1px;
+	position: relative;
+	top: -0.48em;
+}
+
 /* Shared product tokens. The app uses classic Frappe assets, so these map the
    Lexocrates palette directly onto the semantic variables used by Desk. */
 :root,
