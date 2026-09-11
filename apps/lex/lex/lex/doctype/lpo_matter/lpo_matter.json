@@ -24,6 +24,15 @@
   "counterparty_role",
   "opposing_counsel",
   "additional_parties",
+  "conflict_section",
+  "conflict_check_status",
+  "matter_acceptance_status",
+  "conflict_column_break",
+  "latest_conflict_event",
+  "conflict_reviewed_by",
+  "conflict_reviewed_on",
+  "conflict_review_notes",
+  "conflict_matches_html",
   "billing_section",
   "billing_method",
   "quoted_amount",
@@ -179,6 +188,66 @@
    "fieldtype": "Table",
    "label": "Additional Parties",
    "options": "LPO Matter Party"
+  },
+  {
+   "fieldname": "conflict_section",
+   "fieldtype": "Section Break",
+   "label": "Conflict Screening & Acceptance"
+  },
+  {
+   "default": "Not Run",
+   "fieldname": "conflict_check_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Conflict Check Status",
+   "options": "Not Run\nNo Match Found\nPotential Match — Human Review Required\nUnder Review\nCleared\nEscalated",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "matter_acceptance_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Matter Acceptance Status",
+   "options": "Pending\nAccepted\nDeclined\nOn Hold",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "conflict_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "latest_conflict_event",
+   "fieldtype": "Link",
+   "label": "Latest Conflict Screening Event",
+   "options": "LPO Conflict Screening Event",
+   "read_only": 1
+  },
+  {
+   "fieldname": "conflict_reviewed_by",
+   "fieldtype": "Link",
+   "label": "Conflict Reviewed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "conflict_reviewed_on",
+   "fieldtype": "Datetime",
+   "label": "Conflict Reviewed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "conflict_review_notes",
+   "fieldtype": "Small Text",
+   "label": "Conflict Review Notes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "conflict_matches_html",
+   "fieldtype": "HTML",
+   "label": "Conflict Screening Summary"
   },
   {
    "fieldname": "billing_section",

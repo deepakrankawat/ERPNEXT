@@ -1,0 +1,125 @@
+{
+ "actions": [],
+ "creation": "2026-09-11 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "party_name",
+  "normalized_name",
+  "searched_role",
+  "searched_side",
+  "match_type",
+  "review_priority",
+  "matched_matter",
+  "matched_matter_title",
+  "matched_matter_status",
+  "matched_party_name",
+  "matched_role",
+  "matched_side",
+  "matched_customer",
+  "jurisdictions",
+  "explanation"
+ ],
+ "fields": [
+  {
+   "fieldname": "party_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Searched Party Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "normalized_name",
+   "fieldtype": "Data",
+   "label": "Normalized Name"
+  },
+  {
+   "fieldname": "searched_role",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "New Role"
+  },
+  {
+   "fieldname": "searched_side",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "New Side"
+  },
+  {
+   "fieldname": "match_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Match Type",
+   "options": "Exact Match\nNormalized Match\nRelated Entity Match\nSimilar Name Candidate\nCounsel Relationship Match",
+   "reqd": 1
+  },
+  {
+   "fieldname": "review_priority",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Review Priority",
+   "options": "Priority Review\nReview Required\nContextual Review",
+   "reqd": 1
+  },
+  {
+   "fieldname": "matched_matter",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Matched Matter",
+   "options": "LPO Matter"
+  },
+  {
+   "fieldname": "matched_matter_title",
+   "fieldtype": "Data",
+   "label": "Matched Matter Title"
+  },
+  {
+   "fieldname": "matched_matter_status",
+   "fieldtype": "Data",
+   "label": "Matched Matter Status"
+  },
+  {
+   "fieldname": "matched_party_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Matched Party Name"
+  },
+  {
+   "fieldname": "matched_role",
+   "fieldtype": "Data",
+   "label": "Prior Role"
+  },
+  {
+   "fieldname": "matched_side",
+   "fieldtype": "Data",
+   "label": "Prior Side"
+  },
+  {
+   "fieldname": "matched_customer",
+   "fieldtype": "Data",
+   "label": "Customer / Instructing Law Firm"
+  },
+  {
+   "fieldname": "jurisdictions",
+   "fieldtype": "Data",
+   "label": "Jurisdictions"
+  },
+  {
+   "fieldname": "explanation",
+   "fieldtype": "Small Text",
+   "label": "Match Explanation"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-09-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO Conflict Match Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

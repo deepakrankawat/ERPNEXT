@@ -21,27 +21,30 @@
    "reqd": 1
   },
   {
-   "default": "Organization",
+   "default": "Corporation/Company",
    "fieldname": "party_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Party Type",
-   "options": "Organization\nIndividual\nGovernment / Regulator\nOther",
+   "options": "Individual\nCorporation/Company\nPartnership\nGovernment/Regulatory Body\nInsurer\nLaw Firm\nOther Entity",
    "reqd": 1
   },
   {
+   "default": "Other",
    "fieldname": "party_role",
-   "fieldtype": "Data",
+   "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Legal Role"
+   "label": "Legal Role",
+   "options": "Parent Company\nSubsidiary\nAffiliate\nDirector/Officer\nShareholder\nPlaintiff\nDefendant\nApplicant\nRespondent\nBuyer\nSeller\nTarget Company\nGuarantor\nInsurer\nCo-party\nThird Party\nRegulator\nOther",
+   "reqd": 1
   },
   {
-   "default": "Other",
+   "default": "Other / Not Applicable",
    "fieldname": "side",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Side",
-   "options": "Represented\nAdverse\nNeutral / Third Party\nOther",
+   "options": "Represented / Client Side\nAdverse / Counterparty Side\nNeutral / Third Party\nOther / Not Applicable",
    "reqd": 1
   },
   {

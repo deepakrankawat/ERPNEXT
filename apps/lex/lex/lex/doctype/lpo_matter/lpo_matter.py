@@ -52,12 +52,17 @@ class LPOMatter(Document):
 				new_value={"billing_method": self.billing_method, "status": self.status},
 			)
 		self._audit_authorization_changes(None)
+		if not getattr(self.flags, "in_test", False) or getattr(self.flags, "run_conflict_in_test", False):
+			from lex.conflict_check import run_conflict_check
+			run_conflict_check(self.name, trigger_reason="Matter Created")
 
 	def on_update(self):
 		self._sync_chat_channel()
 		previous = self.get_doc_before_save()
 		if previous:
 			self._audit_authorization_changes(previous)
+			from lex.conflict_check import check_matter_for_conflict_recheck
+			check_matter_for_conflict_recheck(self)
 
 	def _sync_chat_channel(self):
 		from lex.lexocrates_chat_sync import ensure_matter_chat_channel
@@ -152,6 +157,10 @@ class LPOMatter(Document):
 	def _validate_activation_gates(self):
 		if self.status != "Active":
 			return
+		if self.matter_acceptance_status == "Declined":
+			frappe.throw(_("Cannot activate a Matter with 'Declined' acceptance status."), frappe.ValidationError)
+		if self.conflict_check_status == "Escalated":
+			frappe.throw(_("Cannot activate a Matter while Conflict Check is Escalated."), frappe.ValidationError)
 		if self.billing_method == "Quoted Price":
 			if flt(self.quoted_amount) <= 0 or self.quote_status != "Approved":
 				frappe.throw(

@@ -1,0 +1,208 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "format:CONFLICT-{YYYY}-{#####}",
+ "creation": "2026-09-11 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "screening_overview_section",
+  "matter",
+  "matter_title",
+  "trigger_reason",
+  "overview_column_break",
+  "status",
+  "match_count",
+  "screened_on",
+  "initiated_by",
+  "compliance_log",
+  "matches_section",
+  "matches",
+  "searched_parties_summary",
+  "review_section",
+  "reviewed_by",
+  "reviewed_on",
+  "review_column_break",
+  "decision",
+  "decision_reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "screening_overview_section",
+   "fieldtype": "Section Break",
+   "label": "Conflict Screening Event"
+  },
+  {
+   "fieldname": "matter",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Client Matter",
+   "options": "LPO Matter",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "matter.matter_title",
+   "fieldname": "matter_title",
+   "fieldtype": "Data",
+   "label": "Matter Title",
+   "read_only": 1
+  },
+  {
+   "default": "Initial Matter Intake",
+   "fieldname": "trigger_reason",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Trigger Reason",
+   "reqd": 1
+  },
+  {
+   "fieldname": "overview_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Potential Match \u2014 Human Review Required",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Screening Status",
+   "options": "No Match Found\nPotential Match \u2014 Human Review Required\nUnder Review\nCleared\nEscalated",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "match_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Match Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "screened_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Screened On",
+   "reqd": 1
+  },
+  {
+   "fieldname": "initiated_by",
+   "fieldtype": "Link",
+   "label": "Initiated By",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "compliance_log",
+   "fieldtype": "Link",
+   "label": "Linked Compliance Log",
+   "options": "LPO Compliance Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "matches_section",
+   "fieldtype": "Section Break",
+   "label": "Conflict Matches Identified"
+  },
+  {
+   "fieldname": "matches",
+   "fieldtype": "Table",
+   "label": "Matches",
+   "options": "LPO Conflict Match Item"
+  },
+  {
+   "fieldname": "searched_parties_summary",
+   "fieldtype": "Long Text",
+   "label": "Searched Parties Summary",
+   "read_only": 1
+  },
+  {
+   "fieldname": "review_section",
+   "fieldtype": "Section Break",
+   "label": "Human Review & Decision"
+  },
+  {
+   "fieldname": "reviewed_by",
+   "fieldtype": "Link",
+   "label": "Reviewer",
+   "options": "User"
+  },
+  {
+   "fieldname": "reviewed_on",
+   "fieldtype": "Datetime",
+   "label": "Reviewed On"
+  },
+  {
+   "fieldname": "review_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "decision",
+   "fieldtype": "Select",
+   "label": "Review Decision",
+   "options": "Pending\nCleared\nEscalated\nDeclined"
+  },
+  {
+   "fieldname": "decision_reason",
+   "fieldtype": "Small Text",
+   "label": "Decision Reason / Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-09-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO Conflict Screening Event",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LPO_Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Lexocrates Operations User"
+  }
+ ],
+ "search_fields": "matter,status,trigger_reason",
+ "show_title_field_in_link": 0,
+ "sort_field": "screened_on",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
