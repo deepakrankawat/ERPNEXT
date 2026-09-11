@@ -1411,6 +1411,160 @@ body.lex-portal-sidebar-open {
 	.lex-check-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ---------- Intake 2-Step Wizard ---------- */
+
+.lex-wizard-stepper {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 12px;
+	padding: 12px 16px;
+	background: var(--lex-surface-2);
+	border: 1px solid var(--lex-border);
+	border-radius: var(--lex-radius-sm);
+	margin-bottom: 4px;
+}
+
+.lex-wizard-step {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--lex-ink-muted);
+	cursor: default;
+	transition: all 0.2s ease;
+}
+
+.lex-wizard-step.is-active {
+	color: var(--lex-primary);
+}
+
+.lex-wizard-step.is-complete {
+	color: var(--lex-green);
+	cursor: pointer;
+}
+
+.lex-step-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 700;
+	background: var(--lex-surface-3);
+	color: var(--lex-ink-muted);
+	transition: all 0.2s ease;
+}
+
+.lex-wizard-step.is-active .lex-step-badge {
+	background: var(--lex-primary);
+	color: #ffffff;
+}
+
+.lex-wizard-step.is-complete .lex-step-badge {
+	background: var(--lex-green-bg);
+	color: var(--lex-green);
+}
+
+.lex-wizard-step-line {
+	flex: 1 1 24px;
+	max-width: 60px;
+	height: 2px;
+	background: var(--lex-border);
+	transition: background 0.2s ease;
+}
+
+.lex-wizard-step.is-complete + .lex-wizard-step-line {
+	background: var(--lex-green);
+}
+
+.lex-wizard-page {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 14px;
+}
+
+@media (min-width: 640px) {
+	.lex-wizard-page {
+		grid-template-columns: repeat(2, 1fr);
+		column-gap: 16px;
+	}
+}
+
+.lex-wizard-page > label {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--lex-ink-muted);
+	min-width: 0;
+}
+
+.lex-wizard-page > label.wide {
+	grid-column: 1 / -1;
+}
+
+.lex-wizard-page-head {
+	grid-column: 1 / -1;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--lex-border);
+}
+
+.lex-wizard-page-head h4 {
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--lex-ink);
+	margin: 0;
+}
+
+.lex-wizard-page-head p {
+	font-size: 12.5px;
+	color: var(--lex-ink-muted);
+	margin-top: 2px;
+}
+
+.lex-linked-matter-card {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 11px 14px;
+	background: var(--lex-blue-bg);
+	border: 1px solid #bfdbfe;
+	border-radius: var(--lex-radius-sm);
+}
+
+.lex-linked-matter-info {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.lex-linked-matter-tag {
+	display: inline-block;
+	font-size: 10.5px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	padding: 2px 8px;
+	border-radius: 4px;
+	background: #1d4ed8;
+	color: #ffffff;
+}
+
+.lex-linked-matter-info strong {
+	font-size: 13.5px;
+	color: var(--lex-ink);
+}
+
 /* ---------- Work Intake ---------- */
 
 .lex-intake-card {

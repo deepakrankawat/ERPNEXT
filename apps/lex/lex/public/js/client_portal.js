@@ -291,26 +291,68 @@
 		if (!data.permissions.can_create_matters) return "";
 		const services = ["Contract Review", "Legal Research", "Document Review", "Due Diligence", "Compliance Review", "Litigation Support", "Drafting", "Summarization", "Other"];
 		const matterOptions = `<option value="">Create a new Matter</option>${(data.matters || []).filter((row) => !["On Hold", "Completed", "Closed"].includes(row.status)).map((row) => `<option value="${escapeHTML(row.name)}">${escapeHTML(row.matter_title)} · ${escapeHTML(row.name)}</option>`).join("")}`;
-		const form = formCard("1. Matter context and preliminary work", "The Matter and a Draft Job are created now. No purchase is required until Job documents have been scanned and estimated.", "lex-new-intake", `
-			<label class="wide">Matter<select name="matter" data-matter-select>${matterOptions}</select></label>
-			<label class="wide" data-new-matter-field>Matter title<input name="matter_title" required maxlength="140" placeholder="Example: Acme vendor contracting programme"></label>
-			<label data-new-matter-field>Matter nature<select name="matter_nature"><option>Advisory</option><option>Contract / Transaction</option><option>Litigation / Dispute</option><option>Regulatory / Compliance</option><option>Due Diligence</option><option>Other</option></select></label>
-			<label data-new-matter-field>Represented party<input name="represented_party_name" placeholder="Client or entity represented"></label>
-			<label data-new-matter-field>Represented party role<input name="our_side_role" placeholder="Buyer, petitioner, employer..."></label>
-			<label data-new-matter-field>Counterparty / opposing party<input name="counterparty_name" placeholder="Second or adverse party"></label>
-			<label data-new-matter-field>Counterparty role<input name="counterparty_role" placeholder="Seller, respondent, employee..."></label>
-			<label class="wide" data-new-matter-field>Opposing counsel / law firm<input name="opposing_counsel" placeholder="If known"></label>
-			<label class="wide">Job / work title<input name="intake_title" required maxlength="140" placeholder="Example: Review vendor master agreement"></label>
-			<label>Service type<select name="service_type" required>${services.map((item) => `<option>${item}</option>`).join("")}</select></label>
-			<label>Priority<select name="priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Urgent</option></select></label>
-			<label>Jurisdiction<input name="jurisdiction" required placeholder="India, Delhi High Court, UK law..."></label>
-			<label>Requested delivery<input name="requested_delivery_date" type="datetime-local"></label>
-			<label class="wide">Expected outcome<textarea name="expected_outcome" required placeholder="Describe the deliverable you need"></textarea></label>
-			<label class="wide">Preliminary instructions<textarea name="preliminary_details" required placeholder="Do not upload documents yet. Add background, parties and initial instructions."></textarea></label>
-			<label>Confidentiality<select name="confidentiality_level"><option>Standard</option><option selected>Confidential</option><option>Highly Confidential</option><option>Restricted</option></select></label>
-			<div class="wide lex-button-row"><button class="lex-button btn btn-primary btn-sm" type="submit">Create Draft Job and review SLA</button><span class="lex-form-note text-muted">Documents attach only to the Draft Job. Funding activates operational work and starts its SLA.</span></div>`);
+		const form = formCard("1. Matter & Job Setup", "Complete Matter details first, then define the Job specifications and review the SLA.", "lex-new-intake", `
+			<div class="lex-wizard-stepper">
+				<div class="lex-wizard-step is-active" data-wizard-step-ind="1">
+					<span class="lex-step-badge">1</span>
+					<span class="lex-step-title">Step 1: Matter Details</span>
+				</div>
+				<div class="lex-wizard-step-line"></div>
+				<div class="lex-wizard-step" data-wizard-step-ind="2">
+					<span class="lex-step-badge">2</span>
+					<span class="lex-step-title">Step 2: Job Details</span>
+				</div>
+			</div>
+
+			<!-- Step 1: Matter Details -->
+			<div class="lex-wizard-page" data-wizard-page="1">
+				<div class="lex-wizard-page-head">
+					<h4>Step 1 · Matter Context</h4>
+					<p class="text-muted">Choose an existing active Matter or provide details to create a new legal matter.</p>
+				</div>
+				<label class="wide">Matter<select name="matter" data-matter-select>${matterOptions}</select></label>
+				<label class="wide" data-new-matter-field>Matter title<input name="matter_title" required maxlength="140" placeholder="Example: Acme vendor contracting programme"></label>
+				<label data-new-matter-field>Matter nature<select name="matter_nature"><option>Advisory</option><option>Contract / Transaction</option><option>Litigation / Dispute</option><option>Regulatory / Compliance</option><option>Due Diligence</option><option>Other</option></select></label>
+				<label data-new-matter-field>Represented party<input name="represented_party_name" placeholder="Client or entity represented"></label>
+				<label data-new-matter-field>Represented party role<input name="our_side_role" placeholder="Buyer, petitioner, employer..."></label>
+				<label data-new-matter-field>Counterparty / opposing party<input name="counterparty_name" placeholder="Second or adverse party"></label>
+				<label data-new-matter-field>Counterparty role<input name="counterparty_role" placeholder="Seller, respondent, employee..."></label>
+				<label class="wide" data-new-matter-field>Opposing counsel / law firm<input name="opposing_counsel" placeholder="If known"></label>
+				<div class="wide lex-button-row" style="margin-top: 8px;">
+					<button class="lex-button btn btn-primary btn-sm" type="button" data-wizard-next>Save &amp; Proceed to Job &rarr;</button>
+					<span class="lex-form-note text-muted">Step 1 of 2: Job specifications unlock after Matter details are set.</span>
+				</div>
+			</div>
+
+			<!-- Step 2: Job Details -->
+			<div class="lex-wizard-page" data-wizard-page="2" style="display: none;">
+				<div class="lex-linked-matter-card">
+					<div class="lex-linked-matter-info">
+						<span class="lex-linked-matter-tag">Linked Matter</span>
+						<strong data-linked-matter-name>Selected Matter</strong>
+					</div>
+					<button type="button" class="lex-button secondary btn btn-default btn-xs" data-wizard-prev>&larr; Edit Matter Details</button>
+				</div>
+				<div class="lex-wizard-page-head">
+					<h4>Step 2 · Job &amp; Work Specifications</h4>
+					<p class="text-muted">Define the specific work to be performed under this matter.</p>
+				</div>
+				<label class="wide">Job / work title<input name="intake_title" required maxlength="140" placeholder="Example: Review vendor master agreement"></label>
+				<label>Service type<select name="service_type" required>${services.map((item) => `<option>${item}</option>`).join("")}</select></label>
+				<label>Priority<select name="priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Urgent</option></select></label>
+				<label>Jurisdiction<input name="jurisdiction" required placeholder="India, Delhi High Court, UK law..."></label>
+				<label>Requested delivery<input name="requested_delivery_date" type="datetime-local"></label>
+				<label class="wide">Expected outcome<textarea name="expected_outcome" required placeholder="Describe the deliverable you need"></textarea></label>
+				<label class="wide">Preliminary instructions<textarea name="preliminary_details" required placeholder="Do not upload documents yet. Add background, parties and initial instructions."></textarea></label>
+				<label>Confidentiality<select name="confidentiality_level"><option>Standard</option><option selected>Confidential</option><option>Highly Confidential</option><option>Restricted</option></select></label>
+				<div class="wide lex-button-row" style="margin-top: 8px;">
+					<button class="lex-button secondary btn btn-default btn-sm" type="button" data-wizard-prev>&larr; Back to Matter</button>
+					<button class="lex-button btn btn-primary btn-sm" type="submit">Create Draft Job and review SLA</button>
+					<span class="lex-form-note text-muted">Documents attach only to the Draft Job. Funding activates operational work and starts its SLA.</span>
+				</div>
+			</div>`);
 		const intakeCards = (data.intakes || []).map((intake) => intakeCard(intake, data)).join("");
-		return `<section class="lex-section" data-panel="new-matter">${sectionHeader("Submit New Work", "Matter + Draft Job → SLA → Job documents → estimate → funding → Job activation")}${form}${intakeCards || card("Current intake", "No intake submitted", empty("Submit preliminary details to begin."))}</section>`;
+		return `<section class="lex-section" data-panel="new-matter">${sectionHeader("Submit New Work", "Matter &rarr; Job &rarr; SLA &rarr; Job documents &rarr; estimate &rarr; funding &rarr; activation")}${form}${intakeCards || card("Current intake", "No intake submitted", empty("Submit preliminary details to begin."))}</section>`;
 	}
 
 	function additionalJobDocuments(intake, docs) {
@@ -516,14 +558,62 @@
 
 	function bindForms(root, data) {
 		const matterSelect = root.querySelector("[data-matter-select]");
+		const titleInput = root.querySelector('[name="matter_title"]');
+		const step1Page = root.querySelector('[data-wizard-page="1"]');
+		const step2Page = root.querySelector('[data-wizard-page="2"]');
+		const step1Ind = root.querySelector('[data-wizard-step-ind="1"]');
+		const step2Ind = root.querySelector('[data-wizard-step-ind="2"]');
+		const linkedMatterName = root.querySelector('[data-linked-matter-name]');
+
 		const toggleMatterFields = () => {
 			const existing = Boolean(matterSelect?.value);
 			root.querySelectorAll("[data-new-matter-field]").forEach((field) => { field.hidden = existing; });
-			const title = root.querySelector('[name="matter_title"]');
-			if (title) title.required = !existing;
+			if (titleInput) titleInput.required = !existing;
 		};
 		matterSelect?.addEventListener("change", toggleMatterFields);
 		toggleMatterFields();
+
+		const goToStep = (step) => {
+			if (step === 2) {
+				const isExisting = Boolean(matterSelect?.value);
+				if (!isExisting) {
+					const titleVal = (titleInput?.value || "").trim();
+					if (!titleVal) {
+						if (titleInput) {
+							titleInput.focus();
+							titleInput.reportValidity?.();
+						}
+						showError("Matter Title required", "Please enter a Matter title before proceeding to Job details.");
+						return;
+					}
+					if (linkedMatterName) linkedMatterName.textContent = titleVal;
+				} else {
+					const selectedOpt = matterSelect ? matterSelect.options[matterSelect.selectedIndex] : null;
+					if (linkedMatterName) linkedMatterName.textContent = selectedOpt ? selectedOpt.textContent : "Existing Matter";
+				}
+				if (titleInput) titleInput.required = false;
+				if (step1Page) step1Page.style.display = "none";
+				if (step2Page) step2Page.style.display = "grid";
+				step1Ind?.classList.remove("is-active");
+				step1Ind?.classList.add("is-complete");
+				step2Ind?.classList.add("is-active");
+				root.querySelector('[name="intake_title"]')?.focus();
+			} else {
+				if (step1Page) step1Page.style.display = "grid";
+				if (step2Page) step2Page.style.display = "none";
+				toggleMatterFields();
+				step1Ind?.classList.add("is-active");
+				step1Ind?.classList.remove("is-complete");
+				step2Ind?.classList.remove("is-active");
+			}
+		};
+
+		root.querySelectorAll("[data-wizard-next]").forEach((button) => button.addEventListener("click", () => goToStep(2)));
+		root.querySelectorAll("[data-wizard-prev]").forEach((button) => button.addEventListener("click", () => goToStep(1)));
+		step1Ind?.addEventListener("click", () => {
+			if (step1Ind.classList.contains("is-complete")) goToStep(1);
+		});
+
 		bindSubmit("lex-new-intake", "lex.work_intake.create_work_intake", "Matter and Draft Job created", "Could not start work");
 		root.querySelectorAll("[data-accept-sla]").forEach((button) => button.addEventListener("click", async () => {
 			const intake = button.dataset.acceptSla;
