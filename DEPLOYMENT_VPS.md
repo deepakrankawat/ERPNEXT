@@ -65,6 +65,10 @@ Replace every `CHANGE_ME` value and ensure:
 * `ADMIN_PASSWORD=YourStrongAdminPasswordHere!`
 * `DEVELOPER_MODE=0`
 
+Production Socket.IO uses host port `9001` by default so it does not collide
+with the development stack's port `9000`. If `SOCKETIO_PORT` is set in `.env`,
+use that same value in the Nginx `proxy_pass` target below.
+
 The deployment script intentionally refuses development hostnames, default passwords, missing secrets, or developer mode. The production Compose stack runs separate Gunicorn web, Socket.IO, scheduler, short/default worker, long worker, MariaDB, Redis, and ClamAV updater services.
 
 Socket.IO shares the Gunicorn service's network namespace. Frappe v15 validates
@@ -84,6 +88,11 @@ Run the automated deployment script:
 chmod +x deploy-vps.sh
 ./deploy-vps.sh
 ```
+
+The script first runs `git pull --ff-only origin <current-branch>` from the
+repository root, then builds and deploys the pulled revision. It stops without
+deploying if the checkout is not a Git branch or if the pull cannot be
+fast-forwarded.
 
 ---
 
@@ -127,7 +136,7 @@ server {
 
     # Realtime Socket.IO Messaging & Chat
     location /socket.io {
-        proxy_pass http://127.0.0.1:9000;
+        proxy_pass http://127.0.0.1:9001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
