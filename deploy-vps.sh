@@ -58,7 +58,10 @@ mkdir -p sites logs
 
 echo "[1/6] Validating and building the production stack..."
 docker compose -f "$COMPOSE_FILE" config --quiet
-docker compose -f "$COMPOSE_FILE" build
+# Build the shared application image once. `docker compose build` previously
+# built the same 4GB+ Dockerfile independently for every Frappe service and
+# could stall a production VPS while exporting several copies concurrently.
+docker build -t lex-prod:latest -f Dockerfile.prod .
 docker compose -f "$COMPOSE_FILE" up -d mariadb redis-cache redis-queue clamav-updater
 
 echo "[2/6] Waiting for MariaDB readiness..."

@@ -1,4 +1,8 @@
 x-frappe-common: &frappe-common
+  # Every Frappe-side service uses the same application image. Without a
+  # shared image name Compose builds and exports this 4GB+ image once per
+  # service, which can stall or exhaust a small VPS during deployment.
+  image: lex-prod:latest
   build:
     context: .
     dockerfile: Dockerfile.prod
@@ -62,6 +66,7 @@ services:
     logging: *logging
 
   clamav-updater:
+    image: lex-prod:latest
     build:
       context: .
       dockerfile: Dockerfile.prod
