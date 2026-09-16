@@ -28,6 +28,16 @@ DEFAULT_JURISDICTIONS = ("India", "Canada", "United Kingdom", "United States", "
 def get_estimator_bootstrap() -> dict:
 	_require_system_user()
 	ai_route = _estimation_ai_route_status()
+	available_models = frappe.get_all(
+		"LPO AI Model Registry",
+		filters={"enabled": 1},
+		fields=["name", "model_id", "display_name", "provider", "verified"],
+		order_by="provider asc, verified desc, model_id asc",
+	)
+	default_ai_model = (
+		frappe.db.get_single_value("LPO LexPoint Settings", "default_ai_model")
+		or ai_route.get("model")
+	)
 	return {
 		"service_types": sorted(DEFAULT_SERVICE_BY_INTAKE),
 		"priorities": list(PRIORITIES),
@@ -36,6 +46,8 @@ def get_estimator_bootstrap() -> dict:
 		"max_upload_bytes": get_max_file_size(),
 		"ai_enabled": bool(ai_route.get("ready")),
 		"ai_route": ai_route,
+		"available_models": available_models,
+		"default_ai_model": default_ai_model,
 		"currency": _setting("quote_currency", "USD"),
 		"recent_estimates": _recent_estimates(),
 		"disclaimer": _(
@@ -134,6 +146,7 @@ def upload_standalone_estimate_file() -> dict:
 		expected_outcome=frappe.form_dict.get("expected_outcome"),
 		detailed_instructions=frappe.form_dict.get("detailed_instructions"),
 		use_ai=frappe.form_dict.get("use_ai", 1),
+		ai_model=frappe.form_dict.get("ai_model"),
 	)
 
 
@@ -147,6 +160,7 @@ def estimate_document(
 	expected_outcome: str | None = None,
 	detailed_instructions: str | None = None,
 	use_ai: int = 1,
+	ai_model: str | None = None,
 ) -> dict:
 	"""Backward-compatible data-URL API; the Desk page uses multipart upload."""
 	_require_system_user()
@@ -163,12 +177,14 @@ def estimate_document(
 		expected_outcome=expected_outcome,
 		detailed_instructions=detailed_instructions,
 		use_ai=use_ai,
+		ai_model=ai_model,
 	)
 
 
 def _estimate_uploaded_content(
 	*, filename: str, content: bytes, service_type: str, jurisdiction: str, priority: str,
 	expected_outcome: str | None, detailed_instructions: str | None, use_ai: int,
+	ai_model: str | None = None,
 ) -> dict:
 	"""Persist, scan, extract and estimate a binary already accepted by Frappe."""
 	_require_system_user()
@@ -259,7 +275,7 @@ def _estimate_uploaded_content(
 	ai_profile = None
 	ai_note = None
 	if cint(use_ai):
-		ai_profile, ai_note = _standalone_estimation_profile_with_ai(context, extracted, 1, word_count)
+		ai_profile, ai_note = _standalone_estimation_profile_with_ai(context, extracted, 1, word_count, ai_model=ai_model)
 	else:
 		ai_note = _("Governed AI classification was not requested; the deterministic formula was used.")
 
@@ -270,6 +286,11 @@ def _estimate_uploaded_content(
 	confidence = flt(estimation.get("confidence") or _extraction_confidence(word_count))
 	threshold = flt(frappe.db.get_single_value("LPO LexPoint Settings", "auto_quote_confidence") or 72)
 	requires_review = bool(cint(estimation.get("requires_human_review")) or confidence < threshold)
+	saved_ai_model = (ai_profile or {}).get("ai_model_registry")
+	if not saved_ai_model and ai_model:
+		saved_ai_model = frappe.db.get_value("LPO AI Model Registry", ai_model, "name") or frappe.db.get_value(
+			"LPO AI Model Registry", {"model_id": ai_model}, "name"
+		)
 
 	with _estimate_service_writes():
 		record.reload()
@@ -299,6 +320,7 @@ def _estimate_uploaded_content(
 				"requires_human_review": cint(requires_review),
 				"analysis_note": ai_note,
 				"ai_execution": (ai_profile or {}).get("ai_execution"),
+				"ai_model": saved_ai_model,
 				"analysis_provider": (ai_profile or {}).get("provider"),
 				"analysis_model": (ai_profile or {}).get("model"),
 				"factor_breakdown_json": json.dumps(
@@ -351,6 +373,7 @@ def _serialize(record) -> dict:
 		"requires_human_review": bool(cint(record.requires_human_review)),
 		"analysis_note": record.analysis_note,
 		"ai_execution": record.ai_execution,
+		"ai_model": getattr(record, "ai_model", None),
 		"analysis_provider": record.analysis_provider,
 		"analysis_model": record.analysis_model,
 		"page_count": cint(record.page_count),
@@ -391,7 +414,7 @@ def _require_system_user():
 		)
 
 
-def _estimation_ai_route_status() -> dict:
+def _estimation_ai_route_status(target_provider: str | None = None, target_model: str | None = None) -> dict:
 	if not frappe.db.exists("DocType", "LPO AI Settings"):
 		return {"ready": False, "message": _("LPO AI Settings is not installed.")}
 	settings = frappe.get_single("LPO AI Settings")
@@ -401,7 +424,7 @@ def _estimation_ai_route_status() -> dict:
 		from lex.ai_gateway import STANDALONE_ESTIMATION_USE_CASE
 		from lex.lex.doctype.lpo_ai_settings.lpo_ai_settings import resolve_ai_route
 
-		provider, model, credential_name = resolve_ai_route(None, None, STANDALONE_ESTIMATION_USE_CASE)
+		provider, model, credential_name = resolve_ai_route(target_provider, target_model, STANDALONE_ESTIMATION_USE_CASE)
 		return {
 			"ready": True,
 			"provider": provider,
@@ -416,9 +439,29 @@ def _estimation_ai_route_status() -> dict:
 		}
 
 
-def _standalone_estimation_profile_with_ai(doc, extracted: str, document_count: int, word_count: int):
+def _standalone_estimation_profile_with_ai(doc, extracted: str, document_count: int, word_count: int, ai_model: str | None = None):
 	"""Use LPO AI only for evidence classification; ERP formula remains pricing authority."""
-	route = _estimation_ai_route_status()
+	target_provider = None
+	target_model = None
+	target_registry_name = None
+	if ai_model:
+		reg = frappe.db.get_value("LPO AI Model Registry", ai_model, ["name", "provider", "model_id"], as_dict=True)
+		if not reg:
+			reg = frappe.db.get_value("LPO AI Model Registry", {"model_id": ai_model, "enabled": 1}, ["name", "provider", "model_id"], as_dict=True)
+		if reg:
+			target_provider = reg.provider
+			target_model = reg.model_id
+			target_registry_name = reg.name
+	elif frappe.db.exists("DocType", "LPO LexPoint Settings"):
+		default_ai_model = frappe.db.get_single_value("LPO LexPoint Settings", "default_ai_model")
+		if default_ai_model:
+			reg = frappe.db.get_value("LPO AI Model Registry", default_ai_model, ["name", "provider", "model_id"], as_dict=True)
+			if reg:
+				target_provider = reg.provider
+				target_model = reg.model_id
+				target_registry_name = reg.name
+
+	route = _estimation_ai_route_status(target_provider, target_model)
 	if not route.get("ready"):
 		return None, route.get("message")
 	if not (extracted or "").strip():
@@ -465,8 +508,8 @@ def _standalone_estimation_profile_with_ai(doc, extracted: str, document_count: 
 				use_case=STANDALONE_ESTIMATION_USE_CASE,
 				prompt_text=prompt,
 				client_id=None,
-				provider=None,
-				model=None,
+				provider=target_provider,
+				model=target_model,
 				credential_name=None,
 				prompt_version=None,
 				is_high_risk=0,
@@ -488,6 +531,10 @@ def _standalone_estimation_profile_with_ai(doc, extracted: str, document_count: 
 	# inputs. They must never be supplied by the model or used to alter pricing.
 	parsed.pop("volume", None)
 	parsed.pop("billing_measure", None)
+	parsed["ai_model_registry"] = target_registry_name or (
+		frappe.db.get_value("LPO AI Model Registry", {"model_id": result.get("model"), "enabled": 1}, "name")
+		if result.get("model") else None
+	)
 	parsed.update(
 		{
 			"ai_execution": result.get("ai_execution"),

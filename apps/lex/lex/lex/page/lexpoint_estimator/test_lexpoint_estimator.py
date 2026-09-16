@@ -189,3 +189,80 @@ class TestStandaloneLexPointEstimator(FrappeTestCase):
 				content=_upload("blocked"),
 				service_type="Other",
 			)
+
+	def test_estimator_bootstrap_returns_registered_ai_models(self):
+		frappe.set_user("Administrator")
+		bootstrap = lexpoint_estimator.get_estimator_bootstrap()
+		self.assertIn("available_models", bootstrap)
+		self.assertIn("default_ai_model", bootstrap)
+		self.assertIsInstance(bootstrap["available_models"], list)
+
+	def test_standalone_estimator_respects_ai_model_selection(self):
+		frappe.set_user("Administrator")
+		reg_name = frappe.db.get_value("LPO AI Model Registry", {"model_id": "gpt-4o", "provider": "OpenAI"}, "name")
+		if not reg_name:
+			reg = frappe.get_doc(
+				{
+					"doctype": "LPO AI Model Registry",
+					"provider": "OpenAI",
+					"model_id": "gpt-4o",
+					"display_name": "GPT-4o Test",
+					"enabled": 1,
+				}
+			).insert(ignore_permissions=True)
+			reg_name = reg.name
+
+		content = " ".join(
+			["agreement obligations indemnity liability termination governing law confidential"] * 30
+		)
+		previous_form = dict(frappe.form_dict)
+		previous_file = getattr(frappe.local, "uploaded_file", None)
+		previous_filename = getattr(frappe.local, "uploaded_filename", None)
+		try:
+			frappe.local.uploaded_file = content.encode()
+			frappe.local.uploaded_filename = "model-selected-contract.txt"
+			frappe.form_dict.update(
+				{
+					"service_type": "Contract Review",
+					"jurisdiction": "India",
+					"priority": "Medium",
+					"expected_outcome": "Estimate review effort only",
+					"detailed_instructions": "Review all material commercial and legal risk clauses.",
+					"use_ai": 1,
+					"ai_model": reg_name,
+				}
+			)
+			with (
+				patch("lex.file_quarantine._run_malware_scan", return_value=("Clean", "Unit Test Scanner", "Clean")),
+				patch(
+					"lex.lex.page.lexpoint_estimator.lexpoint_estimator._standalone_estimation_profile_with_ai",
+					return_value=(
+						{
+							"provider": "OpenAI",
+							"model": "gpt-4o",
+							"confidence": 90,
+							"document_type": "Agreement",
+							"recommended_service": "Contract Review",
+							"complexity_score": 40,
+							"risk_level": "Medium",
+							"reviewer_level": "Senior Associate",
+							"ai_model_registry": reg_name,
+						},
+						None,
+					),
+				) as mock_ai,
+			):
+				result = lexpoint_estimator.upload_standalone_estimate_file()
+				self.assertEqual(mock_ai.call_args[1].get("ai_model"), reg_name)
+		finally:
+			frappe.form_dict.clear()
+			frappe.form_dict.update(previous_form)
+			frappe.local.uploaded_file = previous_file
+			frappe.local.uploaded_filename = previous_filename
+
+		record = frappe.get_doc("LPO Standalone Estimate", result["name"])
+		self.assertEqual(record.ai_model, reg_name)
+		self.assertEqual(record.analysis_provider, "OpenAI")
+		self.assertEqual(record.analysis_model, "gpt-4o")
+
+

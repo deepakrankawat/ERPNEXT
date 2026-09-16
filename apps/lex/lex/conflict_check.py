@@ -216,14 +216,15 @@ def get_all_historical_parties(exclude_matter: str | None = None) -> list[dict]:
 	intakes = frappe.get_all(
 		"Lexocrates Work Intake",
 		filters={"status": ["in", ["Cancelled", "SLA Pending", "Documents Pending", "Security Review"]]},
-		fields=["name", "intake_title", "client", "service_type", "jurisdiction", "status"],
+		fields=["name", "intake_title", "client", "service_type", "jurisdiction", "status", "matter"],
 		limit_page_length=500,
 	)
 	for i in intakes:
 		cust_name = frappe.db.get_value("Customer", i.client, "customer_name") or i.client
+		matter_link = i.matter if (i.matter and frappe.db.exists("LPO Matter", i.matter)) else None
 		historical.append({
-			"matter": i.name,
-			"matter_title": i.intake_title,
+			"matter": matter_link,
+			"matter_title": f"Intake {i.name}: {i.intake_title}",
 			"matter_status": "Prospective / Not Retained",
 			"customer": cust_name,
 			"jurisdictions": i.jurisdiction or "",
@@ -315,60 +316,61 @@ def evaluate_party_match(new_party: dict, historical_party: dict) -> tuple[str, 
 	old_side = historical_party.get("side") or ""
 	old_status = historical_party.get("matter_status") or "Active"
 	is_adversary = "Adverse" in new_side
+	mat_ref = historical_party.get("matter") or historical_party.get("matter_title") or "Historical Record"
 
 	if is_related_entity:
 		priority = "Contextual Review"
 		explanation = (
 			f"Related Entity Match: '{p1_raw}' links to '{p2_raw}' recorded as {historical_party['legal_role']} "
-			f"in Matter {historical_party['matter']}. Contextual review required."
+			f"in Matter {mat_ref}. Contextual review required."
 		)
 	elif is_similar_individual:
 		priority = "Contextual Review"
 		explanation = (
 			f"Possible Match / Identity Verification: Individual name '{p1_raw}' is similar to '{p2_raw}' in "
-			f"Matter {historical_party['matter']}. Verify identity; not an automatic conflict."
+			f"Matter {mat_ref}. Verify identity; not an automatic conflict."
 		)
 	elif old_status == "Prospective / Not Retained":
 		priority = "Review Required"
 		explanation = (
-			f"Prospective / Not Retained Match: '{p1_raw}' matches prospective consultation in {historical_party['matter']}. "
+			f"Prospective / Not Retained Match: '{p1_raw}' matches prospective consultation in {mat_ref}. "
 			f"Review confidential information received and relevance to this matter."
 		)
 	elif is_adversary and "Represented" in old_side and old_status == "Active":
 		priority = "Priority Review"
 		explanation = (
 			f"High-Priority Potential Conflict (Current Client Reversal): New adverse party '{p1_raw}' is currently a "
-			f"Represented Party in active Matter {historical_party['matter']} ({historical_party['matter_title']}). Hold acceptance."
+			f"Represented Party in active Matter {mat_ref} ({historical_party.get('matter_title', '')}). Hold acceptance."
 		)
 	elif "Represented" in new_side and "Adverse" in old_side and old_status == "Active":
 		priority = "Priority Review"
 		explanation = (
 			f"High-Priority Potential Conflict: New represented party '{p1_raw}' is recorded as an Adverse Counterparty "
-			f"in active Matter {historical_party['matter']} ({historical_party['matter_title']}). Human review required."
+			f"in active Matter {mat_ref} ({historical_party.get('matter_title', '')}). Human review required."
 		)
 	elif is_adversary and "Represented" in old_side and "Closed" in old_status:
 		priority = "Review Required"
 		explanation = (
 			f"Former Client Match: New adverse party '{p1_raw}' was a Represented Party in closed/former Matter "
-			f"{historical_party['matter']}. Review prior scope for related-matter or confidential information issues."
+			f"{mat_ref}. Review prior scope for related-matter or confidential information issues."
 		)
 	elif new_side and old_side and new_side != old_side:
 		priority = "Priority Review"
 		explanation = (
 			f"Party Alignment Shift: '{p1_raw}' appears on {new_side} here, but appeared on {old_side} in "
-			f"Matter {historical_party['matter']}. Priority review required."
+			f"Matter {mat_ref}. Priority review required."
 		)
 	elif historical_party.get("legal_role") in CONNECTED_INDIVIDUAL_ROLES:
 		priority = "Contextual Review"
 		explanation = (
 			f"Connected Individual Match: '{p1_raw}' matches {historical_party['legal_role']} in Matter "
-			f"{historical_party['matter']}. Contextual review required."
+			f"{mat_ref}. Contextual review required."
 		)
 	else:
 		priority = "Review Required" if "Represented" in old_side else "Contextual Review"
 		explanation = (
 			f"Potential Match ({match_type}): '{p1_raw}' matches historical record '{p2_raw}' ({historical_party['legal_role']}, "
-			f"{old_side}) in Matter {historical_party['matter']} [{old_status}]."
+			f"{old_side}) in Matter {mat_ref} [{old_status}]."
 		)
 
 	return match_type, priority, explanation
@@ -395,7 +397,7 @@ def run_conflict_check(matter_name: str, trigger_reason: str = "Initial Intake",
 					"searched_side": p.get("side") or "Not Specified",
 					"match_type": match_type,
 					"review_priority": priority,
-					"matched_matter": h["matter"],
+					"matched_matter": h.get("matter") or None,
 					"matched_matter_title": h.get("matter_title") or "",
 					"matched_matter_status": h.get("matter_status") or "Active",
 					"matched_party_name": h["party_name"],
@@ -410,7 +412,12 @@ def run_conflict_check(matter_name: str, trigger_reason: str = "Initial Intake",
 	unique_matches = []
 	seen = set()
 	for item in matches_found:
-		key = (item["party_name"], item["matched_matter"], item["matched_party_name"], item["match_type"])
+		key = (
+			item["party_name"],
+			item.get("matched_matter") or item.get("matched_matter_title"),
+			item["matched_party_name"],
+			item["match_type"],
+		)
 		if key not in seen:
 			seen.add(key)
 			unique_matches.append(item)

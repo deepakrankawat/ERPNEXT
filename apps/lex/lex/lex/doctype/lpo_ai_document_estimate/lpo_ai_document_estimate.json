@@ -10,7 +10,7 @@
   "identity_section", "estimate_title", "work_intake", "client", "portal_user", "identity_column", "status", "estimate_version", "created_on", "matter", "job",
   "source_section", "document_count", "clean_document_count", "page_count", "extracted_word_count", "character_count", "file_size_bytes", "source_corpus_hash", "document_manifest_json",
   "metadata_section", "primary_language", "ocr_quality", "content_form", "metadata_column", "has_tables", "has_images", "has_signatures", "has_annexures",
-  "analysis_section", "analysis_status", "analysis_confidence", "low_confidence", "analysis_column", "analysis_provider", "analysis_model", "ai_execution", "analysis_summary", "ai_reasoning",
+  "analysis_section", "ai_model", "analysis_status", "analysis_confidence", "low_confidence", "analysis_column", "analysis_provider", "analysis_model", "ai_execution", "analysis_summary", "ai_reasoning",
   "classification_section", "detected_document_type", "document_type_confidence", "alternative_matches", "practice_module", "recommended_service", "classification_column", "legal_domain", "detected_jurisdiction", "jurisdiction_confidence", "complexity_score", "complexity_classification", "risk_level", "reviewer_level",
   "formula_section", "formula_version", "billing_measure", "estimated_volume", "task_count", "base_quantity", "base_lexpoints", "billable_units", "formula_column", "junior_hours", "senior_hours", "partner_hours", "normal_sla_hours", "fast_track_sla_hours", "express_sla_hours", "expected_completion", "factor_breakdown_json", "explanation",
   "proposal_section", "estimate_source", "proposed_lexpoints", "proposed_amount", "currency", "proposal_column", "proposed_delivery_hours", "proposed_scope",
@@ -52,6 +52,7 @@
   {"default": "0", "fieldname": "has_annexures", "fieldtype": "Check", "label": "Annexures / Schedules Detected", "read_only": 1},
 
   {"fieldname": "analysis_section", "fieldtype": "Section Break", "label": "Governed Analysis Evidence"},
+  {"description": "Select LPO AI model from registry for evidence classification and estimation", "fieldname": "ai_model", "fieldtype": "Link", "in_list_view": 1, "label": "LPO AI Model", "options": "LPO AI Model Registry"},
   {"fieldname": "analysis_status", "fieldtype": "Data", "label": "Analysis Status", "read_only": 1},
   {"default": "0", "fieldname": "analysis_confidence", "fieldtype": "Percent", "label": "Analysis Confidence", "read_only": 1},
   {"default": "0", "fieldname": "low_confidence", "fieldtype": "Check", "label": "Low Confidence", "read_only": 1},

@@ -69,8 +69,11 @@
   {"create":1,"export":1,"print":1,"read":1,"report":1,"role":"System Manager","write":1},
   {"create":1,"export":1,"print":1,"read":1,"report":1,"role":"LPO_Admin","write":1}
  ],
+ "search_fields": "model_id,provider,display_name",
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
+ "title_field": "model_id",
  "track_changes": 1
 }

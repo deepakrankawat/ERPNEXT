@@ -52,8 +52,12 @@ class LexPointEstimatorPage {
 		const jurisdictionOptions = (data.jurisdictions || []).map((item) =>
 			`<option value="${this.escape(item)}" ${item === "India" ? "selected" : ""}>${this.escape(item)}</option>`
 		).join("");
-		const extensions = (data.allowed_extensions || []).join(",");
-		const maxMB = Math.round((data.max_upload_bytes || 0) / 1024 / 1024);
+		const defaultModel = data.default_ai_model || aiRoute.model || "";
+		const modelOptions = (data.available_models || []).map((m) => {
+			const isSelected = m.name === defaultModel || m.model_id === defaultModel;
+			const label = `${m.model_id} (${m.provider})${m.verified ? " · Verified" : ""}`;
+			return `<option value="${this.escape(m.name)}" ${isSelected ? "selected" : ""}>${this.escape(label)}</option>`;
+		}).join("");
 
 		this.$root.html(`
 			<div class="lex-estimator__notice alert alert-info">
@@ -81,6 +85,14 @@ class LexPointEstimatorPage {
 						<div class="form-group lex-estimator__wide"><label class="control-label">${__("Expected outcome")}</label><input class="form-control" name="expected_outcome" maxlength="1000" placeholder="${__("Example: Contract risk review with clause comments")}"></div>
 						<div class="form-group lex-estimator__wide"><label class="control-label">${__("Instructions / assumptions")}</label><textarea class="form-control" name="detailed_instructions" rows="4" maxlength="10000" placeholder="${__("Add scope, review depth, special risks, or delivery assumptions.")}"></textarea></div>
 						<label class="lex-estimator__check lex-estimator__wide"><input type="checkbox" name="use_ai" ${data.ai_enabled ? "checked" : ""}> <span>${__("Use governed AI for evidence classification when configured")}</span></label>
+						<div class="form-group lex-estimator__wide lex-estimator__model-group ${data.ai_enabled ? "" : "hidden"}">
+							<label class="control-label">${__("LPO AI Model for Estimation")}</label>
+							<select class="form-control" name="ai_model">
+								<option value="">${__("Default Route ({0})", [this.escape(aiRoute.model || "Configured Default")])}</option>
+								${modelOptions}
+							</select>
+							<small class="text-muted">${__("Select which model from LPO AI Model Registry to use for legal document evidence classification.")}</small>
+						</div>
 						<div class="lex-estimator__actions lex-estimator__wide"><button class="btn btn-primary lex-estimator__submit" type="submit">${__("Estimate LexPoints & Price")}</button><span class="text-muted">${__("No client or commercial workflow will be triggered.")}</span></div>
 					</form>
 				</section>
@@ -98,6 +110,9 @@ class LexPointEstimatorPage {
 			</section>
 		`);
 		this.render_history(data.recent_estimates || []);
+		this.$root.find("input[name='use_ai']").on("change", (e) => {
+			this.$root.find(".lex-estimator__model-group").toggleClass("hidden", !e.target.checked);
+		});
 		this.$root.find(".lex-estimator__form").on("submit", (event) => this.submit(event));
 	}
 
@@ -165,6 +180,7 @@ class LexPointEstimatorPage {
 			payload.append("expected_outcome", values.expected_outcome || "");
 			payload.append("detailed_instructions", values.detailed_instructions || "");
 			payload.append("use_ai", useAI ? "1" : "0");
+			payload.append("ai_model", values.ai_model || "");
 			xhr.open("POST", "/api/method/upload_file", true);
 			xhr.setRequestHeader("Accept", "application/json");
 			xhr.setRequestHeader("X-Frappe-CSRF-Token", frappe.csrf_token);

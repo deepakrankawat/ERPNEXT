@@ -139,12 +139,16 @@ def collect_document_metadata(files, extracted: str):
 			pass
 	settings = frappe.get_single("LPO LexPoint Settings")
 	words = len((extracted or "").split())
-	remaining = max(0, len(files) - pdf_pages_known)
-	if remaining:
-		page_count += max(remaining, math.ceil(words / max(1, cint(settings.words_per_page or 500))))
+	# Canadian legal standard density: 350 words per billable page
+	density_wpp = cint(settings.words_per_page or 350)
+	if density_wpp > 400:
+		density_wpp = 350
+	effective_pages = max(1, page_count, math.ceil(words / max(1, density_wpp)))
 	lower = (extracted or "").lower()
 	return {
-		"page_count": max(1, page_count),
+		"page_count": max(1, effective_pages),
+		"physical_pages": max(1, page_count),
+		"effective_pages": max(1, effective_pages),
 		"word_count": words,
 		"character_count": len(extracted or ""),
 		"file_size_bytes": total_bytes,
@@ -159,7 +163,12 @@ def collect_document_metadata(files, extracted: str):
 	}
 
 
-def calculate_estimate(doc, files, extracted: str, ai_profile=None):
+def calculate_estimate(doc, files, extracted: str, ai_profile=None, auto_converge: bool = False):
+	if auto_converge:
+		from lex.iterative_estimator import run_iterative_estimation
+
+		return run_iterative_estimation(doc, files, extracted, initial_profile=ai_profile)
+
 	metadata = collect_document_metadata(files, extracted)
 	profile = normalize_profile(ai_profile or {}, doc, metadata, extracted)
 	calculation = calculate_from_factors(
@@ -194,25 +203,139 @@ def calculate_from_factors(
 	jurisdiction = _factor_key("Jurisdiction", jurisdiction, "Multi-Jurisdiction")
 	risk = _factor_key("Risk", risk, "Medium")
 	reviewer_level = _factor_key("Reviewer Level", reviewer_level, "Mixed Team")
-	multipliers = {
-		"complexity": flt(complexity.multiplier),
-		"priority": _multiplier("Priority", priority),
-		"jurisdiction": _multiplier("Jurisdiction", jurisdiction),
-		"risk": _multiplier("Risk", risk),
-		"reviewer": _multiplier("Reviewer Level", reviewer_level) if cint(settings.apply_reviewer_multiplier) else 1.0,
-		"contingency": flt(settings.contingency_buffer or 1.05),
+
+	# Additive Surcharges (Replaces runaway exponential multiplication)
+	complexity_surcharges = {
+		"Routine": 0.0,
+		"Moderate": 0.15,
+		"Complex": 0.35,
+		"Specialist": 0.60,
 	}
+	priority_surcharges = {
+		"Standard": 0.0,
+		"72 Hours": 0.15,
+		"48 Hours": 0.25,
+		"24 Hours": 0.45,
+		"Same Day": 0.75,
+	}
+	jurisdiction_surcharges = {
+		"India": 0.0,
+		"Canada": 0.10,
+		"United Kingdom": 0.15,
+		"United States": 0.20,
+		"Multi-Jurisdiction": 0.35,
+	}
+	risk_surcharges = {
+		"Low": 0.0,
+		"Medium": 0.10,
+		"High": 0.20,
+		"Critical": 0.35,
+	}
+
+	s_comp = complexity_surcharges.get(complexity.factor_key, 0.15)
+	s_prio = priority_surcharges.get(priority, 0.0)
+	s_juris = jurisdiction_surcharges.get(jurisdiction, 0.10)
+	s_risk = risk_surcharges.get(risk, 0.10)
+	s_rev = (
+		(_multiplier("Reviewer Level", reviewer_level) - 1.0)
+		if cint(settings.apply_reviewer_multiplier)
+		else 0.0
+	)
+	combined_surcharge = round(1.0 + s_comp + s_prio + s_juris + s_risk + s_rev, 4)
+	contingency = flt(settings.contingency_buffer or 1.05)
+
 	tasks = max(1, math.ceil(flt(task_count)))
-	volume = max(0.01, flt(volume))
-	billable_units = max(1, math.ceil(volume / flt(service.base_quantity)))
-	base_total = tasks * billable_units * cint(service.base_lexpoints)
-	raw = base_total
-	for value in multipliers.values():
-		raw *= value
+
+	# 1. Bulk Volume Tapering (Diminishing marginal workload for large document bundles)
+	base_qty = flt(service.base_quantity)
+	if volume <= base_qty:
+		billable_units = 1.0
+	else:
+		excess = volume - base_qty
+		billable_units = round(1.0 + (math.log2(1.0 + excess / base_qty) * 0.40), 3)
+
+	# 2. AI-Assisted Operational Efficiency Factor (0.16x)
+	# AI performs 90% of structural indexing and optical reading, reducing lawyer effort by ~80%
+	ai_operational_factor = 0.16
+	effective_base_lp = flt(service.base_lexpoints) * ai_operational_factor
+	base_total = tasks * billable_units * effective_base_lp
+
+	# Raw LexPoints computed via governed additive model
+	raw = base_total * combined_surcharge * contingency
 	increment = max(1, cint(settings.rounding_increment or 1))
-	lexpoints = max(cint(settings.minimum_charge or 10), int(math.ceil(raw / increment) * increment))
+	rounded_raw = int(math.ceil(raw / increment) * increment)
+
 	effort = _effort(service, tasks, billable_units, complexity.factor_key, reviewer_level)
+	# Human review effort under AI augmentation (hours)
+	junior_hours = round(effort[0] * 0.25, 2)
+	senior_hours = round(effort[1] * 0.25, 2)
+	partner_hours = round(effort[2] * 0.25, 2)
 	delivery_hours = _delivery_hours(cint(service.default_sla_hours), priority)
+
+	# --- THE GOLDEN CORRIDOR: Ultra-Affordable Floor & Ceiling ---
+	rate_per_point = flt(frappe.db.get_single_value("LexPack Settings", "direct_quote_rate_per_point") or 3.0)
+
+	# 1. Company Floor: internal delivery cost with guaranteed >= 60% gross margin
+	# (Offshore Associate @ $6 CAD/hr, Senior QC @ $12 CAD/hr, Partner @ $25 CAD/hr, Tech/Token @ $1.5 CAD)
+	internal_delivery_cost = round(
+		(junior_hours * 6.0) + (senior_hours * 12.0) + (partner_hours * 25.0) + 1.5,
+		2,
+	)
+	target_margin_floor = 0.60
+	floor_amount_cad = round(internal_delivery_cost / (1.0 - target_margin_floor), 2)
+	floor_lexpoints = max(cint(settings.minimum_charge or 10), int(math.ceil(floor_amount_cad / rate_per_point)))
+
+	# 2. Client Ceiling: Hard capped at affordable budget (35 LP for review/chronology, 50 LP for pleading)
+	service_ceiling_max = 50 if ("pleading" in service.name.lower() or "draft" in service.name.lower()) else 35
+	ceiling_lexpoints = max(floor_lexpoints + 4, service_ceiling_max)
+
+	# 3. Final Clamping within Ultra-Affordable Golden Corridor
+	lexpoints = max(floor_lexpoints, min(rounded_raw, ceiling_lexpoints))
+	quoted_price_cad = round(lexpoints * rate_per_point, 2)
+	canadian_firm_hourly_tariff = 325.0
+	standard_total_hours = flt(service.standard_hours) * tasks * max(1, math.ceil(volume / base_qty))
+	canadian_market_benchmark_cad = round(standard_total_hours * canadian_firm_hourly_tariff, 2)
+	client_savings_cad = max(0.0, round(canadian_market_benchmark_cad - quoted_price_cad, 2))
+	client_savings_percent = (
+		round((client_savings_cad / canadian_market_benchmark_cad) * 100, 1)
+		if canadian_market_benchmark_cad
+		else 0.0
+	)
+	gross_margin_percent = (
+		round(((quoted_price_cad - internal_delivery_cost) / quoted_price_cad) * 100, 1)
+		if quoted_price_cad
+		else 0.0
+	)
+
+	# 4. Multi-tier Package Options for Client
+	tier_options = {
+		"essential": {
+			"tier_code": "ESSENTIAL",
+			"tier_name": "Essential Redline",
+			"lexpoints": max(floor_lexpoints, int(math.ceil(lexpoints * 0.75))),
+			"amount_cad": round(max(floor_lexpoints, int(math.ceil(lexpoints * 0.75))) * rate_per_point, 2),
+			"sla_hours": delivery_hours,
+			"scope_summary": "Core clause markup, critical legal issue spotting, and marked-up draft.",
+		},
+		"standard": {
+			"tier_code": "STANDARD",
+			"tier_name": "Standard Governed Review",
+			"lexpoints": lexpoints,
+			"amount_cad": quoted_price_cad,
+			"sla_hours": delivery_hours,
+			"scope_summary": "Full clause analysis, redline, Canadian compliance check, and risk matrix.",
+			"is_recommended": True,
+		},
+		"deep_dive": {
+			"tier_code": "DEEP_DIVE",
+			"tier_name": "Comprehensive & Negotiation Playbook",
+			"lexpoints": min(ceiling_lexpoints, int(math.ceil(lexpoints * 1.35))),
+			"amount_cad": round(min(ceiling_lexpoints, int(math.ceil(lexpoints * 1.35))) * rate_per_point, 2),
+			"sla_hours": delivery_hours + 24,
+			"scope_summary": "Deep redline, negotiation playbook, alternative fallback clauses, and senior counsel call.",
+		},
+	}
+
 	return {
 		"service_code": service.name,
 		"service_family": service.service_family,
@@ -228,23 +351,56 @@ def calculate_from_factors(
 		"jurisdiction": jurisdiction,
 		"risk_level": risk,
 		"reviewer_level": reviewer_level,
-		"multipliers": multipliers,
+		"multipliers": {
+			"complexity": round(1.0 + s_comp, 2),
+			"priority": round(1.0 + s_prio, 2),
+			"jurisdiction": round(1.0 + s_juris, 2),
+			"risk": round(1.0 + s_risk, 2),
+			"combined_surcharge": combined_surcharge,
+			"contingency": contingency,
+		},
 		"raw_lexpoints": round(raw, 4),
 		"lexpoints": lexpoints,
 		"delivery_hours": delivery_hours,
 		"normal_sla_hours": cint(service.default_sla_hours),
 		"fast_track_sla_hours": min(cint(service.default_sla_hours), 48),
 		"express_sla_hours": min(cint(service.default_sla_hours), 24),
-		"junior_hours": effort[0],
-		"senior_hours": effort[1],
-		"partner_hours": effort[2],
+		"junior_hours": junior_hours,
+		"senior_hours": senior_hours,
+		"partner_hours": partner_hours,
 		"formula_version": settings.formula_version,
+		"canadian_market_benchmark_cad": canadian_market_benchmark_cad,
+		"internal_delivery_cost_cad": internal_delivery_cost,
+		"quoted_price_cad": quoted_price_cad,
+		"client_savings_cad": client_savings_cad,
+		"client_savings_percent": client_savings_percent,
+		"gross_margin_percent": gross_margin_percent,
+		"floor_lexpoints": floor_lexpoints,
+		"ceiling_lexpoints": ceiling_lexpoints,
+		"tier_options": tier_options,
 		"factor_breakdown": {
-			"formula": "tasks × ceil(volume/base quantity) × base LP × complexity × priority × jurisdiction × risk × reviewer × contingency",
-			"tasks": tasks, "volume": volume, "base_quantity": flt(service.base_quantity),
-			"billable_units": billable_units, "base_lexpoints": cint(service.base_lexpoints),
-			"base_total": base_total, "multipliers": multipliers, "unrounded_lexpoints": round(raw, 4),
-			"minimum_charge": cint(settings.minimum_charge), "rounding_increment": increment,
+			"formula": "base LP × (1.0 + sum(surcharges)) × contingency [clamped between Floor and Ceiling]",
+			"tasks": tasks,
+			"volume": volume,
+			"base_quantity": flt(service.base_quantity),
+			"billable_units": billable_units,
+			"base_lexpoints": cint(service.base_lexpoints),
+			"base_total": base_total,
+			"combined_surcharge": combined_surcharge,
+			"surcharges": {
+				"complexity": s_comp,
+				"priority": s_prio,
+				"jurisdiction": s_juris,
+				"risk": s_risk,
+			},
+			"unrounded_lexpoints": round(raw, 4),
+			"floor_lexpoints": floor_lexpoints,
+			"ceiling_lexpoints": ceiling_lexpoints,
+			"minimum_charge": cint(settings.minimum_charge),
+			"rounding_increment": increment,
+			"canadian_market_benchmark_cad": canadian_market_benchmark_cad,
+			"client_savings_percent": client_savings_percent,
+			"gross_margin_percent": gross_margin_percent,
 		},
 	}
 
@@ -453,14 +609,19 @@ def _language_hint(text):
 
 
 def _explanation(profile):
-	return [
-		f"{profile['document_count']} document(s), {profile['page_count']} page(s), {profile['word_count']:,} extracted words",
+	factors = [
+		f"{profile['document_count']} document(s), {profile['page_count']} effective page(s) ({profile.get('physical_pages', profile['page_count'])} physical), {profile['word_count']:,} extracted words",
 		f"Classified as {profile['detected_document_type']} and routed to {profile['recommended_service']}",
 		f"{profile['task_count']} task(s) × {profile['billable_units']} billable {profile['billing_measure']} unit(s) × {profile['base_lexpoints']} base LP",
 		f"Complexity {profile['complexity_score']}/100 ({profile['complexity_classification']}), risk {profile['risk_level']}",
 		f"Priority {profile['priority']}, jurisdiction {profile['jurisdiction']}, reviewer {profile['reviewer_level']}",
-		f"Formula {profile['formula_version']} produced {profile['raw_lexpoints']:.2f} LP before governed upward rounding to {profile['lexpoints']} LP",
+		f"Governed Additive Model: {profile['lexpoints']} LP (${profile.get('quoted_price_cad', profile['lexpoints'] * 3):,.2f} CAD)",
 	]
+	if profile.get("canadian_market_benchmark_cad"):
+		factors.append(
+			f"Canadian Law Firm Benchmark: ~${profile['canadian_market_benchmark_cad']:,.2f} CAD; Guaranteed Client Savings: {profile.get('client_savings_percent', 0)}% (Floor: {profile.get('floor_lexpoints', 10)} LP, Ceiling Cap: {profile.get('ceiling_lexpoints', 100)} LP)"
+		)
+	return factors
 
 
 def profile_json(profile):
