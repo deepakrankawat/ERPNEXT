@@ -15,17 +15,16 @@ class TestLexPointEstimationEngine(FrappeTestCase):
 		frappe.set_user("Administrator")
 		ensure_default_lexpoint_rules()
 
-	def test_configurator_reference_scenarios_total_2978(self):
+	def test_configurator_reference_scenarios_respect_hard_caps(self):
 		scenarios = (
-			("Legal Research Memo", 3, 10, 40, "Standard", "Canada", "Medium", 359),
-			("Chronology Preparation", 2, 50, 40, "72 Hours", "Canada", "Medium", 306),
-			("CLM Administration", 5, 25, 20, "Standard", "Canada", "Low", 722),
-			("First-Level Document Review", 10, 100, 20, "Standard", "Canada", "Low", 1040),
-			("Compliance Research", 2, 10, 40, "Standard", "Canada", "Medium", 250),
-			("Virtual Paralegal Support", 1, 20, 20, "Standard", "Canada", "Low", 301),
+			("Legal Research Memo", 3, 10, 40, "Standard", "Canada", "Medium"),
+			("Chronology Preparation", 2, 50, 40, "72 Hours", "Canada", "Medium"),
+			("CLM Administration", 5, 25, 20, "Standard", "Canada", "Low"),
+			("First-Level Document Review", 10, 100, 20, "Standard", "Canada", "Low"),
+			("Compliance Research", 2, 10, 40, "Standard", "Canada", "Medium"),
+			("Virtual Paralegal Support", 1, 20, 20, "Standard", "Canada", "Low"),
 		)
-		results = []
-		for service, tasks, volume, score, priority, jurisdiction, risk, expected in scenarios:
+		for service, tasks, volume, score, priority, jurisdiction, risk in scenarios:
 			result = calculate_from_factors(
 				service_name=service,
 				task_count=tasks,
@@ -36,9 +35,11 @@ class TestLexPointEstimationEngine(FrappeTestCase):
 				risk=risk,
 				reviewer_level="Junior Associate",
 			)
-			self.assertEqual(result["lexpoints"], expected, service)
-			results.append(result["lexpoints"])
-		self.assertEqual(sum(results), 2978)
+			self.assertEqual(result["ceiling_lexpoints"], 35, service)
+			self.assertLessEqual(result["lexpoints"], 35, service)
+			if result["floor_lexpoints"] > result["ceiling_lexpoints"]:
+				self.assertTrue(result["custom_scope_required"], service)
+				self.assertFalse(result["corridor_feasible"], service)
 
 	def test_ai_supplies_factors_but_cannot_set_lexpoints(self):
 		doc = frappe._dict(
@@ -65,9 +66,12 @@ class TestLexPointEstimationEngine(FrappeTestCase):
 		}
 		files = [frappe._dict(file_name=f"memo-{index}.txt", file_size=100, name=f"FAKE-{index}") for index in range(3)]
 		result = calculate_estimate(doc, files, "commercial research memorandum " * 80, ai_profile=profile)
-		self.assertEqual(result["lexpoints"], 359)
-		self.assertEqual(result["formula_version"], "LEXPOINTS-1.0")
-		self.assertIn("governed upward rounding", result["explanation"])
+		self.assertEqual(result["lexpoints"], 35)
+		self.assertEqual(result["formula_version"], "LEXPOINTS-2.0-CAD")
+		self.assertEqual(result["currency"], "CAD")
+		self.assertTrue(result["quality_report"]["is_valid"])
+		self.assertEqual(result["quality_report"]["quality_score"], 100.0)
+		self.assertIn("Governed Additive Model", result["explanation"])
 
 	def test_complexity_score_selects_governed_band(self):
 		for score, expected in ((1, "Routine"), (25, "Routine"), (26, "Moderate"), (50, "Moderate"), (51, "Complex"), (75, "Complex"), (76, "Specialist"), (100, "Specialist")):

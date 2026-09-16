@@ -11,6 +11,13 @@ import frappe
 from frappe.utils import cint, flt, get_datetime, now_datetime
 
 
+CALIBRATED_FORMULA_VERSION = "LEXPOINTS-2.0-CAD"
+CALIBRATED_QUOTE_CURRENCY = "CAD"
+DEFAULT_RATE_PER_POINT_CAD = 3.0
+STANDARD_HARD_CEILING_LEXPOINTS = 35
+DRAFTING_HARD_CEILING_LEXPOINTS = 50
+
+
 SERVICE_RULES = (
 	("QUICK_LEGAL_QUERY", "Research", "Quick Legal Query", "pages", 5, 1, 18, 18, "72 hours", 72, "Focused answer with limited authorities", "legal question,quick query"),
 	("CASE_LAW_RESEARCH", "Research", "Case Law Research", "pages", 10, 2, 18, 36, "3 business days", 72, "Research note and authority list", "case law,authorities,precedent search"),
@@ -85,14 +92,15 @@ DEFAULT_SERVICE_BY_INTAKE = {
 
 
 def ensure_default_lexpoint_rules():
-	"""Seed version 1 rules without overwriting management calibration."""
+	"""Seed governed rules without overwriting management calibration."""
 	if not frappe.db.exists("DocType", "LPO LexPoint Service Rule"):
 		return
+	ensure_calibrated_estimation_settings()
 	if frappe.db.exists("DocType", "LexPack Settings"):
 		frappe.db.set_single_value("LexPack Settings", "auto_approve_ai_pricing", 0)
 	settings = frappe.get_single("LPO LexPoint Settings")
 	if not settings.formula_version:
-		settings.formula_version = "LEXPOINTS-1.0"
+		settings.formula_version = CALIBRATED_FORMULA_VERSION
 		settings.save(ignore_permissions=True)
 	for code, family, name, measure, quantity, hours, midpoint, points, sla, sla_hours, notes, aliases in SERVICE_RULES:
 		if frappe.db.exists("LPO LexPoint Service Rule", code):
@@ -116,6 +124,40 @@ def ensure_default_lexpoint_rules():
 			"maximum_score": maximum, "active": 1,
 		}).insert(ignore_permissions=True)
 	frappe.clear_cache()
+
+
+def ensure_calibrated_estimation_settings():
+	"""Migrate untouched legacy defaults to the approved CAD calibration."""
+
+	if frappe.db.exists("DocType", "LPO LexPoint Settings"):
+		formula_version = frappe.db.get_single_value("LPO LexPoint Settings", "formula_version")
+		if formula_version in {None, "", "LEXPOINTS-1.0"}:
+			frappe.db.set_single_value(
+				"LPO LexPoint Settings", "formula_version", CALIBRATED_FORMULA_VERSION
+			)
+		words_per_page = cint(
+			frappe.db.get_single_value("LPO LexPoint Settings", "words_per_page") or 0
+		)
+		if words_per_page in {0, 500}:
+			frappe.db.set_single_value("LPO LexPoint Settings", "words_per_page", 350)
+
+	if not frappe.db.exists("DocType", "LexPack Settings"):
+		return
+	quote_currency = frappe.db.get_single_value("LexPack Settings", "quote_currency")
+	rate_per_point = flt(
+		frappe.db.get_single_value("LexPack Settings", "direct_quote_rate_per_point")
+		or DEFAULT_RATE_PER_POINT_CAD
+	)
+	# Only migrate the untouched legacy USD/$3 default. Explicitly calibrated
+	# custom rates/currencies remain management-controlled.
+	legacy_default = quote_currency in {None, ""} or (
+		quote_currency == "USD" and rate_per_point == DEFAULT_RATE_PER_POINT_CAD
+	)
+	if legacy_default and frappe.db.exists("Currency", CALIBRATED_QUOTE_CURRENCY):
+		frappe.db.set_single_value(
+			"LexPack Settings", "quote_currency", CALIBRATED_QUOTE_CURRENCY
+		)
+	frappe.clear_cache(doctype="LexPack Settings")
 
 
 def collect_document_metadata(files, extracted: str):
@@ -163,7 +205,7 @@ def collect_document_metadata(files, extracted: str):
 	}
 
 
-def calculate_estimate(doc, files, extracted: str, ai_profile=None, auto_converge: bool = False):
+def calculate_estimate(doc, files, extracted: str, ai_profile=None, auto_converge: bool = True):
 	if auto_converge:
 		from lex.iterative_estimator import run_iterative_estimation
 
@@ -171,6 +213,7 @@ def calculate_estimate(doc, files, extracted: str, ai_profile=None, auto_converg
 
 	metadata = collect_document_metadata(files, extracted)
 	profile = normalize_profile(ai_profile or {}, doc, metadata, extracted)
+	profile["classification_source"] = "AI" if ai_profile is not None else "Deterministic Formula"
 	calculation = calculate_from_factors(
 		service_name=profile["recommended_service"],
 		task_count=profile["task_count"],
@@ -273,7 +316,19 @@ def calculate_from_factors(
 	delivery_hours = _delivery_hours(cint(service.default_sla_hours), priority)
 
 	# --- THE GOLDEN CORRIDOR: Ultra-Affordable Floor & Ceiling ---
-	rate_per_point = flt(frappe.db.get_single_value("LexPack Settings", "direct_quote_rate_per_point") or 3.0)
+	rate_per_point = flt(
+		frappe.db.get_single_value("LexPack Settings", "direct_quote_rate_per_point")
+		or DEFAULT_RATE_PER_POINT_CAD
+	)
+	quote_currency = (
+		frappe.db.get_single_value("LexPack Settings", "quote_currency")
+		or CALIBRATED_QUOTE_CURRENCY
+	)
+	if quote_currency != CALIBRATED_QUOTE_CURRENCY:
+		raise frappe.ValidationError(
+			"The calibrated LexPoint estimator requires quote currency CAD because its "
+			"cost floor and Canadian benchmark are denominated in CAD."
+		)
 
 	# 1. Company Floor: internal delivery cost with guaranteed >= 60% gross margin
 	# (Offshore Associate @ $6 CAD/hr, Senior QC @ $12 CAD/hr, Partner @ $25 CAD/hr, Tech/Token @ $1.5 CAD)
@@ -285,12 +340,25 @@ def calculate_from_factors(
 	floor_amount_cad = round(internal_delivery_cost / (1.0 - target_margin_floor), 2)
 	floor_lexpoints = max(cint(settings.minimum_charge or 10), int(math.ceil(floor_amount_cad / rate_per_point)))
 
-	# 2. Client Ceiling: Hard capped at affordable budget (35 LP for review/chronology, 50 LP for pleading)
-	service_ceiling_max = 50 if ("pleading" in service.name.lower() or "draft" in service.name.lower()) else 35
-	ceiling_lexpoints = max(floor_lexpoints + 4, service_ceiling_max)
+	# 2. Client Ceiling: fixed at 35 LP for standard review/analysis and
+	# 50 LP for pleading/drafting. If the modeled cost floor exceeds this cap,
+	# the engine fails closed for custom scoping instead of silently raising it.
+	service_identifier = f"{service.name} {service.service_name}".lower()
+	ceiling_lexpoints = (
+		DRAFTING_HARD_CEILING_LEXPOINTS
+		if "pleading" in service_identifier or "draft" in service_identifier
+		else STANDARD_HARD_CEILING_LEXPOINTS
+	)
+	corridor_feasible = floor_lexpoints <= ceiling_lexpoints
+	custom_scope_required = not corridor_feasible
 
-	# 3. Final Clamping within Ultra-Affordable Golden Corridor
-	lexpoints = max(floor_lexpoints, min(rounded_raw, ceiling_lexpoints))
+	# 3. Final Clamping within the hard corridor. A cap-conflict result is a
+	# non-releasable preview and is forced to Operations review by the QA layer.
+	lexpoints = (
+		max(floor_lexpoints, min(rounded_raw, ceiling_lexpoints))
+		if corridor_feasible
+		else ceiling_lexpoints
+	)
 	quoted_price_cad = round(lexpoints * rate_per_point, 2)
 	canadian_firm_hourly_tariff = 325.0
 	standard_total_hours = flt(service.standard_hours) * tasks * max(1, math.ceil(volume / base_qty))
@@ -307,7 +375,8 @@ def calculate_from_factors(
 		else 0.0
 	)
 
-	# 4. Multi-tier Package Options for Client
+	# 4. Multi-tier Package Options for Client. No standard package is offered
+	# when the cost floor and hard cap cannot both be satisfied.
 	tier_options = {
 		"essential": {
 			"tier_code": "ESSENTIAL",
@@ -334,7 +403,7 @@ def calculate_from_factors(
 			"sla_hours": delivery_hours + 24,
 			"scope_summary": "Deep redline, negotiation playbook, alternative fallback clauses, and senior counsel call.",
 		},
-	}
+	} if corridor_feasible else {}
 
 	return {
 		"service_code": service.name,
@@ -369,6 +438,7 @@ def calculate_from_factors(
 		"senior_hours": senior_hours,
 		"partner_hours": partner_hours,
 		"formula_version": settings.formula_version,
+		"currency": quote_currency,
 		"canadian_market_benchmark_cad": canadian_market_benchmark_cad,
 		"internal_delivery_cost_cad": internal_delivery_cost,
 		"quoted_price_cad": quoted_price_cad,
@@ -377,9 +447,12 @@ def calculate_from_factors(
 		"gross_margin_percent": gross_margin_percent,
 		"floor_lexpoints": floor_lexpoints,
 		"ceiling_lexpoints": ceiling_lexpoints,
+		"corridor_feasible": corridor_feasible,
+		"custom_scope_required": custom_scope_required,
+		"required_floor_lexpoints": floor_lexpoints,
 		"tier_options": tier_options,
 		"factor_breakdown": {
-			"formula": "base LP × (1.0 + sum(surcharges)) × contingency [clamped between Floor and Ceiling]",
+			"formula": "base LP x (1.0 + sum(surcharges)) x contingency [clamped between floor and hard ceiling]",
 			"tasks": tasks,
 			"volume": volume,
 			"base_quantity": flt(service.base_quantity),
@@ -396,8 +469,11 @@ def calculate_from_factors(
 			"unrounded_lexpoints": round(raw, 4),
 			"floor_lexpoints": floor_lexpoints,
 			"ceiling_lexpoints": ceiling_lexpoints,
+			"corridor_feasible": corridor_feasible,
+			"custom_scope_required": custom_scope_required,
 			"minimum_charge": cint(settings.minimum_charge),
 			"rounding_increment": increment,
+			"currency": quote_currency,
 			"canadian_market_benchmark_cad": canadian_market_benchmark_cad,
 			"client_savings_percent": client_savings_percent,
 			"gross_margin_percent": gross_margin_percent,
@@ -612,7 +688,7 @@ def _explanation(profile):
 	factors = [
 		f"{profile['document_count']} document(s), {profile['page_count']} effective page(s) ({profile.get('physical_pages', profile['page_count'])} physical), {profile['word_count']:,} extracted words",
 		f"Classified as {profile['detected_document_type']} and routed to {profile['recommended_service']}",
-		f"{profile['task_count']} task(s) × {profile['billable_units']} billable {profile['billing_measure']} unit(s) × {profile['base_lexpoints']} base LP",
+		f"{profile['task_count']} task(s) x {profile['billable_units']} billable {profile['billing_measure']} unit(s) x {profile['base_lexpoints']} base LP",
 		f"Complexity {profile['complexity_score']}/100 ({profile['complexity_classification']}), risk {profile['risk_level']}",
 		f"Priority {profile['priority']}, jurisdiction {profile['jurisdiction']}, reviewer {profile['reviewer_level']}",
 		f"Governed Additive Model: {profile['lexpoints']} LP (${profile.get('quoted_price_cad', profile['lexpoints'] * 3):,.2f} CAD)",

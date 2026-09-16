@@ -270,7 +270,7 @@ def ensure_lexpack_master_data():
 			"mode_of_payment": LEXPACK_MODE_OF_PAYMENT if frappe.db.exists("Mode of Payment", LEXPACK_MODE_OF_PAYMENT) else None,
 			"company": companies[0] if companies else None,
 			"intake_sla_version": "CLIENT-INTAKE-SLA-1.0",
-			"quote_currency": "USD",
+			"quote_currency": "CAD",
 			"direct_quote_rate_per_point": 3,
 			"quote_validity_days": 7,
 			"low_confidence_threshold": 72,

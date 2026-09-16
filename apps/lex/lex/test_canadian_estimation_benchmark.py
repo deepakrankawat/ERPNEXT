@@ -24,7 +24,15 @@ class TestCanadianEstimationBenchmark(FrappeTestCase):
 		install.ensure_lexpack_master_data()
 		install.ensure_lexpack_catalog()
 		ensure_default_lexpoint_rules()
-		generate_all_sample_pdfs()
+		if not all(
+			os.path.exists(os.path.join(SAMPLE_DIR, filename))
+			for filename in (
+				"canadian_mutual_nda_ontario.pdf",
+				"canadian_master_saas_agreement_bc.pdf",
+				"canadian_court_motion_research_memo.pdf",
+			)
+		):
+			generate_all_sample_pdfs()
 
 	def _load_sample_pdf(self, filename: str) -> tuple[bytes, str, int]:
 		filepath = os.path.join(SAMPLE_DIR, filename)
@@ -72,9 +80,11 @@ class TestCanadianEstimationBenchmark(FrappeTestCase):
 		# Golden Corridor Guardrails
 		self.assertGreaterEqual(result["lexpoints"], result["floor_lexpoints"])
 		self.assertLessEqual(result["lexpoints"], result["ceiling_lexpoints"])
+		self.assertEqual(result["lexpoints"], 10)
+		self.assertEqual(result["quoted_price_cad"], 30.0)
 
-		# Company Margin Protection (>= 50% gross profit)
-		self.assertGreaterEqual(result["gross_margin_percent"], 50.0)
+		# Company Margin Protection (>= 60% modeled gross margin)
+		self.assertGreaterEqual(result["gross_margin_percent"], 60.0)
 
 		# Client Savings Guarantee (>= 65% savings vs Canadian law firms)
 		self.assertGreaterEqual(result["client_savings_percent"], 65.0)
@@ -83,6 +93,8 @@ class TestCanadianEstimationBenchmark(FrappeTestCase):
 		self.assertIn("essential", result["tier_options"])
 		self.assertIn("standard", result["tier_options"])
 		self.assertIn("deep_dive", result["tier_options"])
+		self.assertTrue(result["quality_report"]["is_valid"])
+		self.assertEqual(result["quality_report"]["quality_score"], 100.0)
 
 		# Print summary for reporting
 		print("\n" + "=" * 70)
@@ -132,8 +144,12 @@ class TestCanadianEstimationBenchmark(FrappeTestCase):
 		# Corridor bounds
 		self.assertGreaterEqual(result["lexpoints"], result["floor_lexpoints"])
 		self.assertLessEqual(result["lexpoints"], result["ceiling_lexpoints"])
-		self.assertGreaterEqual(result["gross_margin_percent"], 50.0)
+		self.assertEqual(result["lexpoints"], 21)
+		self.assertEqual(result["quoted_price_cad"], 63.0)
+		self.assertGreaterEqual(result["gross_margin_percent"], 60.0)
 		self.assertGreaterEqual(result["client_savings_percent"], 65.0)
+		self.assertTrue(result["quality_report"]["is_valid"])
+		self.assertEqual(result["quality_report"]["quality_score"], 100.0)
 
 		print("\n" + "=" * 70)
 		print("BENCHMARK SAMPLE 2: CANADIAN MASTER SAAS AGREEMENT (BRITISH COLUMBIA)")
@@ -181,8 +197,12 @@ class TestCanadianEstimationBenchmark(FrappeTestCase):
 		# Corridor bounds
 		self.assertGreaterEqual(result["lexpoints"], result["floor_lexpoints"])
 		self.assertLessEqual(result["lexpoints"], result["ceiling_lexpoints"])
-		self.assertGreaterEqual(result["gross_margin_percent"], 50.0)
+		self.assertEqual(result["lexpoints"], 20)
+		self.assertEqual(result["quoted_price_cad"], 60.0)
+		self.assertGreaterEqual(result["gross_margin_percent"], 60.0)
 		self.assertGreaterEqual(result["client_savings_percent"], 65.0)
+		self.assertTrue(result["quality_report"]["is_valid"])
+		self.assertEqual(result["quality_report"]["quality_score"], 100.0)
 
 		print("\n" + "=" * 70)
 		print("BENCHMARK SAMPLE 3: CANADIAN COURT MOTION & RESEARCH BRIEF (FEDERAL COURT)")

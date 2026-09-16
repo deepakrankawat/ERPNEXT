@@ -48,7 +48,7 @@ def get_estimator_bootstrap() -> dict:
 		"ai_route": ai_route,
 		"available_models": available_models,
 		"default_ai_model": default_ai_model,
-		"currency": _setting("quote_currency", "USD"),
+		"currency": _setting("quote_currency", "CAD"),
 		"recent_estimates": _recent_estimates(),
 		"disclaimer": _(
 			"Internal preview only. This tool does not create or update a Customer, Matter, Job, quote, wallet, invoice, or payment."
@@ -279,13 +279,36 @@ def _estimate_uploaded_content(
 	else:
 		ai_note = _("Governed AI classification was not requested; the deterministic formula was used.")
 
-	estimation = calculate_estimate(context, files, extracted, ai_profile=ai_profile)
-	rate = flt(_setting("direct_quote_rate_per_point", 3))
-	price = flt(cint(estimation["lexpoints"]) * rate, 2)
-	currency = _setting("quote_currency", "USD")
+	estimation = calculate_estimate(
+		context,
+		files,
+		extracted,
+		ai_profile=ai_profile,
+		auto_converge=True,
+	)
+	price = flt(estimation.get("quoted_price_cad"), 2)
+	currency = estimation.get("currency") or _setting("quote_currency", "CAD")
 	confidence = flt(estimation.get("confidence") or _extraction_confidence(word_count))
 	threshold = flt(frappe.db.get_single_value("LPO LexPoint Settings", "auto_quote_confidence") or 72)
-	requires_review = bool(cint(estimation.get("requires_human_review")) or confidence < threshold)
+	quality_report = estimation.get("quality_report") or {}
+	requires_review = bool(
+		cint(estimation.get("requires_human_review"))
+		or confidence < threshold
+		or not quality_report.get("is_valid")
+	)
+	if not quality_report.get("is_valid"):
+		quality_reasons = "; ".join(quality_report.get("defect_reasons") or [])
+		ai_note = " ".join(
+			filter(
+				None,
+				[
+					ai_note,
+					f"Quality gates require Operations review: {quality_reasons}"
+					if quality_reasons
+					else "Quality gates require Operations review.",
+				],
+			)
+		)
 	saved_ai_model = (ai_profile or {}).get("ai_model_registry")
 	if not saved_ai_model and ai_model:
 		saved_ai_model = frappe.db.get_value("LPO AI Model Registry", ai_model, "name") or frappe.db.get_value(
@@ -350,6 +373,12 @@ def _estimate_uploaded_content(
 
 
 def _serialize(record) -> dict:
+	try:
+		factor_breakdown = json.loads(record.factor_breakdown_json or "{}")
+	except (TypeError, ValueError):
+		factor_breakdown = {}
+	quality_assurance = factor_breakdown.get("quality_assurance") or {}
+	quality_report = quality_assurance.get("quality_report") or {}
 	return {
 		"name": record.name,
 		"estimate_title": record.estimate_title,
@@ -379,6 +408,10 @@ def _serialize(record) -> dict:
 		"page_count": cint(record.page_count),
 		"word_count": cint(record.word_count),
 		"explanation": record.explanation,
+		"quality_gate_passed": bool(quality_report.get("is_valid")),
+		"quality_score": flt(quality_report.get("quality_score")),
+		"convergence_status": quality_assurance.get("convergence_status"),
+		"iterations_count": cint(quality_assurance.get("iterations_count")),
 		"route": f"/app/lpo-standalone-estimate/{record.name}",
 	}
 

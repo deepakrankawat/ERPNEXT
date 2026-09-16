@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from unittest.mock import patch
 
 import frappe
@@ -228,9 +229,12 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		self.assertEqual(estimate.estimate_source, "Formula")
 		self.assertEqual(estimate.proposed_lexpoints, analysis["required_lexpoints"])
 		self.assertEqual(estimate.reviewed_lexpoints, analysis["required_lexpoints"])
-		self.assertEqual(estimate.formula_version, "LEXPOINTS-1.0")
+		self.assertEqual(estimate.formula_version, "LEXPOINTS-2.0-CAD")
 		self.assertEqual(estimate.recommended_service, "STANDARD_CONTRACT_REVIEW")
 		self.assertTrue(estimate.factor_breakdown_json)
+		quality_assurance = json.loads(estimate.factor_breakdown_json)["quality_assurance"]
+		self.assertTrue(quality_assurance["quality_report"]["is_valid"])
+		self.assertEqual(quality_assurance["quality_report"]["quality_score"], 100.0)
 		self.assertTrue(estimate.explanation)
 		pre_funding = frappe.db.get_value(
 			"Lexocrates Work Intake", intake["name"], ["matter", "job"], as_dict=True
@@ -347,6 +351,43 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		self.assertTrue(
 			frappe.db.get_value("Lexocrates Work Intake", intake["name"], "low_confidence")
 		)
+
+	def test_cost_floor_above_hard_cap_routes_to_custom_scope_review(self):
+		intake = _new_intake()
+		work_intake.accept_sla(intake["name"], 1)
+		work_intake.save_detailed_instructions(
+			intake["name"], "Estimate ten separately scoped contract-review tasks from this bundle."
+		)
+		content = " ".join(
+			["agreement obligations indemnity liability termination governing law"] * 800
+		)
+		profile = {
+			"document_type": "Contract Bundle",
+			"document_type_confidence": 95,
+			"recommended_service": "Standard Contract Review",
+			"jurisdiction": "Canada",
+			"jurisdiction_confidence": 95,
+			"complexity_score": 45,
+			"risk_level": "Medium",
+			"reviewer_level": "Senior Associate",
+			"task_count": 10,
+			"confidence": 92,
+		}
+		with (
+			patch("lex.file_quarantine._run_malware_scan", return_value=("Clean", "Unit Test Scanner", "Clean")),
+			patch("lex.work_intake._estimation_profile_with_ai", return_value=(profile, None)),
+		):
+			work_intake.upload_document(intake["name"], "large-bundle.txt", _text_upload(content))
+			result = work_intake.request_cost_estimate(intake["name"])
+
+		self.assertEqual(result["status"], "Operations Review")
+		self.assertEqual(result["quote_status"], "Operations Review")
+		self.assertEqual(result["required_lexpoints"], 35)
+		doc = frappe.get_doc("Lexocrates Work Intake", intake["name"])
+		estimate = frappe.get_doc("LPO AI Document Estimate", doc.ai_document_estimate)
+		quality = json.loads(estimate.factor_breakdown_json)["quality_assurance"]
+		self.assertFalse(quality["quality_report"]["is_valid"])
+		self.assertIn("Human Review Required", quality["convergence_status"])
 
 	def test_only_ceo_role_can_decide_pricing_and_rejection_returns_to_review(self):
 		intake = _new_intake()
@@ -636,6 +677,52 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		self.assertEqual(doc.quoted_amount, 240)
 		self.assertEqual(doc.quote_status, "Ready")
 		self.assertEqual(doc.pricing_approved_by, "Administrator")
+
+	def test_intake_ai_profile_normalizes_confidence_and_rejects_model_volume(self):
+		frappe.db.set_value(
+			"LexPack Settings",
+			"LexPack Settings",
+			"enable_ai_intake_analysis",
+			1,
+			update_modified=False,
+		)
+		doc = frappe._dict(
+			client=self.client,
+			service_type="Contract Review",
+			jurisdiction="Canada",
+			priority="Medium",
+			expected_outcome="Review agreement",
+			detailed_instructions="Classify the agreement for estimation.",
+		)
+		gateway_result = {
+			"response_text": (
+				'{"document_type":"Agreement","recommended_service":"Standard Contract Review",'
+				'"complexity_score":42,"risk_level":"Medium","reviewer_level":"Senior Associate",'
+				'"jurisdiction":"Canada","volume":9999,"billing_measure":"hours",'
+				'"task_count":1,"confidence":0.91,"document_type_confidence":0.88,'
+				'"jurisdiction_confidence":0.95}'
+			),
+			"ai_execution": "AIEXEC-TEST",
+			"provider": "OpenAI",
+			"model": "gpt-test",
+			"credential_name": "OpenAI Test",
+			"requires_human_review": False,
+		}
+		with patch("lex.ai_gateway.invoke_ai_gateway", return_value=gateway_result):
+			profile, note = work_intake._estimation_profile_with_ai(
+				doc,
+				"agreement liability termination",
+				1,
+				3,
+				provider="OpenAI",
+				model="gpt-test",
+			)
+		self.assertIsNone(note)
+		self.assertEqual(profile["confidence"], 91)
+		self.assertEqual(profile["document_type_confidence"], 88)
+		self.assertEqual(profile["jurisdiction_confidence"], 95)
+		self.assertNotIn("volume", profile)
+		self.assertNotIn("billing_measure", profile)
 
 
 def _new_intake():
