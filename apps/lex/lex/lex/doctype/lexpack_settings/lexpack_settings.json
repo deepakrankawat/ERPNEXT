@@ -42,7 +42,7 @@
   {"fieldname": "intake_section", "fieldtype": "Section Break", "label": "Upload-First Client Intake and Quoting"},
   {"default": "CLIENT-INTAKE-SLA-1.0", "fieldname": "intake_sla_version", "fieldtype": "Data", "label": "Client Intake SLA Version"},
   {"fieldname": "intake_sla_document", "fieldtype": "Attach", "label": "Client Intake SLA PDF"},
-  {"default": "USD", "fieldname": "quote_currency", "fieldtype": "Link", "label": "Fixed Quote Currency", "options": "Currency"},
+  {"default": "CAD", "fieldname": "quote_currency", "fieldtype": "Link", "label": "Fixed Quote Currency", "options": "Currency"},
   {"default": "3", "fieldname": "direct_quote_rate_per_point", "fieldtype": "Currency", "label": "Direct Quote Rate per LexPoint", "options": "quote_currency", "precision": "2"},
   {"default": "7", "fieldname": "quote_validity_days", "fieldtype": "Int", "label": "Quote Validity (Days)"},
   {"default": "72", "fieldname": "low_confidence_threshold", "fieldtype": "Percent", "label": "Operations Review Below Confidence"},

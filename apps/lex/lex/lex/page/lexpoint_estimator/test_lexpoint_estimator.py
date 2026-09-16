@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from unittest.mock import patch
 
 import frappe
@@ -65,10 +66,15 @@ class TestStandaloneLexPointEstimator(FrappeTestCase):
 		self.assertGreater(result["estimated_price"], 0)
 		self.assertGreater(result["delivery_hours"], 0)
 		self.assertEqual(result["estimate_source"], "Formula")
+		self.assertEqual(result["currency"], "CAD")
+		self.assertTrue(result["quality_gate_passed"])
+		self.assertEqual(result["quality_score"], 100.0)
 		record = frappe.get_doc("LPO Standalone Estimate", result["name"])
 		self.assertEqual(record.status, "Complete")
 		self.assertEqual(record.scan_status, "Clean")
 		self.assertEqual(record.requested_by, "Administrator")
+		quality_assurance = json.loads(record.factor_breakdown_json)["quality_assurance"]
+		self.assertTrue(quality_assurance["quality_report"]["is_valid"])
 		self.assertFalse(record.meta.has_field("client"))
 		self.assertFalse(record.meta.has_field("matter"))
 		self.assertFalse(record.meta.has_field("job"))
@@ -264,5 +270,4 @@ class TestStandaloneLexPointEstimator(FrappeTestCase):
 		self.assertEqual(record.ai_model, reg_name)
 		self.assertEqual(record.analysis_provider, "OpenAI")
 		self.assertEqual(record.analysis_model, "gpt-4o")
-
 

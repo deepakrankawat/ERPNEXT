@@ -101,7 +101,7 @@ def create_work_intake(
 		"sla_document_snapshot": sla_document,
 		"sla_terms_snapshot": sla_terms,
 		"sla_snapshot_hash": _sla_hash(sla_terms, sla_document),
-		"currency": _setting("quote_currency", "USD"),
+		"currency": _setting("quote_currency", "CAD"),
 	}
 	if service_type not in BASE_POINTS:
 		frappe.throw(_("Choose a supported Service Type."), frappe.ValidationError)
@@ -534,10 +534,31 @@ def _process_documents(
 	)
 	from lex.lexpoint_estimation import calculate_estimate
 
-	estimation = calculate_estimate(doc, files, extracted, ai_profile=ai_profile)
+	estimation = calculate_estimate(
+		doc,
+		files,
+		extracted,
+		ai_profile=ai_profile,
+		auto_converge=True,
+	)
 	points = estimation["lexpoints"]
 	hours = estimation["delivery_hours"]
 	estimate_method = "AI-Assisted Formula" if ai_profile else "Formula"
+	quality_report = estimation.get("quality_report") or {}
+	if not quality_report.get("is_valid"):
+		low_confidence = True
+		quality_reasons = "; ".join(quality_report.get("defect_reasons") or [])
+		ai_estimate_note = " ".join(
+			filter(
+				None,
+				[
+					ai_estimate_note,
+					f"Quality gates require Operations review: {quality_reasons}"
+					if quality_reasons
+					else "Quality gates require Operations review.",
+				],
+			)
+		)
 	if cint(estimation.get("requires_human_review")):
 		low_confidence = True
 	if ai_profile:
@@ -551,7 +572,7 @@ def _process_documents(
 		):
 			low_confidence = True
 
-	quote_amount = flt(points * flt(_setting("direct_quote_rate_per_point", 3)), 2)
+	quote_amount = flt(estimation.get("quoted_price_cad"), 2)
 	scope = _scope_summary(doc, len(files), word_count)
 	recommended = _recommend_plan(doc.client, points)
 	with _service_writes():
@@ -589,6 +610,7 @@ def _process_documents(
 		)
 		doc.required_lexpoints = points
 		doc.quoted_amount = quote_amount
+		doc.currency = estimation.get("currency") or doc.currency
 		doc.delivery_timeline_hours = hours
 		doc.scope_summary = scope
 		doc.estimate_method = estimate_method
@@ -650,6 +672,9 @@ def _process_documents(
 			"required_lexpoints": points,
 			"estimate_method": estimate_method,
 			"ai_estimate_note": ai_estimate_note,
+			"quality_gate_passed": bool(quality_report.get("is_valid")),
+			"quality_score": quality_report.get("quality_score"),
+			"custom_scope_required": bool(estimation.get("custom_scope_required")),
 		},
 	)
 	return _intake_row(doc, actor)
@@ -1477,8 +1502,7 @@ def _estimation_profile_with_ai(doc, extracted, document_count, word_count, prov
 		'"content_form":"Typed|Handwritten|Mixed|Unknown", "has_tables":false, "has_images":false, '
 		'"has_signatures":false, "has_annexures":false, "complexity_score":1, '
 		'"risk_level":"Low|Medium|High|Critical", "reviewer_level":"Junior Associate|Senior Associate|Subject Matter Expert|Partner|Mixed Team", '
-		'"billing_measure":"pages|documents|hours|jurisdictions|topics|contracts|policies|business units|matters|legal questions|evidence records", '
-		'"volume":1, "task_count":1, "confidence":0, "requires_human_review":false, "explanation_factors":[]}.\n\n'
+		'"task_count":1, "confidence":0, "requires_human_review":false, "explanation_factors":[]}.\n\n'
 		f"Service type: {doc.service_type}\nJurisdiction: {doc.jurisdiction}\nPriority: {doc.priority}\n"
 		f"Document count: {document_count}\nApproximate word count: {word_count}\n"
 		f"Expected outcome: {doc.expected_outcome}\n"
@@ -1503,6 +1527,15 @@ def _estimation_profile_with_ai(doc, extracted, document_count, word_count, prov
 	parsed = _parse_ai_json_object(result.get("response_text") or "")
 	if not parsed or not parsed.get("recommended_service") or not cint(parsed.get("complexity_score")):
 		return None, "AI response did not contain a valid classification profile; using the governed deterministic profile."
+	for key in ("confidence", "document_type_confidence", "jurisdiction_confidence"):
+		value = flt(parsed.get(key))
+		if 0 < value <= 1:
+			value *= 100
+		parsed[key] = max(0, min(100, value))
+	# File/page/document volume and the catalogue billing measure are objective
+	# inputs; the model may classify work but cannot alter those price drivers.
+	parsed.pop("volume", None)
+	parsed.pop("billing_measure", None)
 	parsed["ai_execution"] = result.get("ai_execution")
 	parsed["provider"] = result.get("provider")
 	parsed["model"] = result.get("model")

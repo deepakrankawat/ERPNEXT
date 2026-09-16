@@ -68,7 +68,7 @@
   {"default": "0", "fieldname": "quote_version", "fieldtype": "Int", "label": "Quote Version", "read_only": 1},
   {"default": "Not Generated", "fieldname": "quote_status", "fieldtype": "Select", "label": "Quote Status", "options": "Not Generated\nDraft\nOperations Review\nPending CEO Approval\nReady\nAccepted\nExpired\nRejected", "read_only": 1},
   {"default": "0", "fieldname": "quoted_amount", "fieldtype": "Currency", "label": "Fixed Quote", "options": "currency", "read_only": 1},
-  {"default": "USD", "fieldname": "currency", "fieldtype": "Link", "label": "Currency", "options": "Currency", "read_only": 1, "reqd": 1},
+  {"default": "CAD", "fieldname": "currency", "fieldtype": "Link", "label": "Currency", "options": "Currency", "read_only": 1, "reqd": 1},
   {"default": "0", "fieldname": "required_lexpoints", "fieldtype": "Int", "label": "Required LexPoints", "read_only": 1},
   {"fieldname": "estimate_method", "fieldtype": "Select", "label": "Estimate Method", "options": "\nAI-Assisted Formula\nFormula\nManual (Operations)", "permlevel": 1, "read_only": 1},
   {"fieldname": "quote_column", "fieldtype": "Column Break"},

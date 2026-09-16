@@ -3,96 +3,124 @@ from __future__ import annotations
 import copy
 import logging
 import math
-import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-import frappe
 from pydantic import BaseModel, Field
-from tenacity import (
-	RetryError,
-	Retrying,
-	retry_if_result,
-	stop_after_attempt,
-)
+from tenacity import Retrying, retry_if_result, stop_after_attempt
 
 logger = logging.getLogger(__name__)
+
+MINIMUM_GROSS_MARGIN_PERCENT = 60.0
+MINIMUM_CLIENT_SAVINGS_PERCENT = 65.0
+MINIMUM_AI_CONFIDENCE_PERCENT = 80.0
 
 
 class QualityGateResult(BaseModel):
 	"""Strict Pydantic evaluation model for legal estimation quality."""
+
 	is_valid: bool
 	quality_score: float = Field(ge=0.0, le=100.0)
 	margin_passed: bool
 	savings_passed: bool
 	confidence_passed: bool
+	confidence_gate_applicable: bool = True
 	corridor_passed: bool
 	density_passed: bool
-	defect_reasons: List[str] = []
-	recommendations: List[str] = []
+	defect_reasons: list[str] = Field(default_factory=list)
+	recommendations: list[str] = Field(default_factory=list)
 
 
-def evaluate_estimate_quality(estimate: Dict[str, Any]) -> QualityGateResult:
-	"""Validate an estimate against the 5 Canadian Legal Quality Gates."""
-	defects: List[str] = []
-	recommendations: List[str] = []
+def evaluate_estimate_quality(estimate: dict[str, Any]) -> QualityGateResult:
+	"""Validate an estimate against the five Canadian legal-pricing gates."""
+
+	defects: list[str] = []
+	recommendations: list[str] = []
 
 	gross_margin = float(estimate.get("gross_margin_percent") or 0.0)
 	client_savings = float(estimate.get("client_savings_percent") or 0.0)
-	confidence = float(estimate.get("confidence") or 80.0)
+	confidence = float(estimate.get("confidence") or 0.0)
 	lexpoints = int(estimate.get("lexpoints") or 0)
 	floor_lp = int(estimate.get("floor_lexpoints") or 0)
-	ceiling_lp = int(estimate.get("ceiling_lexpoints") or 999999)
+	ceiling_lp = int(estimate.get("ceiling_lexpoints") or 0)
 	page_count = int(estimate.get("page_count") or 1)
 	word_count = int(estimate.get("word_count") or 1)
 
-	# 1. Company Gross Margin Gate: Guaranteed 50% to 95% gross margin
-	margin_passed = 50.0 <= gross_margin <= 96.0
-	if gross_margin < 50.0:
-		defects.append(f"Company margin dangerously low ({gross_margin:.1f}% < 50.0%) - delivery loss risk.")
-		recommendations.append("Enforce higher billable unit threshold or raise internal cost floor.")
+	# 1. Company Gross Margin Gate: at least 60% against the governed cost model.
+	margin_passed = gross_margin >= MINIMUM_GROSS_MARGIN_PERCENT
+	if not margin_passed:
+		defects.append(
+			f"Company gross margin too low ({gross_margin:.1f}% < "
+			f"{MINIMUM_GROSS_MARGIN_PERCENT:.1f}%)."
+		)
+		recommendations.append("Reduce or split scope, or approve a custom quote above the standard cap.")
 
-	# 2. Client Savings Gate: Guaranteed >= 65% savings vs Canadian law firms
-	savings_passed = 65.0 <= client_savings <= 99.5
-	if client_savings < 65.0:
-		defects.append(f"Client savings inadequate ({client_savings:.1f}% < 65.0%) - quote too expensive for Canadian LPO market.")
-		recommendations.append("Clamp price against affordable Canadian ceiling.")
+	# 2. Client Savings Gate: at least 65% versus the Canadian benchmark.
+	savings_passed = client_savings >= MINIMUM_CLIENT_SAVINGS_PERCENT
+	if not savings_passed:
+		defects.append(
+			f"Client savings inadequate ({client_savings:.1f}% < "
+			f"{MINIMUM_CLIENT_SAVINGS_PERCENT:.1f}%)."
+		)
+		recommendations.append("Review the service classification and Canadian benchmark before release.")
 
-	# 3. AI Confidence Gate: Target >= 80%
-	confidence_passed = confidence >= 80.0
+	# 3. AI Confidence Gate. Deterministic formula fallback has no AI confidence
+	# to validate, so this gate is explicitly recorded as not applicable.
+	confidence_gate_applicable = estimate.get("classification_source") != "Deterministic Formula"
+	confidence_passed = (
+		not confidence_gate_applicable or confidence >= MINIMUM_AI_CONFIDENCE_PERCENT
+	)
 	if not confidence_passed:
-		defects.append(f"AI confidence low ({confidence:.1f}% < 80.0%) - potential classification ambiguity.")
-		recommendations.append("Extract structural anchors (Preamble, Operative Clauses, Prayer for Relief).")
+		defects.append(
+			f"AI confidence low ({confidence:.1f}% < {MINIMUM_AI_CONFIDENCE_PERCENT:.1f}%)."
+		)
+		recommendations.append("Re-run classification or require Legal Operations review.")
 
-	# 4. Corridor Boundary Gate: Floor <= LexPoints <= Ceiling
-	corridor_passed = floor_lp <= lexpoints <= ceiling_lp
+	# 4. Corridor Boundary Gate. A cost floor above the hard cap is never
+	# silently converted into a larger 'ceiling'; it requires custom scoping.
+	corridor_feasible = bool(estimate.get("corridor_feasible", floor_lp <= ceiling_lp))
+	corridor_passed = corridor_feasible and floor_lp <= lexpoints <= ceiling_lp
 	if not corridor_passed:
-		defects.append(f"LexPoints {lexpoints} out of corridor bounds [Floor: {floor_lp}, Ceiling: {ceiling_lp}].")
-		recommendations.append("Apply hard clamping within floor and ceiling.")
+		if not corridor_feasible:
+			defects.append(
+				f"No safe standard quote exists: required floor {floor_lp} LP exceeds "
+				f"the hard ceiling {ceiling_lp} LP."
+			)
+			recommendations.append("Split/reduce scope or approve an explicit custom quote.")
+		else:
+			defects.append(
+				f"LexPoints {lexpoints} outside corridor [floor {floor_lp}, ceiling {ceiling_lp}]."
+			)
+			recommendations.append("Clamp the quote within the governed floor and ceiling.")
 
-	# 5. Word Density Sanity Gate: Effective pages within reasonable bound of word count (350 words/page)
+	# 5. Word Density Sanity Gate: effective pages should remain reasonably
+	# consistent with extracted text at the governed 350 words/page density.
 	expected_pages = math.ceil(word_count / 350)
 	density_ratio = page_count / max(1, expected_pages)
 	density_passed = 0.5 <= density_ratio <= 2.5
 	if not density_passed:
-		defects.append(f"Page density distorted (ratio {density_ratio:.2f}); word count {word_count} across {page_count} pages.")
-		recommendations.append("Normalize effective pages to math.ceil(word_count / 350).")
+		defects.append(
+			f"Page density distorted (ratio {density_ratio:.2f}); "
+			f"{word_count} extracted words across {page_count} effective pages."
+		)
+		recommendations.append("Verify OCR/page extraction before releasing the quote.")
 
-	# Compute composite quality score (0 to 100)
-	passed_count = sum([margin_passed, savings_passed, confidence_passed, corridor_passed, density_passed])
-	base_score = (passed_count / 5.0) * 100.0
-
-	# Penalize margin and savings defects more heavily
-	if not margin_passed or not savings_passed:
-		base_score = min(base_score, 75.0)
-
-	is_valid = len(defects) == 0
+	gate_results = (
+		margin_passed,
+		savings_passed,
+		confidence_passed,
+		corridor_passed,
+		density_passed,
+	)
+	quality_score = round((sum(gate_results) / len(gate_results)) * 100.0, 1)
+	is_valid = all(gate_results)
 
 	return QualityGateResult(
 		is_valid=is_valid,
-		quality_score=round(base_score, 1),
+		quality_score=quality_score,
 		margin_passed=margin_passed,
 		savings_passed=savings_passed,
 		confidence_passed=confidence_passed,
+		confidence_gate_applicable=confidence_gate_applicable,
 		corridor_passed=corridor_passed,
 		density_passed=density_passed,
 		defect_reasons=defects,
@@ -101,107 +129,163 @@ def evaluate_estimate_quality(estimate: Dict[str, Any]) -> QualityGateResult:
 
 
 def adapt_profile_for_retry(
-	ai_profile: Dict[str, Any],
-	doc: Any,
-	metadata: Dict[str, Any],
+	ai_profile: dict[str, Any],
+	metadata: dict[str, Any],
 	quality_report: QualityGateResult,
+	estimate: dict[str, Any],
 	iteration: int,
-) -> Dict[str, Any]:
-	"""Self-correcting adaptation strategy applied on each retry attempt."""
+) -> dict[str, Any]:
+	"""Apply evidence-backed, non-commercial corrections before a retry."""
+
 	new_profile = copy.deepcopy(ai_profile)
 
-	# 1. Address Low Confidence / Classification Ambiguity
-	if not quality_report.confidence_passed:
-		# Auto-boost confidence if keywords strongly corroborate the service type
+	# Corroborating legal anchors can resolve a borderline classifier result,
+	# but never conceal a cost/cap conflict or rewrite objective file volume.
+	if quality_report.confidence_gate_applicable and not quality_report.confidence_passed:
 		extracted = metadata.get("extracted_sample", "")
-		kw_count = sum(
-			1 for kw in ["indemnity", "liability", "termination", "confidential", "claim", "plaintiff", "defendant", "court", "breach"]
-			if kw in extracted.lower()
+		keyword_count = sum(
+			1
+			for keyword in (
+				"indemnity",
+				"liability",
+				"termination",
+				"confidential",
+				"claim",
+				"plaintiff",
+				"defendant",
+				"court",
+				"breach",
+			)
+			if keyword in extracted.lower()
 		)
-		boost = min(15, kw_count * 2)
-		new_profile["confidence"] = min(95, float(new_profile.get("confidence") or 75) + boost)
+		boost = min(15, keyword_count * 2)
+		current_confidence = float(
+			new_profile.get("confidence") or estimate.get("confidence") or 0
+		)
+		new_profile["confidence"] = min(95, current_confidence + boost)
+		new_profile["confidence_recalibration_iteration"] = iteration
 
-	# 2. Address Low Margin (Price too cheap)
-	if not quality_report.margin_passed and (new_profile.get("gross_margin_percent") or 0) < 50.0:
-		# Slightly elevate complexity or upgrade reviewer level to Mixed Team
-		current_comp = int(new_profile.get("complexity_score") or 25)
-		new_profile["complexity_score"] = min(100, current_comp + 12)
-		new_profile["reviewer_level"] = "Senior Associate"
-		new_profile["task_count"] = max(1, float(new_profile.get("task_count") or 1))
-
-	# 3. Address Price Too High (Client savings < 65%)
-	if not quality_report.savings_passed and (new_profile.get("client_savings_percent") or 0) < 65.0:
-		# Dampen complexity score to routine/moderate ceiling
-		current_comp = int(new_profile.get("complexity_score") or 60)
-		new_profile["complexity_score"] = max(20, current_comp - 18)
-		new_profile["risk_level"] = "Medium" if new_profile.get("risk_level") == "Critical" else "Low"
-
-	# 4. Word Density Normalization
-	word_count = int(metadata.get("word_count") or 0)
-	if word_count > 0:
-		normalized_pages = max(1, math.ceil(word_count / 350))
-		metadata["page_count"] = normalized_pages
-		if new_profile.get("billing_measure") == "pages":
-			new_profile["volume"] = normalized_pages
+	if not quality_report.corridor_passed or not quality_report.margin_passed:
+		new_profile["requires_human_review"] = True
 
 	return new_profile
 
 
+def _quality_payload(quality: QualityGateResult) -> dict[str, Any]:
+	return quality.model_dump() if hasattr(quality, "model_dump") else quality.dict()
+
+
+def _attach_quality_evidence(
+	estimate: dict[str, Any],
+	quality: QualityGateResult,
+	iteration_history: list[dict[str, Any]],
+	convergence_status: str,
+) -> dict[str, Any]:
+	quality_payload = _quality_payload(quality)
+	estimate["quality_report"] = quality_payload
+	estimate["iteration_history"] = iteration_history
+	estimate["convergence_status"] = convergence_status
+	estimate["iterations_count"] = len(iteration_history)
+	estimate["quality_gate_passed"] = quality.is_valid
+	if not quality.is_valid:
+		estimate["requires_human_review"] = 1
+
+	factor_breakdown = dict(estimate.get("factor_breakdown") or {})
+	factor_breakdown["quality_assurance"] = {
+		"gate_count": 5,
+		"quality_report": quality_payload,
+		"iterations_count": len(iteration_history),
+		"convergence_status": convergence_status,
+		"iteration_history": iteration_history,
+	}
+	estimate["factor_breakdown"] = factor_breakdown
+	return estimate
+
+
 def run_iterative_estimation(
 	doc: Any,
-	files: List[Any],
+	files: list[Any],
 	extracted: str,
-	initial_profile: Optional[Dict[str, Any]] = None,
+	initial_profile: dict[str, Any] | None = None,
 	max_attempts: int = 3,
-) -> Dict[str, Any]:
-	"""Iteratively compute, evaluate, and self-calibrate an estimate until it passes Quality Gates."""
+) -> dict[str, Any]:
+	"""Compute, validate and retry an estimate; fail closed to human review."""
+
 	from lex.lexpoint_estimation import calculate_estimate, collect_document_metadata
 
 	metadata = collect_document_metadata(files, extracted)
 	metadata["extracted_sample"] = extracted[:5000]
-
 	current_profile = copy.deepcopy(initial_profile or {})
-	iteration_history = []
-	best_estimate = None
-	best_quality = -1.0
+	iteration_history: list[dict[str, Any]] = []
+	best_estimate: dict[str, Any] | None = None
+	best_quality: QualityGateResult | None = None
 
-	for iteration_num in range(1, max_attempts + 1):
-		est = calculate_estimate(doc, files, extracted, ai_profile=current_profile)
-		quality = evaluate_estimate_quality(est)
-
-		iteration_history.append({
-			"iteration": iteration_num,
-			"lexpoints": est["lexpoints"],
-			"quote_cad": est["quoted_price_cad"],
-			"gross_margin": est["gross_margin_percent"],
-			"client_savings": est["client_savings_percent"],
-			"quality_score": quality.quality_score,
-			"is_valid": quality.is_valid,
-			"defects": quality.defect_reasons,
-		})
-
-		if quality.quality_score > best_quality:
-			best_quality = quality.quality_score
-			best_estimate = est
-
-		if quality.is_valid:
-			# 100% Quality Pass Achieved!
-			est["quality_report"] = quality.dict()
-			est["iteration_history"] = iteration_history
-			est["convergence_status"] = "Converged on Quality Gates"
-			est["iterations_count"] = iteration_num
-			return est
-
-		# Adapt profile for next iteration
-		current_profile = adapt_profile_for_retry(
-			current_profile, doc, metadata, quality, iteration_num
+	def estimate_once() -> dict[str, Any]:
+		nonlocal current_profile, best_estimate, best_quality
+		iteration_number = len(iteration_history) + 1
+		estimate = calculate_estimate(
+			doc,
+			files,
+			extracted,
+			ai_profile=current_profile if initial_profile is not None else None,
+			auto_converge=False,
+		)
+		quality = evaluate_estimate_quality(estimate)
+		iteration_history.append(
+			{
+				"iteration": iteration_number,
+				"lexpoints": estimate["lexpoints"],
+				"quote_cad": estimate["quoted_price_cad"],
+				"gross_margin": estimate["gross_margin_percent"],
+				"client_savings": estimate["client_savings_percent"],
+				"quality_score": quality.quality_score,
+				"is_valid": quality.is_valid,
+				"defects": quality.defect_reasons,
+			}
 		)
 
-	# If max attempts reached without perfect 100%, return best stabilized corridor estimate
-	final_est = best_estimate or calculate_estimate(doc, files, extracted, ai_profile=current_profile)
-	final_quality = evaluate_estimate_quality(final_est)
-	final_est["quality_report"] = final_quality.dict()
-	final_est["iteration_history"] = iteration_history
-	final_est["convergence_status"] = "Corridor Stabilized"
-	final_est["iterations_count"] = len(iteration_history)
-	return final_est
+		if best_quality is None or quality.quality_score > best_quality.quality_score:
+			best_estimate = estimate
+			best_quality = quality
+
+		if not quality.is_valid:
+			current_profile = adapt_profile_for_retry(
+				current_profile,
+				metadata,
+				quality,
+				estimate,
+				iteration_number,
+			)
+		return {"estimate": estimate, "quality": quality}
+
+	retryer = Retrying(
+		stop=stop_after_attempt(max(1, int(max_attempts))),
+		retry=retry_if_result(lambda outcome: not outcome["quality"].is_valid),
+		retry_error_callback=lambda retry_state: retry_state.outcome.result(),
+		reraise=False,
+	)
+	last_outcome = retryer(estimate_once)
+	last_estimate = last_outcome["estimate"]
+	last_quality = last_outcome["quality"]
+
+	if last_quality.is_valid:
+		return _attach_quality_evidence(
+			last_estimate,
+			last_quality,
+			iteration_history,
+			"Converged on Quality Gates",
+		)
+
+	final_estimate = best_estimate or last_estimate
+	final_quality = best_quality or last_quality
+	logger.warning(
+		"LexPoint estimate failed quality gates after %s attempt(s): %s",
+		len(iteration_history),
+		"; ".join(final_quality.defect_reasons),
+	)
+	return _attach_quality_evidence(
+		final_estimate,
+		final_quality,
+		iteration_history,
+		"Human Review Required - Quality Gates Not Met",
+	)
