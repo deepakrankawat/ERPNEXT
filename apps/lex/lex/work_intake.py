@@ -476,7 +476,15 @@ def analyze_documents(intake: str):
 	return _process_documents(doc, actor, estimate_only=False)
 
 
-def _process_documents(doc, actor, *, estimate_only: bool):
+def _process_documents(
+	doc,
+	actor,
+	*,
+	estimate_only: bool,
+	model_override: str | None = None,
+	provider_override: str | None = None,
+	ai_model_registry: str | None = None,
+):
 	if not doc.sla_accepted:
 		frappe.throw(_("SLA acceptance is required before cost estimation."), frappe.PermissionError)
 	files = _intake_files(doc.name)
@@ -515,11 +523,15 @@ def _process_documents(doc, actor, *, estimate_only: bool):
 	# Client Website Users may request commercial estimation only.  The wider
 	# legal/risk analysis is an internal Operations capability and is never run
 	# from the client-facing endpoint.
-	ai_result, ai_error = (None, None) if estimate_only else _run_governed_ai_analysis(doc, extracted)
+	ai_result, ai_error = (None, None) if estimate_only else _run_governed_ai_analysis(
+		doc, extracted, provider=provider_override, model=model_override
+	)
 	if ai_error or (ai_result and ai_result.get("requires_human_review")):
 		low_confidence = True
 
-	ai_profile, ai_estimate_note = _estimation_profile_with_ai(doc, extracted, len(files), word_count)
+	ai_profile, ai_estimate_note = _estimation_profile_with_ai(
+		doc, extracted, len(files), word_count, provider=provider_override, model=model_override
+	)
 	from lex.lexpoint_estimation import calculate_estimate
 
 	estimation = calculate_estimate(doc, files, extracted, ai_profile=ai_profile)
@@ -600,6 +612,7 @@ def _process_documents(doc, actor, *, estimate_only: bool):
 		word_count=word_count,
 		ai_result=ai_result,
 		estimation=estimation,
+		ai_model_registry=ai_model_registry,
 	)
 	with _service_writes():
 		doc.reload()
@@ -1401,12 +1414,20 @@ def _analysis_confidence(files, chunks, unsupported, word_count):
 	return max(0, min(95, round(confidence, 1)))
 
 
-def _run_governed_ai_analysis(doc, extracted):
+def _run_governed_ai_analysis(doc, extracted, provider=None, model=None):
 	if not cint(_setting("enable_ai_intake_analysis", 0)):
 		return None, None
 	if not extracted.strip():
 		return None, _("AI analysis was not run because no text could be extracted; Operations Review is required.")
 	from lex.ai_gateway import invoke_ai_gateway
+
+	if not model and not provider and frappe.db.exists("DocType", "LPO LexPoint Settings"):
+		default_ai_model = frappe.db.get_single_value("LPO LexPoint Settings", "default_ai_model")
+		if default_ai_model:
+			reg = frappe.db.get_value("LPO AI Model Registry", default_ai_model, ["provider", "model_id"], as_dict=True)
+			if reg:
+				provider = reg.provider
+				model = reg.model_id
 
 	prompt = (
 		"Analyze this legal work intake for scope, complexity, key risks, missing information and delivery assumptions. "
@@ -1419,8 +1440,8 @@ def _run_governed_ai_analysis(doc, extracted):
 			use_case="Client Work Intake Analysis",
 			prompt_text=prompt,
 			client_id=doc.client,
-			provider=None,
-			model=None,
+			provider=provider,
+			model=model,
 			prompt_version=None,
 			is_high_risk=0,
 			source_corpus=extracted[:50000],
@@ -1429,13 +1450,21 @@ def _run_governed_ai_analysis(doc, extracted):
 		return None, _("Governed AI analysis failed and the intake was routed to Operations Review: {0}").format(str(exc)[:300])
 
 
-def _estimation_profile_with_ai(doc, extracted, document_count, word_count):
+def _estimation_profile_with_ai(doc, extracted, document_count, word_count, provider=None, model=None):
 	"""Ask governed AI for observable factors; ERP remains the pricing authority."""
 	if not cint(_setting("enable_ai_intake_analysis", 0)):
 		return None, "AI intake analysis is disabled; using the standard formula."
 	if not extracted.strip():
 		return None, "No text could be extracted; using the standard formula."
 	from lex.ai_gateway import invoke_ai_gateway
+
+	if not model and not provider and frappe.db.exists("DocType", "LPO LexPoint Settings"):
+		default_ai_model = frappe.db.get_single_value("LPO LexPoint Settings", "default_ai_model")
+		if default_ai_model:
+			reg = frappe.db.get_value("LPO AI Model Registry", default_ai_model, ["provider", "model_id"], as_dict=True)
+			if reg:
+				provider = reg.provider
+				model = reg.model_id
 
 	prompt = (
 		"You are the evidence-classification component of a governed legal-services estimation system. "
@@ -1462,8 +1491,8 @@ def _estimation_profile_with_ai(doc, extracted, document_count, word_count):
 				use_case="Client Work Intake LexPoint Estimation",
 				prompt_text=prompt,
 				client_id=doc.client,
-				provider=None,
-				model=None,
+				provider=provider,
+				model=model,
 				prompt_version=None,
 				is_high_risk=0,
 				source_corpus=extracted[:50000],
@@ -1521,7 +1550,7 @@ def apply_document_estimate(estimate: str):
 	)
 
 
-def _create_analysis_estimate(doc, *, files, extracted, word_count, ai_result, estimation):
+def _create_analysis_estimate(doc, *, files, extracted, word_count, ai_result, estimation, ai_model_registry: str | None = None):
 	previous_name = doc.get("ai_document_estimate")
 	if previous_name and frappe.db.exists("LPO AI Document Estimate", previous_name):
 		previous = frappe.get_doc("LPO AI Document Estimate", previous_name)
@@ -1550,6 +1579,12 @@ def _create_analysis_estimate(doc, *, files, extracted, word_count, ai_result, e
 		frappe.db.get_value("LPO AI Execution", ai_execution, ["provider", "model"], as_dict=True)
 		if ai_execution else None
 	) or {}
+	if not ai_model_registry and execution_route.get("model"):
+		ai_model_registry = frappe.db.get_value(
+			"LPO AI Model Registry",
+			{"model_id": execution_route.get("model"), "enabled": 1},
+			"name",
+		)
 	status = _estimate_status(doc)
 	values = {
 		"doctype": "LPO AI Document Estimate",
@@ -1578,6 +1613,7 @@ def _create_analysis_estimate(doc, *, files, extracted, word_count, ai_result, e
 		"analysis_status": doc.analysis_status,
 		"analysis_confidence": doc.analysis_confidence,
 		"low_confidence": doc.low_confidence,
+		"ai_model": ai_model_registry,
 		"analysis_provider": execution_route.get("provider") or ("Formula Engine" if not ai_execution else None),
 		"analysis_model": execution_route.get("model"),
 		"ai_execution": ai_execution,
@@ -2348,3 +2384,28 @@ def _funding_result(doc, duplicate=False):
 		"delivery_due_on": doc.delivery_due_on,
 		"duplicate": duplicate,
 	}
+
+
+@frappe.whitelist()
+def reestimate_intake_with_model(intake_name: str, model_registry_name: str | None = None, current_estimate_name: str | None = None) -> dict:
+	"""Re-run AI intake analysis and estimation using a chosen LPO AI Model Registry model."""
+	_require_internal()
+	doc, actor = _require_intake_access(intake_name)
+	provider = None
+	model = None
+	if model_registry_name:
+		model_row = frappe.db.get_value("LPO AI Model Registry", model_registry_name, ["provider", "model_id"], as_dict=True)
+		if not model_row:
+			model_row = frappe.db.get_value("LPO AI Model Registry", {"model_id": model_registry_name, "enabled": 1}, ["provider", "model_id"], as_dict=True)
+		if model_row:
+			provider = model_row.provider
+			model = model_row.model_id
+	return _process_documents(
+		doc,
+		actor,
+		estimate_only=False,
+		model_override=model,
+		provider_override=provider,
+		ai_model_registry=model_registry_name,
+	)
+

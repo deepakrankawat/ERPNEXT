@@ -11,7 +11,7 @@
   "source_section", "source_document", "file_name", "file_size_bytes", "source_checksum", "scan_status", "document_column", "page_count", "word_count", "character_count",
   "instructions_section", "expected_outcome", "detailed_instructions",
   "result_section", "estimated_lexpoints", "estimated_price", "currency", "delivery_hours", "result_column", "recommended_service", "billing_measure", "estimated_volume", "estimate_source",
-  "classification_section", "detected_document_type", "complexity_score", "complexity_classification", "risk_level", "reviewer_level", "classification_column", "confidence", "requires_human_review", "analysis_note", "ai_execution", "analysis_provider", "analysis_model",
+  "classification_section", "detected_document_type", "complexity_score", "complexity_classification", "risk_level", "reviewer_level", "classification_column", "confidence", "requires_human_review", "analysis_note", "ai_execution", "ai_model", "analysis_provider", "analysis_model",
   "evidence_section", "factor_breakdown_json", "explanation"
  ],
  "fields": [
@@ -62,6 +62,7 @@
   {"default": "0", "fieldname": "requires_human_review", "fieldtype": "Check", "label": "Human Review Recommended", "read_only": 1},
   {"fieldname": "analysis_note", "fieldtype": "Small Text", "label": "Analysis Note", "read_only": 1},
   {"fieldname": "ai_execution", "fieldtype": "Link", "label": "Governed AI Execution", "options": "LPO AI Execution", "read_only": 1},
+  {"fieldname": "ai_model", "fieldtype": "Link", "label": "LPO AI Model", "options": "LPO AI Model Registry", "read_only": 1},
   {"fieldname": "analysis_provider", "fieldtype": "Data", "label": "AI Provider", "read_only": 1},
   {"fieldname": "analysis_model", "fieldtype": "Data", "label": "AI Model", "read_only": 1},
 

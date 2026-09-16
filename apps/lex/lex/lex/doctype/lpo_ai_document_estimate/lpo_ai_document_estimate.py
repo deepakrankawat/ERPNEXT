@@ -27,7 +27,7 @@ PROTECTED_FIELDS = {
 	"variance_lexpoints", "variance_percent",
 }
 REVIEW_FIELDS = {
-	"reviewed_lexpoints", "reviewed_amount", "reviewed_delivery_hours", "reviewed_scope", "review_notes",
+	"reviewed_lexpoints", "reviewed_amount", "reviewed_delivery_hours", "reviewed_scope", "review_notes", "ai_model",
 }
 FEEDBACK_FIELDS = {
 	"actual_lexpoints", "actual_hours", "actual_delivery_hours", "actual_internal_cost", "actual_margin",
@@ -76,6 +76,11 @@ class LPOAIDocumentEstimate(Document):
 			calibration_status = "Needs Review" if abs(variance_percent) > threshold else "Within Tolerance"
 		elif not actual_points:
 			calibration_status = "Not Captured"
+		if self.ai_model and (not self.analysis_model or self.has_value_changed("ai_model")):
+			model_info = frappe.db.get_value("LPO AI Model Registry", self.ai_model, ["provider", "model_id"], as_dict=True)
+			if model_info:
+				self.analysis_provider = model_info.provider
+				self.analysis_model = model_info.model_id
 		previous = self.get_doc_before_save()
 		if not previous or getattr(frappe.flags, "lexocrates_estimate_service", False):
 			self.changed_from_proposal = changed_from_proposal
@@ -161,3 +166,22 @@ def on_doctype_update():
 	frappe.db.add_index(
 		"LPO AI Document Estimate", ["status", "modified"], index_name="ai_document_estimate_status_modified"
 	)
+
+
+@frappe.whitelist()
+def rerun_estimate_with_model(estimate_name: str, model_id: str | None = None) -> dict:
+	"""Re-run AI intake estimation with a chosen LPO AI Model Registry model."""
+	if frappe.session.user != "Administrator" and not set(frappe.get_roles()).intersection(REVIEW_ROLES):
+		frappe.throw(_("Legal Operations authority is required to re-run an estimate."), frappe.PermissionError)
+
+	doc = frappe.get_doc("LPO AI Document Estimate", estimate_name)
+	if doc.status in {"Activated", "Superseded"}:
+		frappe.throw(_("Cannot re-estimate an activated or superseded estimate."), frappe.ValidationError)
+
+	from lex.work_intake import reestimate_intake_with_model
+	return reestimate_intake_with_model(
+		intake_name=doc.work_intake,
+		model_registry_name=model_id or doc.ai_model,
+		current_estimate_name=doc.name,
+	)
+
