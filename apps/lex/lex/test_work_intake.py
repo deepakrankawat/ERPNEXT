@@ -444,7 +444,7 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		self.assertEqual(analysis["pricing_approval_status"], "Pending CEO Approval")
 		self.assertEqual(analysis["quote_status"], "Pending CEO Approval")
 
-	def test_high_confidence_ai_estimate_still_requires_ceo_approval(self):
+	def test_high_confidence_ai_estimate_is_auto_approved_by_policy(self):
 		frappe.set_user("Administrator")
 		frappe.db.set_single_value("LexPack Settings", "enable_ai_intake_analysis", 1)
 		with patch(
@@ -499,22 +499,17 @@ class TestUploadFirstWorkIntake(FrappeTestCase):
 		with patch("lex.work_intake._estimation_profile_with_ai", return_value=(profile, None)):
 			result = work_intake.request_cost_estimate(intake["name"])
 
-		self.assertEqual(result["status"], "Pending CEO Approval")
-		self.assertEqual(result["quote_status"], "Pending CEO Approval")
-		self.assertEqual(result["pricing_approval_status"], "Pending CEO Approval")
+		self.assertEqual(result["status"], "Quote Ready")
+		self.assertEqual(result["quote_status"], "Ready")
+		self.assertEqual(result["pricing_approval_status"], "Approved")
 		doc = frappe.get_doc("Lexocrates Work Intake", intake["name"])
 		self.assertEqual(doc.estimate_method, "AI-Assisted Formula")
-		self.assertIsNone(doc.pricing_approved_by)
-		self.assertIsNone(doc.pricing_approved_on)
+		self.assertEqual(doc.pricing_approved_by, "Administrator")
+		self.assertIsNotNone(doc.pricing_approved_on)
 		estimate = frappe.get_doc("LPO AI Document Estimate", doc.ai_document_estimate)
-		self.assertEqual(estimate.status, "Pending CEO Approval")
-		self.assertEqual(estimate.approval_status, "Pending CEO Approval")
-		with self.assertRaises(frappe.ValidationError):
-			work_intake._validate_ready_quote(doc)
-
-		frappe.set_user("Administrator")
-		approval = work_intake.approve_quote_pricing(intake["name"], "Approved")
-		self.assertEqual(approval["status"], "Quote Ready")
+		self.assertEqual(estimate.status, "Approved")
+		self.assertEqual(estimate.approval_status, "Approved")
+		work_intake._validate_ready_quote(doc)
 
 	def test_ai_human_review_flag_blocks_auto_approval(self):
 		frappe.set_user("Administrator")
