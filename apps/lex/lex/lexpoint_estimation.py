@@ -96,8 +96,6 @@ def ensure_default_lexpoint_rules():
 	if not frappe.db.exists("DocType", "LPO LexPoint Service Rule"):
 		return
 	ensure_calibrated_estimation_settings()
-	if frappe.db.exists("DocType", "LexPack Settings"):
-		frappe.db.set_single_value("LexPack Settings", "auto_approve_ai_pricing", 0)
 	settings = frappe.get_single("LPO LexPoint Settings")
 	if not settings.formula_version:
 		settings.formula_version = CALIBRATED_FORMULA_VERSION

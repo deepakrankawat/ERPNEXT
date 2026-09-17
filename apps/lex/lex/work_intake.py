@@ -643,6 +643,7 @@ def _process_documents(
 		doc.save(ignore_permissions=True)
 	_sync_job_commercial(doc)
 	if auto_approved:
+		_notify_client_quote_ready(doc)
 		_audit(
 			doc,
 			"AI Estimate Auto-Approved by CEO Policy",
@@ -1811,11 +1812,17 @@ def _activate_document_estimate(doc, matter: str, job: str):
 
 
 def _route_quote_for_approval(doc, *, ai_profile=None):
-	"""Route every client-facing estimate through explicit CEO approval.
+	"""Auto-release only estimates covered by the CEO-approved AI policy."""
+	policy = _eligible_ai_auto_approval(doc, ai_profile)
+	if policy:
+		doc.pricing_approval_status = "Approved"
+		doc.pricing_approved_by = policy["authorized_by"]
+		doc.pricing_approved_on = now_datetime()
+		doc.pricing_rejection_reason = None
+		doc.quote_status = "Ready"
+		doc.status = "Quote Ready"
+		return True
 
-	AI can propose observable pricing factors, but it cannot release pricing
-	or unlock payment without an executive action.
-	"""
 	doc.pricing_approval_status = "Pending CEO Approval"
 	doc.pricing_approved_by = None
 	doc.pricing_approved_on = None
