@@ -29,7 +29,7 @@
 
   {"fieldname": "preliminary_section", "fieldtype": "Section Break", "label": "Preliminary Work Details"},
   {"fieldname": "service_type", "fieldtype": "Select", "label": "Service Type", "options": "Contract Review\nLegal Research\nDocument Review\nDue Diligence\nCompliance Review\nLitigation Support\nDrafting\nSummarization\nOther", "reqd": 1},
-  {"fieldname": "jurisdiction", "fieldtype": "Data", "label": "Jurisdiction", "reqd": 1},
+  {"default": "Canada", "fieldname": "jurisdiction", "fieldtype": "Data", "label": "Jurisdiction", "reqd": 1},
   {"default": "Medium", "fieldname": "priority", "fieldtype": "Select", "label": "Priority", "options": "Low\nMedium\nHigh\nUrgent", "reqd": 1},
   {"fieldname": "requested_delivery_date", "fieldtype": "Datetime", "label": "Requested Delivery Date"},
   {"fieldname": "preliminary_column", "fieldtype": "Column Break"},

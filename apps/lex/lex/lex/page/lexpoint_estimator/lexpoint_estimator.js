@@ -50,7 +50,7 @@ class LexPointEstimatorPage {
 			`<option value="${this.escape(item)}" ${item === "Medium" ? "selected" : ""}>${this.escape(item)}</option>`
 		).join("");
 		const jurisdictionOptions = (data.jurisdictions || []).map((item) =>
-			`<option value="${this.escape(item)}" ${item === "India" ? "selected" : ""}>${this.escape(item)}</option>`
+			`<option value="${this.escape(item)}" ${item === (data.default_jurisdiction || "Canada") ? "selected" : ""}>${this.escape(item)}</option>`
 		).join("");
 		const defaultModel = data.default_ai_model || aiRoute.model || "";
 		const modelOptions = (data.available_models || []).map((m) => {
@@ -80,7 +80,7 @@ class LexPointEstimatorPage {
 							</div>
 						</div>
 						<div class="form-group"><label class="control-label reqd">${__("Service type")}</label><select class="form-control" name="service_type">${serviceOptions}</select></div>
-						<div class="form-group"><label class="control-label reqd">${__("Jurisdiction")}</label><input class="form-control" name="jurisdiction" list="lex-estimator-jurisdictions" value="India" maxlength="140" required><datalist id="lex-estimator-jurisdictions">${jurisdictionOptions}</datalist></div>
+						<div class="form-group"><label class="control-label reqd">${__("Jurisdiction")}</label><input class="form-control" name="jurisdiction" list="lex-estimator-jurisdictions" value="${this.escape(data.default_jurisdiction || "Canada")}" maxlength="140" required><datalist id="lex-estimator-jurisdictions">${jurisdictionOptions}</datalist></div>
 						<div class="form-group"><label class="control-label reqd">${__("Priority")}</label><select class="form-control" name="priority">${priorityOptions}</select></div>
 						<div class="form-group lex-estimator__wide"><label class="control-label">${__("Expected outcome")}</label><input class="form-control" name="expected_outcome" maxlength="1000" placeholder="${__("Example: Contract risk review with clause comments")}"></div>
 						<div class="form-group lex-estimator__wide"><label class="control-label">${__("Instructions / assumptions")}</label><textarea class="form-control" name="detailed_instructions" rows="4" maxlength="10000" placeholder="${__("Add scope, review depth, special risks, or delivery assumptions.")}"></textarea></div>
@@ -175,7 +175,7 @@ class LexPointEstimatorPage {
 			payload.append("folder", "Home/Attachments");
 			payload.append("method", `${this.api}.upload_standalone_estimate_file`);
 			payload.append("service_type", values.service_type || "Other");
-			payload.append("jurisdiction", values.jurisdiction || "India");
+			payload.append("jurisdiction", values.jurisdiction || "Canada");
 			payload.append("priority", values.priority || "Medium");
 			payload.append("expected_outcome", values.expected_outcome || "");
 			payload.append("detailed_instructions", values.detailed_instructions || "");
