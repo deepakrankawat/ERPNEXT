@@ -21,7 +21,7 @@ from lex.work_intake import _parse_ai_json_object
 
 ALLOWED_ESTIMATE_EXTENSIONS = {".csv", ".docx", ".pdf", ".txt"}
 PRIORITIES = ("Low", "Medium", "High", "Urgent")
-DEFAULT_JURISDICTIONS = ("India", "Canada", "United Kingdom", "United States", "Multi-Jurisdiction")
+DEFAULT_JURISDICTIONS = ("Canada", "India", "United Kingdom", "United States", "Multi-Jurisdiction")
 
 
 @frappe.whitelist()
@@ -42,6 +42,7 @@ def get_estimator_bootstrap() -> dict:
 		"service_types": sorted(DEFAULT_SERVICE_BY_INTAKE),
 		"priorities": list(PRIORITIES),
 		"jurisdictions": list(DEFAULT_JURISDICTIONS),
+		"default_jurisdiction": "Canada",
 		"allowed_extensions": sorted(ALLOWED_ESTIMATE_EXTENSIONS),
 		"max_upload_bytes": get_max_file_size(),
 		"ai_enabled": bool(ai_route.get("ready")),
@@ -141,7 +142,7 @@ def upload_standalone_estimate_file() -> dict:
 		filename=filename,
 		content=content,
 		service_type=frappe.form_dict.get("service_type") or "Other",
-		jurisdiction=frappe.form_dict.get("jurisdiction") or "India",
+		jurisdiction=frappe.form_dict.get("jurisdiction") or "Canada",
 		priority=frappe.form_dict.get("priority") or "Medium",
 		expected_outcome=frappe.form_dict.get("expected_outcome"),
 		detailed_instructions=frappe.form_dict.get("detailed_instructions"),
@@ -155,7 +156,7 @@ def estimate_document(
 	filename: str,
 	content: str,
 	service_type: str = "Other",
-	jurisdiction: str = "India",
+	jurisdiction: str = "Canada",
 	priority: str = "Medium",
 	expected_outcome: str | None = None,
 	detailed_instructions: str | None = None,

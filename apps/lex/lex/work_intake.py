@@ -91,7 +91,7 @@ def create_work_intake(
 		"status": "SLA Pending",
 		"created_on": now_datetime(),
 		"service_type": service_type,
-		"jurisdiction": (jurisdiction or "").strip(),
+		"jurisdiction": (jurisdiction or "Canada").strip(),
 		"priority": priority,
 		"requested_delivery_date": requested_delivery_date or None,
 		"expected_outcome": (expected_outcome or "").strip(),

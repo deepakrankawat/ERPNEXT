@@ -340,7 +340,7 @@
 				<label class="wide">Job / work title<input name="intake_title" required maxlength="140" placeholder="Example: Review vendor master agreement"></label>
 				<label>Service type<select name="service_type" required>${services.map((item) => `<option>${item}</option>`).join("")}</select></label>
 				<label>Priority<select name="priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Urgent</option></select></label>
-				<label>Jurisdiction<input name="jurisdiction" required placeholder="India, Delhi High Court, UK law..."></label>
+				<label>Jurisdiction<input name="jurisdiction" required value="Canada" placeholder="Canada, Ontario, Federal Court of Canada..."></label>
 				<label>Requested delivery<input name="requested_delivery_date" type="datetime-local"></label>
 				<label class="wide">Expected outcome<textarea name="expected_outcome" required placeholder="Describe the deliverable you need"></textarea></label>
 				<label class="wide">Preliminary instructions<textarea name="preliminary_details" required placeholder="Do not upload documents yet. Add background, parties and initial instructions."></textarea></label>
