@@ -289,70 +289,34 @@
 
 	function workIntakeSection(data) {
 		if (!data.permissions.can_create_matters) return "";
-		const services = ["Contract Review", "Legal Research", "Document Review", "Due Diligence", "Compliance Review", "Litigation Support", "Drafting", "Summarization", "Other"];
-		const matterOptions = `<option value="">Create a new Matter</option>${(data.matters || []).filter((row) => !["On Hold", "Completed", "Closed"].includes(row.status)).map((row) => `<option value="${escapeHTML(row.name)}">${escapeHTML(row.matter_title)} · ${escapeHTML(row.name)}</option>`).join("")}`;
-		const form = formCard("1. Matter & Job Setup", "Complete Matter details first, then define the Job specifications and review the SLA.", "lex-new-intake", `
-			<div class="lex-wizard-stepper">
-				<div class="lex-wizard-step is-active" data-wizard-step-ind="1">
-					<span class="lex-step-badge">1</span>
-					<span class="lex-step-title">Step 1: Matter Details</span>
-				</div>
-				<div class="lex-wizard-step-line"></div>
-				<div class="lex-wizard-step" data-wizard-step-ind="2">
-					<span class="lex-step-badge">2</span>
-					<span class="lex-step-title">Step 2: Job Details</span>
-				</div>
+		const services = [
+			"Auto-Detect from Document",
+			"Legal Research & Writing",
+			"Litigation Support",
+			"Contract Lifecycle Management (CLM)",
+			"Contract Review",
+			"eDiscovery & Document Review",
+			"Compliance & Regulatory Support",
+			"Paralegal & Virtual Legal Assistance",
+			"Legal Operations Support"
+		];
+		const speedOptions = [
+			"Standard (3-5 Business Days)",
+			"Rush (24-48 Hours)",
+			"Emergency (Same Day / Weekend)"
+		];
+		const form = formCard("Lexocrates - Pricing Estimator (CAD)", "Upload a PDF for an exact native page count and instant page-based estimate. Processing speed: 30 pages per hour.", "lex-instant-estimate-form", `
+			<label class="wide">Select Service<select name="service" required>${services.map((item) => `<option value="${escapeHTML(item)}">${escapeHTML(item)}</option>`).join("")}</select></label>
+			<label class="wide">Upload Document (.pdf)<input class="lex-file-input" name="file" type="file" accept=".pdf,application/pdf" required></label>
+			<label class="wide">Turnaround Speed<select name="turnaround" required>${speedOptions.map((item) => `<option value="${escapeHTML(item)}">${escapeHTML(item)}</option>`).join("")}</select></label>
+			<div class="wide lex-button-row" style="margin-top: 14px;">
+				<button class="lex-button btn btn-primary btn-md" type="submit" style="padding: 10px 26px; font-size: 15px; background: #274c77; border-color: #274c77;">Calculate Estimate</button>
+				<span class="lex-form-note text-muted">Processing speed: 30 pages/hour · Base USD rates converted to CAD (1 USD = 1.3988 CAD).</span>
 			</div>
-
-			<!-- Step 1: Matter Details -->
-			<div class="lex-wizard-page" data-wizard-page="1">
-				<div class="lex-wizard-page-head">
-					<h4>Step 1 · Matter Context</h4>
-					<p class="text-muted">Choose an existing active Matter or provide details to create a new legal matter.</p>
-				</div>
-				<label class="wide">Matter<select name="matter" data-matter-select>${matterOptions}</select></label>
-				<label class="wide" data-new-matter-field>Matter title<input name="matter_title" required maxlength="140" placeholder="Example: Acme vendor contracting programme"></label>
-				<label data-new-matter-field>Matter nature<select name="matter_nature"><option>Advisory</option><option>Contract / Transaction</option><option>Litigation / Dispute</option><option>Regulatory / Compliance</option><option>Due Diligence</option><option>Other</option></select></label>
-				<label data-new-matter-field>Represented party<input name="represented_party_name" placeholder="Client or entity represented"></label>
-				<label data-new-matter-field>Represented party role<input name="our_side_role" placeholder="Buyer, petitioner, employer..."></label>
-				<label data-new-matter-field>Counterparty / opposing party<input name="counterparty_name" placeholder="Second or adverse party"></label>
-				<label data-new-matter-field>Counterparty role<input name="counterparty_role" placeholder="Seller, respondent, employee..."></label>
-				<label class="wide" data-new-matter-field>Opposing counsel / law firm<input name="opposing_counsel" placeholder="If known"></label>
-				<div class="wide lex-button-row" style="margin-top: 8px;">
-					<button class="lex-button btn btn-primary btn-sm" type="button" data-wizard-next>Save &amp; Proceed to Job &rarr;</button>
-					<span class="lex-form-note text-muted">Step 1 of 2: Job specifications unlock after Matter details are set.</span>
-				</div>
-			</div>
-
-			<!-- Step 2: Job Details -->
-			<div class="lex-wizard-page" data-wizard-page="2" style="display: none;">
-				<div class="lex-linked-matter-card">
-					<div class="lex-linked-matter-info">
-						<span class="lex-linked-matter-tag">Linked Matter</span>
-						<strong data-linked-matter-name>Selected Matter</strong>
-					</div>
-					<button type="button" class="lex-button secondary btn btn-default btn-xs" data-wizard-prev>&larr; Edit Matter Details</button>
-				</div>
-				<div class="lex-wizard-page-head">
-					<h4>Step 2 · Job &amp; Work Specifications</h4>
-					<p class="text-muted">Define the specific work to be performed under this matter.</p>
-				</div>
-				<label class="wide">Job / work title<input name="intake_title" required maxlength="140" placeholder="Example: Review vendor master agreement"></label>
-				<label>Service type<select name="service_type" required>${services.map((item) => `<option>${item}</option>`).join("")}</select></label>
-				<label>Priority<select name="priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Urgent</option></select></label>
-				<label>Jurisdiction<input name="jurisdiction" required value="Canada" placeholder="Canada, Ontario, Federal Court of Canada..."></label>
-				<label>Requested delivery<input name="requested_delivery_date" type="datetime-local"></label>
-				<label class="wide">Expected outcome<textarea name="expected_outcome" required placeholder="Describe the deliverable you need"></textarea></label>
-				<label class="wide">Preliminary instructions<textarea name="preliminary_details" required placeholder="Do not upload documents yet. Add background, parties and initial instructions."></textarea></label>
-				<label>Confidentiality<select name="confidentiality_level"><option>Standard</option><option selected>Confidential</option><option>Highly Confidential</option><option>Restricted</option></select></label>
-				<div class="wide lex-button-row" style="margin-top: 8px;">
-					<button class="lex-button secondary btn btn-default btn-sm" type="button" data-wizard-prev>&larr; Back to Matter</button>
-					<button class="lex-button btn btn-primary btn-sm" type="submit">Create Draft Job and review SLA</button>
-					<span class="lex-form-note text-muted">Documents attach only to the Draft Job. Funding activates operational work and starts its SLA.</span>
-				</div>
-			</div>`);
+			<div id="lex-estimate-result-box" class="wide" style="margin-top: 20px; display: none;"></div>
+		`);
 		const intakeCards = (data.intakes || []).map((intake) => intakeCard(intake, data)).join("");
-		return `<section class="lex-section" data-panel="new-matter">${sectionHeader("Submit New Work", "Matter &rarr; Job &rarr; SLA &rarr; Job documents &rarr; estimate &rarr; funding &rarr; activation")}${form}${intakeCards || card("Current intake", "No intake submitted", empty("Submit preliminary details to begin."))}</section>`;
+		return `<section class="lex-section" data-panel="new-matter">${sectionHeader("Pricing Estimator", "Instant Native PDF Page Count & CAD Pricing Engine")}${form}${intakeCards ? `<div style="margin-top: 30px;"><h3>Recent Intakes &amp; Matters</h3>${intakeCards}</div>` : ""}</section>`;
 	}
 
 	function additionalJobDocuments(intake, docs) {
@@ -557,64 +521,133 @@
 	}
 
 	function bindForms(root, data) {
-		const matterSelect = root.querySelector("[data-matter-select]");
-		const titleInput = root.querySelector('[name="matter_title"]');
-		const step1Page = root.querySelector('[data-wizard-page="1"]');
-		const step2Page = root.querySelector('[data-wizard-page="2"]');
-		const step1Ind = root.querySelector('[data-wizard-step-ind="1"]');
-		const step2Ind = root.querySelector('[data-wizard-step-ind="2"]');
-		const linkedMatterName = root.querySelector('[data-linked-matter-name]');
+		const estimateForm = document.getElementById("lex-instant-estimate-form");
+		const resultBox = document.getElementById("lex-estimate-result-box");
+		if (estimateForm) {
+			estimateForm.addEventListener("submit", async (event) => {
+				event.preventDefault();
+				const button = estimateForm.querySelector("button[type=submit]");
+				const fileInput = estimateForm.elements.file;
+				const file = fileInput?.files?.[0];
+				if (!file) return showError("File required", "Please select a PDF file.");
+				if (!file.name.toLowerCase().endsWith(".pdf")) {
+					return showError("Invalid File Type", "Only PDF files are supported for exact page counting.");
+				}
+				button.disabled = true;
+				const originalText = button.textContent;
+				button.textContent = "Calculating exact page count & CAD estimate...";
+				resultBox.style.display = "block";
+				resultBox.innerHTML = `<div class="lex-loading" style="padding: 24px; text-align: center;"><div class="lex-loading-mark">L</div><div><strong>Reading PDF &amp; Calculating...</strong><span>Analyzing native page count and applying CAD rate card...</span></div></div>`;
 
-		const toggleMatterFields = () => {
-			const existing = Boolean(matterSelect?.value);
-			root.querySelectorAll("[data-new-matter-field]").forEach((field) => { field.hidden = existing; });
-			if (titleInput) titleInput.required = !existing;
-		};
-		matterSelect?.addEventListener("change", toggleMatterFields);
-		toggleMatterFields();
+				try {
+					const content = await readFile(file);
+					const response = await call("lex.instant_estimator.calculate_instant_pdf_estimate", {
+						filename: file.name,
+						content,
+						service: estimateForm.elements.service.value,
+						turnaround: estimateForm.elements.turnaround.value,
+					});
 
-		const goToStep = (step) => {
-			if (step === 2) {
-				const isExisting = Boolean(matterSelect?.value);
-				if (!isExisting) {
-					const titleVal = (titleInput?.value || "").trim();
-					if (!titleVal) {
-						if (titleInput) {
-							titleInput.focus();
-							titleInput.reportValidity?.();
-						}
-						showError("Matter Title required", "Please enter a Matter title before proceeding to Job details.");
+					if (response.has_error) {
+						resultBox.innerHTML = `<div class="lex-state-card" role="alert" style="border: 2px solid #e05252; background: #fff5f5; padding: 20px; border-radius: 8px;"><div class="lex-state-mark" style="color: #e05252;">!</div><h3 style="color: #c53030;">Calculation Error</h3><p>${escapeHTML(response.volume_text || response.validation_error)}</p></div>`;
 						return;
 					}
-					if (linkedMatterName) linkedMatterName.textContent = titleVal;
-				} else {
-					const selectedOpt = matterSelect ? matterSelect.options[matterSelect.selectedIndex] : null;
-					if (linkedMatterName) linkedMatterName.textContent = selectedOpt ? selectedOpt.textContent : "Existing Matter";
+
+					// Render exact n8n result card
+					resultBox.innerHTML = `
+						<div class="lex-n8n-estimate-card" style="padding: 30px; border: 2px solid #274c77; border-radius: 12px; background: #f5f9ff; margin-bottom: 20px; font-family: Arial, sans-serif;">
+							<p style="margin: 0 0 8px; color: #52606d; font-size: 14px; text-align: center; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">APPROXIMATE PRICE RANGE (CAD)</p>
+							<h1 style="color: #274c77; font-size: 34px; margin: 0; text-align: center; font-weight: bold;">${escapeHTML(response.price_amount)}</h1>
+							<p style="color: #334e68; margin: 14px 0 20px; font-size: 17px; text-align: center; font-weight: 500;">${escapeHTML(response.volume_text)}</p>
+							<div style="border-top: 1px solid #cbd5e1; padding-top: 16px; line-height: 1.8; color: #243b53; font-size: 15px;">
+								<div><strong>Service:</strong> ${escapeHTML(response.service_text)}</div>
+								<div><strong>PDF Pages:</strong> ${escapeHTML(String(response.pages))}</div>
+								<div><strong>Base rate:</strong> ${escapeHTML(response.rate_text)}</div>
+								<div><strong>Exchange rate:</strong> ${escapeHTML(response.fx_text)}</div>
+								<div><strong>Turnaround:</strong> ${escapeHTML(response.turnaround_text)}</div>
+								<div><strong>Counted by:</strong> ${escapeHTML(response.page_count_source)}</div>
+							</div>
+							<p style="font-size: 12px; color: #627d98; margin: 16px 0 0;">${escapeHTML(response.calculation_text)}</p>
+							<div style="margin-top: 24px; text-align: center;">
+								<button type="button" class="lex-button btn btn-primary btn-lg" id="lex-pay-instant-btn" style="padding: 14px 32px; font-size: 16px; background: #274c77; border-color: #274c77; box-shadow: 0 4px 12px rgba(39, 76, 119, 0.25);">
+									💳 Pay Deposit via Razorpay (${fmtMoney(response.price_min, 'CAD')})
+								</button>
+								<div id="lex-payment-status" style="margin-top: 12px;"></div>
+							</div>
+						</div>
+					`;
+
+					notify("Estimate calculated! Opening Razorpay checkout...", "green");
+
+					// Razorpay trigger function
+					const triggerPayment = async () => {
+						const payBtn = document.getElementById("lex-pay-instant-btn");
+						const statusDiv = document.getElementById("lex-payment-status");
+						if (payBtn) payBtn.disabled = true;
+						try {
+							await loadRazorpayCheckout();
+							const orderData = response.razorpay_order || {};
+							const options = {
+								key: orderData.key,
+								amount: orderData.amount,
+								currency: orderData.currency || "CAD",
+								name: orderData.name || "Lexocrates Legal Services",
+								description: orderData.description || `Deposit: ${response.service_text}`,
+								image: orderData.image || "/assets/lex/images/lexocrates-mark-dark.png",
+								order_id: orderData.order_id || undefined,
+								prefill: orderData.prefill || {},
+								theme: orderData.theme || { color: "#274c77" },
+								handler: async (paymentResponse) => {
+									if (statusDiv) statusDiv.innerHTML = '<span class="text-muted">Verifying payment...</span>';
+									try {
+										const verifyRes = await call("lex.instant_estimator.verify_instant_estimate_payment", {
+											intake: response.intake,
+											razorpay_payment_id: paymentResponse.razorpay_payment_id,
+											razorpay_order_id: paymentResponse.razorpay_order_id,
+											razorpay_signature: paymentResponse.razorpay_signature,
+										});
+										notify(verifyRes.message || "Payment confirmed! Matter activated.", "green");
+										if (statusDiv) {
+											statusDiv.innerHTML = `<div style="padding: 12px; background: #e6fffa; border: 1px solid #38b2ac; border-radius: 6px; color: #234e52; font-weight: bold; margin-top: 10px;">✅ ${escapeHTML(verifyRes.message)}</div>`;
+										}
+										if (payBtn) payBtn.style.display = "none";
+										reloadSection("new-matter");
+									} catch (err) {
+										showError("Verification Failed", err);
+										if (payBtn) payBtn.disabled = false;
+									}
+								},
+								modal: {
+									ondismiss: () => {
+										if (payBtn) payBtn.disabled = false;
+									}
+								}
+							};
+							const rzp = new window.Razorpay(options);
+							rzp.on("payment.failed", (failResp) => {
+								showError("Payment Failed", failResp.error?.description || "Payment could not be completed.");
+								if (payBtn) payBtn.disabled = false;
+							});
+							rzp.open();
+						} catch (rzpErr) {
+							showError("Razorpay Unavailable", rzpErr);
+							if (payBtn) payBtn.disabled = false;
+						}
+					};
+
+					document.getElementById("lex-pay-instant-btn")?.addEventListener("click", triggerPayment);
+					// Immediately trigger Razorpay modal as requested
+					triggerPayment();
+
+				} catch (err) {
+					showError("Calculation Failed", err);
+					resultBox.innerHTML = `<div class="lex-alert">${escapeHTML(errorMessage(err))}</div>`;
+				} finally {
+					button.disabled = false;
+					button.textContent = originalText;
 				}
-				if (titleInput) titleInput.required = false;
-				if (step1Page) step1Page.style.display = "none";
-				if (step2Page) step2Page.style.display = "grid";
-				step1Ind?.classList.remove("is-active");
-				step1Ind?.classList.add("is-complete");
-				step2Ind?.classList.add("is-active");
-				root.querySelector('[name="intake_title"]')?.focus();
-			} else {
-				if (step1Page) step1Page.style.display = "grid";
-				if (step2Page) step2Page.style.display = "none";
-				toggleMatterFields();
-				step1Ind?.classList.add("is-active");
-				step1Ind?.classList.remove("is-complete");
-				step2Ind?.classList.remove("is-active");
-			}
-		};
-
-		root.querySelectorAll("[data-wizard-next]").forEach((button) => button.addEventListener("click", () => goToStep(2)));
-		root.querySelectorAll("[data-wizard-prev]").forEach((button) => button.addEventListener("click", () => goToStep(1)));
-		step1Ind?.addEventListener("click", () => {
-			if (step1Ind.classList.contains("is-complete")) goToStep(1);
-		});
-
-		bindSubmit("lex-new-intake", "lex.work_intake.create_work_intake", "Matter and Draft Job created", "Could not start work");
+			});
+		}
 		root.querySelectorAll("[data-accept-sla]").forEach((button) => button.addEventListener("click", async () => {
 			const intake = button.dataset.acceptSla;
 			const checked = root.querySelector(`[data-sla-check="${CSS.escape(intake)}"]`)?.checked;
