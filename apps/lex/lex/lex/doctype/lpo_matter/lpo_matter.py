@@ -47,14 +47,15 @@ class LPOMatter(Document):
 				portal_user=portal_user.name if portal_user else None,
 				matter=self.name,
 				action="Matter Created",
-				object_type=self.doctype,
-				object_id=self.name,
 				new_value={"billing_method": self.billing_method, "status": self.status},
 			)
 		self._audit_authorization_changes(None)
-		if not getattr(self.flags, "in_test", False) or getattr(self.flags, "run_conflict_in_test", False):
+		if getattr(self.flags, "run_conflict_in_test", False) or (
+			not getattr(frappe.flags, "in_test", False) and not getattr(self.flags, "in_test", False)
+		):
 			from lex.conflict_check import run_conflict_check
 			run_conflict_check(self.name, trigger_reason="Matter Created")
+			self.reload()
 
 	def on_update(self):
 		self._sync_chat_channel()
