@@ -48,6 +48,7 @@
   "job_billing_method",
   "estimate_status",
   "quote_version",
+  "required_legal_capacity",
   "required_lexpoints",
   "quoted_amount",
   "currency",
@@ -371,10 +372,20 @@
   },
   {
    "default": "0",
+   "fieldname": "required_legal_capacity",
+   "fieldtype": "Currency",
+   "label": "Legal Capacity Required",
+   "non_negative": 1,
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "default": "0",
    "fieldname": "required_lexpoints",
    "fieldtype": "Int",
-   "label": "Required LexPoints",
+   "label": "Internal Effort Units",
    "non_negative": 1,
+   "permlevel": 1,
    "read_only": 1
   },
   {
@@ -403,7 +414,7 @@
    "fieldname": "funding_route",
    "fieldtype": "Select",
    "label": "Funding Route",
-   "options": "Not Selected\nExisting LexPoints\nRecommended LexPack\nDirect Quote",
+   "options": "Not Selected\nExisting Legal Capacity\nRecommended LexPack\nDirect Quote",
    "read_only": 1
   },
   {
@@ -417,7 +428,7 @@
   {
    "fieldname": "wallet_reservation",
    "fieldtype": "Link",
-   "label": "LexPoint Reservation",
+   "label": "Legal Capacity Reservation",
    "options": "Lexocrates Wallet Transaction",
    "read_only": 1
   },

@@ -58,6 +58,7 @@ def post_transaction(
 	client: str,
 	transaction_type: str,
 	points: float,
+	currency: str | None = None,
 	idempotency_key: str | None = None,
 	matter: str | None = None,
 	reference_doctype: str | None = None,
@@ -65,13 +66,14 @@ def post_transaction(
 	description: str | None = None,
 ):
 	if not _is_internal(frappe.session.user):
-		frappe.throw(_("Only authorized Lexocrates staff can post LexPoint transactions."), frappe.PermissionError)
+		frappe.throw(_("Only authorized Lexocrates staff can post Legal Capacity transactions."), frappe.PermissionError)
 	if transaction_type == "Reversal":
 		frappe.throw(_("Use the reversal service to reverse a ledger entry."), frappe.ValidationError)
 	return _post_transaction(
 		client=client,
 		transaction_type=transaction_type,
 		points=points,
+		currency=currency,
 		idempotency_key=idempotency_key,
 		matter=matter,
 		reference_doctype=reference_doctype,
@@ -84,7 +86,7 @@ def post_transaction(
 def reverse_transaction(transaction: str, reason: str, idempotency_key: str):
 	"""Post a one-time compensating entry while preserving the original transaction."""
 	if not _is_internal(frappe.session.user):
-		frappe.throw(_("Only authorized Lexocrates staff can reverse LexPoint transactions."), frappe.PermissionError)
+		frappe.throw(_("Only authorized Lexocrates staff can reverse Legal Capacity transactions."), frappe.PermissionError)
 	if not (reason or "").strip():
 		frappe.throw(_("A reversal reason is required."), frappe.MandatoryError)
 	if not (idempotency_key or "").strip():
@@ -96,6 +98,7 @@ def reverse_transaction(transaction: str, reason: str, idempotency_key: str):
 		client=original.client,
 		transaction_type="Reversal",
 		points=original.points,
+		currency=original.currency,
 		idempotency_key=idempotency_key,
 		matter=original.matter,
 		reference_doctype=original.reference_doctype,
@@ -119,9 +122,9 @@ def _post_transaction(**values):
 		if existing:
 			return frappe.get_doc("Lexocrates Wallet Transaction", existing)
 	if transaction_type not in TRANSACTION_TYPES:
-		frappe.throw(_("Unsupported LexPoint transaction type."), frappe.ValidationError)
+		frappe.throw(_("Unsupported Legal Capacity transaction type."), frappe.ValidationError)
 	if points <= 0:
-		frappe.throw(_("LexPoints must be greater than zero."), frappe.ValidationError)
+		frappe.throw(_("Legal Capacity must be greater than zero."), frappe.ValidationError)
 
 	wallet_name = frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "name")
 	if not wallet_name:
@@ -132,6 +135,14 @@ def _post_transaction(**values):
 	wallet = frappe.get_doc("Lexocrates Client Wallet", wallet_name)
 	if wallet.status != "Active":
 		frappe.throw(_("The Client Wallet is frozen."), frappe.ValidationError)
+	currency = (values.get("currency") or wallet.get("capacity_currency") or frappe.db.get_value("Customer", client, "default_currency") or "CAD").upper()
+	if wallet.get("capacity_currency") and wallet.capacity_currency != currency:
+		frappe.throw(
+			_("Legal Capacity currency must match the Client Wallet currency ({0}).").format(wallet.capacity_currency),
+			frappe.ValidationError,
+		)
+	if not wallet.get("capacity_currency"):
+		wallet.capacity_currency = currency
 
 	available = flt(wallet.current_balance)
 	reserved = flt(wallet.reserved_balance)
@@ -196,6 +207,7 @@ def _post_transaction(**values):
 				"doctype": "Lexocrates Wallet Transaction",
 				"wallet": wallet.name,
 				"client": client,
+				"currency": currency,
 				"transaction_type": transaction_type,
 				"points": points,
 				"posted_on": wallet.last_transaction_on,
@@ -215,11 +227,12 @@ def _post_transaction(**values):
 	create_portal_audit_event(
 		client=client,
 		matter=values.get("matter"),
-		action=f"LexPoint {transaction_type}",
+		action=f"Legal Capacity {transaction_type}",
 		object_type="Lexocrates Wallet Transaction",
 		object_id=transaction.name,
 		new_value={
-			"points": points,
+			"legal_capacity": points,
+			"currency": currency,
 			"available": available,
 			"reserved": reserved,
 			"reversal_of": values.get("reversal_of"),
@@ -230,12 +243,12 @@ def _post_transaction(**values):
 
 def _require_balance(balance, points):
 	if points > balance:
-		frappe.throw(_("Insufficient available LexPoints."), frappe.ValidationError)
+		frappe.throw(_("Insufficient available Legal Capacity."), frappe.ValidationError)
 
 
 def _require_reserved(balance, points):
 	if points > balance:
-		frappe.throw(_("Insufficient reserved LexPoints."), frappe.ValidationError)
+		frappe.throw(_("Insufficient reserved Legal Capacity."), frappe.ValidationError)
 
 
 def _apply_reversal(wallet, original, available, reserved, points):

@@ -44,6 +44,12 @@ LEXPACK_PUBLIC_PRICES = {
 	"PROFESSIONAL": {"USD": 1999, "CAD": 2699, "GBP": 1599},
 	"BUSINESS": {"USD": 3999, "CAD": 5399, "GBP": 3199},
 }
+LEXPACK_DISCOUNT_PERCENTAGES = {
+	"STARTER": Decimal("7"),
+	"GROWTH": Decimal("14"),
+	"PROFESSIONAL": Decimal("21"),
+	"BUSINESS": Decimal("28"),
+}
 DEFAULT_CHECKOUT_CURRENCY = "CAD"
 
 
@@ -56,7 +62,7 @@ def get_lexpack_portal_data(portal_user=None):
 		"LexPack Plan",
 		filters={"status": "Active"},
 		fields=[
-			"name", "plan_code", "plan_name", "currency", "price", "lexpoints", "value_advantage",
+			"name", "plan_code", "plan_name", "currency", "price", "value_advantage", "discount_percent",
 			"display_order", "self_service", "enterprise_custom", "no_expiry",
 			"rolling_qualification_spend", "qualification_bonus_points", "description", "commercial_note",
 		],
@@ -68,8 +74,8 @@ def get_lexpack_portal_data(portal_user=None):
 		"LexPack Purchase",
 		filters={"client": portal_user.client},
 		fields=[
-			"name", "plan", "plan_name_snapshot", "status", "currency", "amount", "base_lexpoints",
-			"bonus_lexpoints", "total_lexpoints", "created_on", "paid_on", "tier_after", "sales_invoice",
+			"name", "plan", "plan_name_snapshot", "status", "currency", "amount", "legal_capacity_amount",
+			"created_on", "paid_on", "tier_after", "sales_invoice",
 		],
 		order_by="created_on desc",
 		limit_page_length=50,
@@ -86,7 +92,7 @@ def get_lexpack_portal_data(portal_user=None):
 		"selected_currency": selected_currency,
 		"currency_options": list(LEXPACK_CHECKOUT_CURRENCIES.values()),
 		"accounting_currency": accounting_currency or "INR",
-		"fair_pricing_note": _("Rolling 12-month tier upgrades are automatic. LexPoints never expire."),
+		"fair_pricing_note": _("Rolling 12-month tier upgrades are automatic. Legal Capacity never expires."),
 		"commercial_note": _("LexPack bundle checkout is available directly from the dashboard. Job quote payments remain inside the Job funding flow."),
 	}
 
@@ -161,7 +167,7 @@ def create_razorpay_order(plan: str, work_intake: str | None = None, currency: s
 		"amount": payload["amount"],
 		"currency": checkout["currency"],
 		"name": settings.checkout_name or "Lexocrates Legal Services Pvt. Ltd.",
-		"description": f"{plan_doc.plan_name} LexPack - {cint(plan_doc.lexpoints):,} LexPoints",
+		"description": f"{plan_doc.plan_name} LexPack - {checkout['legal_capacity_amount']:.2f} {checkout['currency']} Legal Capacity",
 		"image": "/assets/lex/images/lexocrates-mark-dark.png",
 		"prefill": _checkout_prefill(portal_user),
 		"theme": {"color": settings.checkout_theme_color or "#1f2937"},
@@ -193,7 +199,7 @@ def verify_razorpay_payment(
 			object_id=purchase_doc.name,
 			result="Failure",
 		)
-		frappe.throw(_("Payment verification failed. No LexPoints were credited."), frappe.PermissionError)
+		frappe.throw(_("Payment verification failed. No Legal Capacity was credited."), frappe.PermissionError)
 
 	payment = _razorpay_request("GET", f"/payments/{razorpay_payment_id}", settings)
 	_validate_payment_entity(purchase_doc, payment, require_captured=False)
@@ -303,6 +309,8 @@ def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None
 	try:
 		checkout_currency = currency or plan_doc.currency
 		checkout_amount = flt(amount if amount is not None else plan_doc.price)
+		legal_capacity_amount = calculate_legal_capacity(checkout_amount, _plan_discount_percent(plan_doc))
+		_ensure_wallet_capacity_currency(client, checkout_currency)
 		return frappe.get_doc(
 			{
 				"doctype": "LexPack Purchase",
@@ -317,9 +325,10 @@ def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None
 				"currency": checkout_currency,
 				"amount": checkout_amount,
 				"exchange_rate": exchange_rate,
-				"base_lexpoints": cint(plan_doc.lexpoints),
+				"legal_capacity_amount": legal_capacity_amount,
+				"base_lexpoints": cint(legal_capacity_amount),
 				"bonus_lexpoints": 0,
-				"total_lexpoints": cint(plan_doc.lexpoints),
+				"total_lexpoints": cint(legal_capacity_amount),
 			}
 		).insert(ignore_permissions=True)
 	finally:
@@ -334,6 +343,9 @@ def _plan_for_checkout_currency(plan, currency: str):
 	plan.currency_symbol = checkout["symbol"]
 	plan.currency_country = checkout["country"]
 	plan.display_currency = f"{checkout['currency']} ({checkout['symbol']})"
+	plan.discount_percent = checkout["discount_percent"]
+	plan.value_advantage = f"{checkout['discount_percent']:.0f}% savings"
+	plan.legal_capacity_amount = checkout["legal_capacity_amount"]
 	return plan
 
 
@@ -342,13 +354,60 @@ def _checkout_pricing_for_plan(plan_doc, portal_user=None, requested_currency: s
 	plan_code = str(plan_doc.get("plan_code") or plan_doc.name or "").upper()
 	prices = LEXPACK_PUBLIC_PRICES.get(plan_code)
 	if not prices:
-		return {
+		result = {
 			"currency": plan_doc.get("currency") or currency,
 			"price": flt(plan_doc.get("price")),
 			**LEXPACK_CHECKOUT_CURRENCIES.get(plan_doc.get("currency") or currency, {}),
 		}
-	info = LEXPACK_CHECKOUT_CURRENCIES[currency]
-	return {"currency": currency, "price": flt(prices[currency]), **info}
+	else:
+		info = LEXPACK_CHECKOUT_CURRENCIES[currency]
+		result = {"currency": currency, "price": flt(prices[currency]), **info}
+	discount_percent = _plan_discount_percent(plan_doc)
+	result["discount_percent"] = flt(discount_percent, 2)
+	result["legal_capacity_amount"] = (
+		calculate_legal_capacity(result["price"], discount_percent)
+		if flt(result["price"]) > 0 and discount_percent > 0
+		else 0
+	)
+	return result
+
+
+def _plan_discount_percent(plan_doc) -> Decimal:
+	plan_code = str(plan_doc.get("plan_code") or plan_doc.get("name") or "").upper()
+	configured = plan_doc.get("discount_percent")
+	if configured not in (None, "", 0, 0.0):
+		return Decimal(str(configured))
+	return LEXPACK_DISCOUNT_PERCENTAGES.get(plan_code, Decimal("0"))
+
+
+def calculate_legal_capacity(paid_amount: float | Decimal, discount_percent: float | Decimal) -> float:
+	"""Return the currency value a LexPack credits after its approved discount."""
+	amount = Decimal(str(paid_amount))
+	discount = Decimal(str(discount_percent)) / Decimal("100")
+	if amount <= 0 or discount < 0 or discount >= 1:
+		frappe.throw(_("LexPack paid amount and discount must be valid."), frappe.ValidationError)
+	return flt((amount / (Decimal("1") - discount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), 2)
+
+
+def _ensure_wallet_capacity_currency(client: str, currency: str):
+	"""Keep each client wallet in one currency; never silently reinterpret legacy units."""
+	wallet_name = frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "name")
+	if not wallet_name:
+		return
+	wallet = frappe.get_doc("Lexocrates Client Wallet", wallet_name)
+	existing_currency = (wallet.get("capacity_currency") or "").upper()
+	if existing_currency and existing_currency != currency:
+		frappe.throw(
+			_("This client has Legal Capacity in {0}. Purchase LexPack in the same currency.").format(existing_currency),
+			frappe.ValidationError,
+		)
+	if not existing_currency and any(flt(wallet.get(fieldname)) for fieldname in ("current_balance", "reserved_balance", "total_purchased", "total_consumed")):
+		frappe.throw(
+			_("This legacy wallet must be reconciled to Legal Capacity before a new LexPack purchase."),
+			frappe.ValidationError,
+		)
+	if not existing_currency:
+		frappe.db.set_value("Lexocrates Client Wallet", wallet.name, "capacity_currency", currency, update_modified=False)
 
 
 def _resolve_checkout_currency(portal_user=None, requested_currency: str | None = None) -> str:
@@ -410,7 +469,8 @@ def _complete_purchase(purchase_doc, payment, source: str):
 		wallet_entry = _post_transaction(
 			client=purchase_doc.client,
 			transaction_type="Purchase",
-			points=purchase_doc.base_lexpoints,
+			points=purchase_doc.legal_capacity_amount,
+			currency=purchase_doc.currency,
 			idempotency_key=f"lexpack-purchase:{purchase_doc.name}",
 			reference_doctype="LexPack Purchase",
 			reference_name=purchase_doc.name,
@@ -428,9 +488,9 @@ def _complete_purchase(purchase_doc, payment, source: str):
 		rolling_spend_after=pricing["rolling_spend_after"],
 		tier_before=pricing["tier_before"],
 		tier_after=pricing["tier_after"],
-		bonus_lexpoints=pricing["bonus_points"],
-		total_lexpoints=cint(purchase_doc.base_lexpoints) + cint(pricing["bonus_points"]),
-		bonus_wallet_transactions=json.dumps(pricing["bonus_transactions"]),
+		bonus_lexpoints=0,
+		total_lexpoints=cint(purchase_doc.legal_capacity_amount),
+		bonus_wallet_transactions="[]",
 		failure_reason=None,
 	)
 	create_portal_audit_event(
@@ -443,8 +503,7 @@ def _complete_purchase(purchase_doc, payment, source: str):
 			"plan": purchase_doc.plan,
 			"amount": purchase_doc.amount,
 			"currency": purchase_doc.currency,
-			"base_lexpoints": purchase_doc.base_lexpoints,
-			"bonus_lexpoints": pricing["bonus_points"],
+			"legal_capacity_amount": purchase_doc.legal_capacity_amount,
 		},
 	)
 	if purchase_doc.work_intake:
@@ -455,7 +514,7 @@ def _complete_purchase(purchase_doc, payment, source: str):
 
 
 def recalculate_client_pricing(client: str, triggering_purchase: str | None = None):
-	"""Update rolling spend/current tier and post each configured tier bonus once."""
+	"""Update the rolling relationship tier; value comes from the tier discount, not bonus units."""
 	wallet_name = frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "name")
 	if not wallet_name:
 		frappe.get_doc({"doctype": "Lexocrates Client Wallet", "client": client, "status": "Active"}).insert(ignore_permissions=True)
@@ -479,7 +538,7 @@ def recalculate_client_pricing(client: str, triggering_purchase: str | None = No
 	plans = frappe.get_all(
 		"LexPack Plan",
 		filters={"status": "Active", "enterprise_custom": 0},
-		fields=["name", "display_order", "rolling_qualification_spend", "qualification_bonus_points"],
+		fields=["name", "display_order", "rolling_qualification_spend"],
 		order_by="display_order asc",
 		limit_page_length=50,
 	)
@@ -488,48 +547,14 @@ def recalculate_client_pricing(client: str, triggering_purchase: str | None = No
 		if flt(plan.rolling_qualification_spend) <= rolling_after:
 			eligible = plan
 	tier_before = wallet.get("current_pricing_tier") or None
-	previous_order = next((cint(row.display_order) for row in plans if row.name == tier_before), 0)
-	eligible_order = cint(eligible.display_order) if eligible else 0
-	bonus_points = 0
-	bonus_transactions = []
-	if eligible_order > previous_order:
-		from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import _post_transaction
-
-		for plan in plans:
-			if not (previous_order < cint(plan.display_order) <= eligible_order) or cint(plan.qualification_bonus_points) <= 0:
-				continue
-			idempotency_key = f"lexpack-fair-pricing:{client}:{plan.name}"
-			already_posted = frappe.db.exists(
-				"Lexocrates Wallet Transaction", {"idempotency_key": idempotency_key}
-			)
-			entry = _post_transaction(
-				client=client,
-				transaction_type="Adjustment Credit",
-				points=cint(plan.qualification_bonus_points),
-				idempotency_key=idempotency_key,
-				reference_doctype="LexPack Purchase" if triggering_purchase else None,
-				reference_name=triggering_purchase,
-				description=f"LexPack Fair Pricing Promise qualification bonus: {plan.name}",
-			)
-			if not already_posted:
-				bonus_points += cint(entry.points)
-				bonus_transactions.append(entry.name)
 	current_tier = eligible.name if eligible else None
-	total_bonus = flt(
-		frappe.db.sql(
-			"""select coalesce(sum(points), 0) from `tabLexocrates Wallet Transaction`
-			where client=%s and transaction_type='Adjustment Credit'
-			and idempotency_key like 'lexpack-fair-pricing:%%'""",
-			client,
-		)[0][0]
-	)
 	frappe.db.set_value(
 		"Lexocrates Client Wallet",
 		wallet_name,
 		{
 			"rolling_12_month_spend": rolling_after,
 			"current_pricing_tier": current_tier,
-			"bonus_points_earned": total_bonus,
+			"bonus_points_earned": 0,
 			"pricing_calculated_on": now_datetime(),
 		},
 		update_modified=False,
@@ -539,8 +564,8 @@ def recalculate_client_pricing(client: str, triggering_purchase: str | None = No
 		"rolling_spend_after": rolling_after,
 		"tier_before": tier_before,
 		"tier_after": current_tier,
-		"bonus_points": bonus_points,
-		"bonus_transactions": bonus_transactions,
+		"bonus_points": 0,
+		"bonus_transactions": [],
 	}
 
 
@@ -618,7 +643,7 @@ def _create_sales_invoice(purchase_doc, settings):
 			"item_code": selling_item,
 			"qty": 1,
 			"rate": item_rate,
-			"description": f"{purchase_doc.plan_name_snapshot} LexPack - {cint(purchase_doc.base_lexpoints):,} non-expiring LexPoints ({doc_currency} {flt(purchase_doc.amount):,.2f})",
+			"description": f"{purchase_doc.plan_name_snapshot} LexPack - {doc_currency} {flt(purchase_doc.legal_capacity_amount):,.2f} non-expiring Legal Capacity ({doc_currency} {flt(purchase_doc.amount):,.2f} paid)",
 		}
 		income_account = settings.get("income_account") if isinstance(settings, dict) else getattr(settings, "income_account", None)
 		cost_center = settings.get("cost_center") if isinstance(settings, dict) else getattr(settings, "cost_center", None)
@@ -967,7 +992,7 @@ def _validate_payment_entity(purchase_doc, payment, require_captured=True):
 	if payment.get("currency") != purchase_doc.currency:
 		frappe.throw(_("Razorpay payment currency does not match the LexPack purchase."), frappe.PermissionError)
 	if require_captured and payment.get("status") != "captured":
-		frappe.throw(_("LexPoints are credited only after Razorpay marks the payment as captured."), frappe.ValidationError)
+		frappe.throw(_("Legal Capacity is credited only after Razorpay marks the payment as captured."), frappe.ValidationError)
 
 
 def _minor_units(amount, currency: str) -> int:
@@ -1044,9 +1069,8 @@ def _purchase_result(purchase_doc, duplicate=False):
 		"sales_invoice": purchase_doc.sales_invoice,
 		"payment_entry": purchase_doc.payment_entry,
 		"wallet_transaction": purchase_doc.wallet_transaction,
-		"base_lexpoints": cint(purchase_doc.base_lexpoints),
-		"bonus_lexpoints": cint(purchase_doc.bonus_lexpoints),
-		"total_lexpoints": cint(purchase_doc.total_lexpoints),
+		"legal_capacity_amount": flt(purchase_doc.legal_capacity_amount, 2),
+		"currency": purchase_doc.currency,
 		"duplicate": duplicate,
 	}
 
@@ -1092,7 +1116,8 @@ def manually_approve_lexpack_plan(
 	exchange_rate = _resolve_exchange_rate(plan_doc.currency, company)
 
 	paid_amount = flt(amount) if amount is not None and flt(amount) > 0 else flt(plan_doc.price)
-	granted_points = cint(lexpoints) if lexpoints is not None and cint(lexpoints) > 0 else cint(plan_doc.lexpoints)
+	legal_capacity_amount = calculate_legal_capacity(paid_amount, _plan_discount_percent(plan_doc))
+	_ensure_wallet_capacity_currency(client, plan_doc.currency)
 
 	prev_ignore_perm = getattr(frappe.flags, "ignore_permissions", False)
 	prev_service_flag = getattr(frappe.flags, "lexpack_purchase_service", False)
@@ -1113,10 +1138,11 @@ def manually_approve_lexpack_plan(
 				"paid_on": now_datetime(),
 				"currency": plan_doc.currency,
 				"amount": paid_amount,
+				"legal_capacity_amount": legal_capacity_amount,
 				"exchange_rate": exchange_rate,
-				"base_lexpoints": granted_points,
+				"base_lexpoints": cint(legal_capacity_amount),
 				"bonus_lexpoints": 0,
-				"total_lexpoints": granted_points,
+				"total_lexpoints": cint(legal_capacity_amount),
 				"is_manual_approval": 1,
 				"approval_reason": str(approval_reason).strip(),
 			}
@@ -1138,7 +1164,8 @@ def manually_approve_lexpack_plan(
 		wallet_entry = _post_transaction(
 			client=client,
 			transaction_type="Purchase",
-			points=granted_points,
+			points=legal_capacity_amount,
+			currency=plan_doc.currency,
 			idempotency_key=f"lexpack-purchase:{purchase_doc.name}",
 			reference_doctype="LexPack Purchase",
 			reference_name=purchase_doc.name,
@@ -1153,9 +1180,9 @@ def manually_approve_lexpack_plan(
 			rolling_spend_after=pricing["rolling_spend_after"],
 			tier_before=pricing["tier_before"],
 			tier_after=pricing["tier_after"],
-			bonus_lexpoints=pricing["bonus_points"],
-			total_lexpoints=granted_points + cint(pricing["bonus_points"]),
-			bonus_wallet_transactions=json.dumps(pricing["bonus_transactions"]),
+			bonus_lexpoints=0,
+			total_lexpoints=cint(legal_capacity_amount),
+			bonus_wallet_transactions="[]",
 		)
 
 		if work_intake and frappe.db.exists("Lexocrates Work Intake", work_intake):
@@ -1174,7 +1201,7 @@ def manually_approve_lexpack_plan(
 			new_value={
 				"plan": plan_doc.name,
 				"amount": paid_amount,
-				"lexpoints": granted_points,
+				"legal_capacity_amount": legal_capacity_amount,
 				"approval_reason": str(approval_reason).strip(),
 				"sales_invoice": invoice.name,
 				"payment_entry": purchase_doc.payment_entry,
@@ -1185,7 +1212,8 @@ def manually_approve_lexpack_plan(
 			"purchase": purchase_doc.name,
 			"sales_invoice": invoice.name,
 			"payment_entry": purchase_doc.payment_entry,
-			"total_lexpoints": purchase_doc.total_lexpoints,
+			"legal_capacity_amount": purchase_doc.legal_capacity_amount,
+			"currency": purchase_doc.currency,
 			"status": "Paid",
 			"message": _("LexPack Plan manually approved successfully. Invoice {0} generated.").format(invoice.name),
 		}

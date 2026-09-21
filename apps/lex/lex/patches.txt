@@ -11,3 +11,4 @@ lex.patches.archive_non_system_direct_messages
 lex.patches.backfill_reliable_chat_sequences
 lex.patches.privatize_chat_attachments
 lex.patches.enforce_delivery_governance
+lex.patches.revise_lexpack_legal_capacity

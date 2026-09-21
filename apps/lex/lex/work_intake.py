@@ -29,7 +29,7 @@ DEFAULT_SLA_TERMS = """Client Intake Service Level Agreement
 1. Documents remain encrypted/private and are scanned before processing.
 2. The preliminary timeline is not the operational SLA. The operational SLA starts only after clean documents, confirmed scope and successful funding.
 3. AI-assisted extraction may be used only within the approved Lexocrates processing environment; low-confidence output is reviewed by Legal Operations.
-4. A generated quote records fixed price, required LexPoints, confirmed scope and delivery timeline. The client may fund it with existing LexPoints, the recommended LexPack, or the fixed quote directly.
+4. A generated quote records an internal effort estimate, confirmed fixed price, required Legal Capacity and delivery timeline. The client may use existing Legal Capacity, a LexPack, or pay the fixed quote directly.
 5. Material scope changes require a revised quote and delivery timeline.
 6. Lexocrates retains an immutable audit trail of SLA acceptance, documents, quote, funding, execution, QA, approval and delivery.
 """
@@ -574,7 +574,7 @@ def _process_documents(
 
 	quote_amount = flt(estimation.get("quoted_price_cad"), 2)
 	scope = _scope_summary(doc, len(files), word_count)
-	recommended = _recommend_plan(doc.client, points)
+	recommended = _recommend_plan(doc.client, quote_amount, estimation.get("currency") or doc.currency)
 	with _service_writes():
 		doc.reload()
 		doc.extracted_text = extracted
@@ -611,6 +611,7 @@ def _process_documents(
 		doc.required_lexpoints = points
 		doc.quoted_amount = quote_amount
 		doc.currency = estimation.get("currency") or doc.currency
+		doc.required_legal_capacity = quote_amount
 		doc.delivery_timeline_hours = hours
 		doc.scope_summary = scope
 		doc.estimate_method = estimate_method
@@ -699,6 +700,7 @@ def issue_quote(
 	with _service_writes():
 		doc.required_lexpoints = cint(required_lexpoints)
 		doc.quoted_amount = flt(quoted_amount, 2)
+		doc.required_legal_capacity = flt(quoted_amount, 2)
 		doc.delivery_timeline_hours = cint(delivery_timeline_hours)
 		doc.scope_summary = (scope_summary or "").strip()
 		doc.operations_review_notes = (review_notes or "").strip()
@@ -707,7 +709,7 @@ def issue_quote(
 		doc.estimate_method = "Manual (Operations)"
 		doc.quote_version = cint(doc.quote_version) + 1
 		doc.quote_valid_until = add_days(nowdate(), cint(_setting("quote_validity_days", 7)))
-		doc.recommended_plan = _recommend_plan(doc.client, cint(required_lexpoints))
+		doc.recommended_plan = _recommend_plan(doc.client, flt(quoted_amount, 2), doc.currency)
 		doc.quote_issued_by = frappe.session.user
 		doc.quote_issued_on = now_datetime()
 		_route_quote_for_approval(doc)
@@ -773,13 +775,14 @@ def submit_chat_pricing(
 	if doc.funding_status in {"Payment Pending", "Funded"} or doc.status in {"Funding Pending", "Funded", "Matter Confirmed"}:
 		frappe.throw(_("Pricing is locked after payment or funding starts."), frappe.PermissionError)
 	if cint(required_lexpoints) <= 0 or flt(quoted_amount) <= 0 or cint(delivery_timeline_hours) <= 0:
-		frappe.throw(_("LexPoints, amount and delivery hours must be positive."), frappe.ValidationError)
+		frappe.throw(_("Internal effort, amount and delivery hours must be positive."), frappe.ValidationError)
 	scope_summary = (scope_summary or "").strip()
 	if not scope_summary:
 		frappe.throw(_("Scope summary is required before releasing pricing."), frappe.MandatoryError)
 	with _service_writes():
 		doc.required_lexpoints = cint(required_lexpoints)
 		doc.quoted_amount = flt(quoted_amount, 2)
+		doc.required_legal_capacity = flt(quoted_amount, 2)
 		doc.delivery_timeline_hours = cint(delivery_timeline_hours)
 		doc.scope_summary = scope_summary
 		doc.operations_review_notes = (review_notes or "").strip()
@@ -788,7 +791,7 @@ def submit_chat_pricing(
 		doc.estimate_method = "Manual (Operations)"
 		doc.quote_version = cint(doc.quote_version) + 1
 		doc.quote_valid_until = add_days(nowdate(), cint(_setting("quote_validity_days", 7)))
-		doc.recommended_plan = _recommend_plan(doc.client, cint(required_lexpoints))
+		doc.recommended_plan = _recommend_plan(doc.client, flt(quoted_amount, 2), doc.currency)
 		doc.quote_issued_by = frappe.session.user
 		doc.quote_issued_on = now_datetime()
 		doc.pricing_approval_status = "Approved"
@@ -852,18 +855,20 @@ def get_chat_pricing_context(intake: str) -> dict:
 @frappe.whitelist()
 def fund_with_existing_lexpoints(intake: str):
 	doc, actor = _require_intake_access(intake)
-	_require_funding_authority(actor, "Existing LexPoints")
+	_require_funding_authority(actor, "Existing Legal Capacity")
 	_validate_ready_quote(doc)
+	_validate_legal_capacity_currency(doc.client, doc.currency)
 	available = _available_lexpoints(doc.client)
-	if available < flt(doc.required_lexpoints):
+	required_capacity = _required_legal_capacity(doc)
+	if available < required_capacity:
 		frappe.throw(
-			_("Available balance is {0} LexPoints; this work requires {1}.").format(
-				cint(available), cint(doc.required_lexpoints)
+			_("Available Legal Capacity is {0}; this work requires {1}.").format(
+				flt(available, 2), flt(required_capacity, 2)
 			),
 			frappe.ValidationError,
 		)
 	with _service_writes():
-		doc.funding_route = "Existing LexPoints"
+		doc.funding_route = "Existing Legal Capacity"
 		doc.funding_status = "Funded"
 		doc.funded_on = now_datetime()
 		doc.quote_status = "Accepted"
@@ -879,10 +884,13 @@ def prepare_lexpack_purchase(intake: str, plan: str, actor=None):
 	doc, actor = _require_intake_access(intake, actor=actor)
 	_require_funding_authority(actor, "Recommended LexPack")
 	_validate_ready_quote(doc)
+	_validate_legal_capacity_currency(doc.client, doc.currency)
 	if doc.recommended_plan != plan:
 		frappe.throw(_("Purchase the LexPack recommended for this confirmed quote."), frappe.ValidationError)
-	plan_points = cint(frappe.db.get_value("LexPack Plan", plan, "lexpoints"))
-	if _available_lexpoints(doc.client) + plan_points < cint(doc.required_lexpoints):
+	from lex.lexpack import _checkout_pricing_for_plan
+	plan_doc = frappe.get_doc("LexPack Plan", plan)
+	plan_capacity = _checkout_pricing_for_plan(plan_doc, portal_user=actor, requested_currency=doc.currency)["legal_capacity_amount"]
+	if _available_lexpoints(doc.client) + plan_capacity < _required_legal_capacity(doc):
 		frappe.throw(_("The selected LexPack does not fully fund this quote."), frappe.ValidationError)
 	with _service_writes():
 		doc.funding_route = "Recommended LexPack"
@@ -909,7 +917,7 @@ def complete_lexpack_funding(purchase_doc):
 		return None
 	frappe.db.savepoint("lexpack_intake_activation")
 	try:
-		if _available_lexpoints(doc.client) < flt(doc.required_lexpoints):
+		if _available_lexpoints(doc.client) < _required_legal_capacity(doc):
 			with _service_writes():
 				doc.funding_status = "Payment Pending"
 				doc.failure_reason = _("LexPack was credited, but another reservation used the remaining balance. Add capacity to finish funding.")
@@ -1108,7 +1116,7 @@ def portal_intakes(actor=None):
 			"sla_version", "sla_document_snapshot", "sla_terms_snapshot", "sla_snapshot_hash", "sla_accepted", "sla_accepted_by", "sla_accepted_on",
 			"document_count", "clean_document_count", "security_status", "extraction_status", "analysis_status",
 			"analysis_confidence", "low_confidence",
-			"quote_version", "quote_status", "quoted_amount", "currency", "required_lexpoints", "scope_summary",
+			"quote_version", "quote_status", "quoted_amount", "currency", "required_legal_capacity", "required_lexpoints", "scope_summary",
 			"estimate_method", "pricing_approval_status",
 			"delivery_timeline_hours", "quote_valid_until", "recommended_plan", "funding_route", "funding_status",
 			"lexpack_purchase", "wallet_reservation", "failure_reason", "sales_invoice", "payment_entry",
@@ -1189,7 +1197,8 @@ def _confirm_funded_intake(doc):
 		reservation = _post_transaction(
 			client=doc.client,
 			transaction_type="Reservation",
-			points=doc.required_lexpoints,
+			points=_required_legal_capacity(doc),
+			currency=doc.currency,
 			idempotency_key=f"job-funding:{job.name}",
 			matter=matter.name,
 			reference_doctype="LPO Job",
@@ -1215,6 +1224,7 @@ def _confirm_funded_intake(doc):
 	job.estimate_status = "Accepted"
 	job.quote_version = doc.quote_version
 	job.required_lexpoints = doc.required_lexpoints
+	job.required_legal_capacity = _required_legal_capacity(doc)
 	job.quoted_amount = doc.quoted_amount
 	job.currency = doc.currency
 	job.funding_route = doc.funding_route
@@ -1242,9 +1252,13 @@ def _intake_row(doc, actor):
 	if doc.get("recommended_plan"):
 		plan = frappe.db.get_value(
 			"LexPack Plan", doc.recommended_plan,
-			["name", "plan_code", "plan_name", "price", "currency", "lexpoints", "self_service", "enterprise_custom"],
+			["name", "plan_code", "plan_name", "price", "currency", "discount_percent", "self_service", "enterprise_custom"],
 			as_dict=True,
 		)
+		if plan:
+			from lex.lexpack import _checkout_pricing_for_plan
+			checkout = _checkout_pricing_for_plan(plan, requested_currency=doc.currency)
+			plan.update(checkout)
 	# ``frappe._dict`` returns ``None`` for unknown attributes, so
 	# ``hasattr(doc, "as_dict")`` is true even though the value is not callable.
 	# Portal list queries return ``frappe._dict`` rows while document APIs return
@@ -1265,6 +1279,7 @@ def _intake_row(doc, actor):
 		"analysis_provider", "ai_execution", "ai_estimate_reference_doctype", "ai_document_estimate",
 		"analysis_summary", "operations_review_notes", "estimate_method",
 		"pricing_rejection_reason", "pricing_approved_by", "pricing_approved_on", "quote_issued_by", "quote_issued_on",
+		"required_lexpoints",
 	):
 		row.pop(internal_field, None)
 	row["sla_download_url"] = secure_download_url_for_file_url(row.get("sla_document_snapshot"))
@@ -1272,8 +1287,9 @@ def _intake_row(doc, actor):
 		add_secure_download_url(document)
 	row["documents"] = documents
 	row["recommended_plan_details"] = plan
-	row["available_lexpoints"] = _available_lexpoints(doc.client)
-	row["can_fund_lexpoints"] = bool(actor and actor.lexpack_purchase_access)
+	row["required_legal_capacity"] = _required_legal_capacity(doc)
+	row["available_legal_capacity"] = _available_lexpoints(doc.client)
+	row["can_fund_legal_capacity"] = bool(actor and actor.lexpack_purchase_access)
 	row["can_pay_direct"] = bool(actor and actor.billing_access)
 	return row
 
@@ -1321,6 +1337,7 @@ def _invalidate_unfunded_estimate(doc):
 		doc.low_confidence = 0
 		doc.quote_status = "Not Generated"
 		doc.quoted_amount = 0
+		doc.required_legal_capacity = 0
 		doc.required_lexpoints = 0
 		doc.scope_summary = None
 		doc.delivery_timeline_hours = 0
@@ -1357,12 +1374,13 @@ def _sync_job_commercial(doc, *, estimate_status=None):
 	funding_route = doc.funding_route or "Not Selected"
 	job.job_billing_method = (
 		"Direct Quote" if funding_route == "Direct Quote"
-		else "LexPack" if funding_route in {"Existing LexPoints", "Recommended LexPack"}
+		else "LexPack" if funding_route in {"Existing Legal Capacity", "Recommended LexPack"}
 		else None
 	)
 	job.estimate_status = estimate_status or _job_estimate_status(doc)
 	job.quote_version = doc.quote_version
 	job.required_lexpoints = doc.required_lexpoints
+	job.required_legal_capacity = _required_legal_capacity(doc)
 	job.quoted_amount = doc.quoted_amount
 	job.currency = doc.currency
 	job.funding_route = funding_route
@@ -2142,19 +2160,29 @@ def _scope_summary(doc, document_count, word_count):
 	)
 
 
-def _recommend_plan(client, required_points):
+def _required_legal_capacity(doc) -> float:
+	return flt(doc.get("required_legal_capacity") or doc.get("quoted_amount") or 0, 2)
+
+
+def _recommend_plan(client, required_capacity, currency: str = "CAD"):
 	available = _available_lexpoints(client)
-	if available >= required_points:
+	if available >= required_capacity:
 		return None
-	shortfall = required_points - available
+	shortfall = required_capacity - available
 	plans = frappe.get_all(
 		"LexPack Plan",
-		filters={"status": "Active", "self_service": 1, "enterprise_custom": 0, "lexpoints": [">=", shortfall]},
-		fields=["name", "lexpoints", "price", "display_order"],
-		order_by="lexpoints asc, display_order asc",
-		limit_page_length=1,
+		filters={"status": "Active", "self_service": 1, "enterprise_custom": 0},
+		fields=["name", "plan_code", "currency", "price", "display_order", "discount_percent"],
+		order_by="display_order asc",
+		limit_page_length=50,
 	)
-	return plans[0].name if plans else None
+	from lex.lexpack import _checkout_pricing_for_plan
+	eligible = []
+	for plan in plans:
+		checkout = _checkout_pricing_for_plan(plan, requested_currency=currency)
+		if flt(checkout["legal_capacity_amount"]) >= shortfall and flt(checkout["price"]) <= required_capacity:
+			eligible.append((flt(checkout["price"]), cint(plan.display_order), plan.name))
+	return min(eligible)[2] if eligible else None
 
 
 def _validate_ready_quote(doc):
@@ -2239,7 +2267,29 @@ def _checkout_payload(doc, actor, settings, payload):
 
 
 def _available_lexpoints(client):
-	return flt(frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "current_balance") or 0)
+	wallet = frappe.db.get_value(
+		"Lexocrates Client Wallet", {"client": client}, ["current_balance", "capacity_currency"], as_dict=True
+	) or {}
+	# Legacy points must never be silently displayed or consumed as currency capacity.
+	if flt(wallet.get("current_balance")) and not wallet.get("capacity_currency"):
+		return 0
+	return flt(wallet.get("current_balance") or 0)
+
+
+def _validate_legal_capacity_currency(client: str, currency: str):
+	wallet = frappe.db.get_value(
+		"Lexocrates Client Wallet", {"client": client}, ["current_balance", "capacity_currency"], as_dict=True
+	) or {}
+	if flt(wallet.get("current_balance")) and not wallet.get("capacity_currency"):
+		frappe.throw(
+			_("This legacy wallet must be reconciled to Legal Capacity before it can fund work."),
+			frappe.ValidationError,
+		)
+	if wallet.get("capacity_currency") and wallet.capacity_currency != currency:
+		frappe.throw(
+			_("Available Legal Capacity is held in {0}, but this quote is in {1}.").format(wallet.capacity_currency, currency),
+			frappe.ValidationError,
+		)
 
 
 def _practice_area(service_type):
@@ -2335,7 +2385,7 @@ def _require_system_job_estimation_access(job: str):
 def _require_funding_authority(actor, route):
 	if _is_internal():
 		return
-	if route in {"Existing LexPoints", "Recommended LexPack"} and not (actor and actor.lexpack_purchase_access):
+	if route in {"Existing Legal Capacity", "Recommended LexPack"} and not (actor and actor.lexpack_purchase_access):
 		frappe.throw(_("LexPack purchase authority is required."), frappe.PermissionError)
 	if route == "Direct Quote" and not (actor and actor.billing_access):
 		frappe.throw(_("Billing access is required for direct quote payment."), frappe.PermissionError)
