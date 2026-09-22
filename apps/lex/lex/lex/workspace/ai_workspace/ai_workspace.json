@@ -140,66 +140,6 @@
    "link_type": "Page",
    "onboard": 0,
    "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Standalone LexPoint Estimator",
-   "link_count": 0,
-   "link_to": "lexpoint-estimator",
-   "link_type": "Page",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Standalone Estimate History",
-   "link_count": 0,
-   "link_to": "LPO Standalone Estimate",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Intake AI Estimates",
-   "link_count": 0,
-   "link_to": "LPO AI Document Estimate",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "LexPoint Service Rules",
-   "link_count": 0,
-   "link_to": "LPO LexPoint Service Rule",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "LexPoint Multipliers",
-   "link_count": 0,
-   "link_to": "LPO LexPoint Multiplier",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "LexPoint Formula Settings",
-   "link_count": 0,
-   "link_to": "LPO LexPoint Settings",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
   }
  ],
  "modified": "2026-08-25 08:13:38.347638",

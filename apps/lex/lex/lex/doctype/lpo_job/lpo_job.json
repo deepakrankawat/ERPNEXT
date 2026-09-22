@@ -42,13 +42,20 @@
   "delivery_document",
   "delivery_document_checksum",
   "delivery_document_version",
-  "intake_estimate_doctype",
-  "intake_estimate",
   "job_commercial_section",
   "job_billing_method",
   "estimate_status",
   "quote_version",
-  "required_lexpoints",
+  "required_legal_capacity",
+  "selected_pricing_service",
+  "exact_pdf_page_count",
+  "calculated_hours",
+  "fixed_service_rate_cad",
+  "raw_price_cad",
+  "final_rounded_price_cad",
+  "pricing_exchange_rate",
+  "pricing_exchange_rate_date",
+  "pricing_version",
   "quoted_amount",
   "currency",
   "commercial_column_break",
@@ -325,24 +332,6 @@
    "read_only": 1
   },
   {
-   "default": "LPO AI Document Estimate",
-   "fieldname": "intake_estimate_doctype",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Intake Estimate DocType",
-   "permlevel": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "intake_estimate",
-   "fieldtype": "Dynamic Link",
-   "label": "Pre-Job AI Document Estimate",
-   "options": "intake_estimate_doctype",
-   "permlevel": 1,
-   "read_only": 1,
-   "search_index": 1
-  },
-  {
    "fieldname": "job_commercial_section",
    "fieldtype": "Section Break",
    "label": "Job Estimate and Funding"
@@ -371,10 +360,86 @@
   },
   {
    "default": "0",
-   "fieldname": "required_lexpoints",
-   "fieldtype": "Int",
-   "label": "Required LexPoints",
+   "fieldname": "required_legal_capacity",
+   "fieldtype": "Currency",
+   "label": "Legal Capacity Required",
    "non_negative": 1,
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "selected_pricing_service",
+   "fieldtype": "Data",
+   "label": "Selected Fixed-Rate Service",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "exact_pdf_page_count",
+   "fieldtype": "Int",
+   "label": "Exact Native PDF Pages",
+   "non_negative": 1,
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "calculated_hours",
+   "fieldtype": "Float",
+   "label": "Calculated Hours",
+   "precision": "9",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "fixed_service_rate_cad",
+   "fieldtype": "Float",
+   "label": "Fixed CAD Hourly Rate",
+   "precision": "2",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "raw_price_cad",
+   "fieldtype": "Float",
+   "label": "Raw CAD Price",
+   "precision": "2",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "final_rounded_price_cad",
+   "fieldtype": "Float",
+   "label": "Final Rounded CAD Price",
+   "precision": "2",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "pricing_exchange_rate",
+   "fieldtype": "Float",
+   "label": "CAD Exchange Rate",
+   "precision": "9",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "pricing_exchange_rate_date",
+   "fieldtype": "Date",
+   "label": "Pricing Exchange Rate Date",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "pricing_version",
+   "fieldtype": "Data",
+   "label": "Pricing Version",
+   "permlevel": 1,
    "read_only": 1
   },
   {
@@ -403,7 +468,7 @@
    "fieldname": "funding_route",
    "fieldtype": "Select",
    "label": "Funding Route",
-   "options": "Not Selected\nExisting LexPoints\nRecommended LexPack\nDirect Quote",
+   "options": "Not Selected\nExisting Legal Capacity\nRecommended LexPack\nDirect Quote",
    "read_only": 1
   },
   {
@@ -417,7 +482,7 @@
   {
    "fieldname": "wallet_reservation",
    "fieldtype": "Link",
-   "label": "LexPoint Reservation",
+   "label": "Legal Capacity Reservation",
    "options": "Lexocrates Wallet Transaction",
    "read_only": 1
   },

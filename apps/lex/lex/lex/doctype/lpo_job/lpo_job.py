@@ -5,7 +5,7 @@ import hashlib
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt, get_datetime, now_datetime
+from frappe.utils import cint, flt, get_datetime, now_datetime
 
 from lex.client_access import (
 	has_matter_access,
@@ -55,6 +55,7 @@ class LPOJob(Document):
 		self._load_engagement_context()
 		self._protect_client_submission()
 		self._validate_status_transition()
+		self._validate_currency_pricing()
 		self._validate_matter_activation()
 		self._validate_execution_snapshots()
 		self._validate_job_documents()
@@ -99,8 +100,6 @@ class LPOJob(Document):
 				"confidentiality_level",
 				"status",
 				"end_date",
-				"quote_status",
-				"funding_status",
 				"workflow_version_snapshot",
 				"sop_version_snapshot",
 			],
@@ -130,6 +129,25 @@ class LPOJob(Document):
 		):
 			self.set(fieldname, engagement.get(fieldname))
 
+	def _validate_currency_pricing(self):
+		"""Keep a Job's quote and Legal Capacity in one real currency."""
+		if self.estimate_status not in {"Ready", "Accepted"}:
+			return
+		if self.currency not in {"CAD", "USD", "GBP"}:
+			frappe.throw(_("A Job estimate must use CAD, USD or GBP."), frappe.ValidationError)
+		if flt(self.quoted_amount) <= 0 or flt(self.required_legal_capacity) <= 0:
+			frappe.throw(_("A ready Job estimate needs a positive fixed quote and Legal Capacity."), frappe.ValidationError)
+		if abs(flt(self.quoted_amount) - flt(self.required_legal_capacity)) > 0.001:
+			frappe.throw(
+				_("Legal Capacity must equal the fixed quote in the Job currency."),
+				frappe.ValidationError,
+			)
+		if not self.selected_pricing_service or cint(self.exact_pdf_page_count) <= 0:
+			frappe.throw(
+				_("A ready Job estimate requires its selected service and exact native PDF page count."),
+				frappe.ValidationError,
+			)
+
 	def _validate_matter_activation(self):
 		if self.job_status == "Draft":
 			return
@@ -142,18 +160,13 @@ class LPOJob(Document):
 			if not self.work_intake or self.estimate_status != "Accepted" or flt(self.quote_version) <= 0:
 				frappe.throw(_("A current accepted Job estimate is required before activation."), frappe.ValidationError)
 			if self.job_billing_method == "LexPack" and (
-				flt(self.required_lexpoints) <= 0 or not self.wallet_reservation
+				flt(self.required_legal_capacity) <= 0 or not self.wallet_reservation
 			):
-				frappe.throw(_("Reserved LexPoints are required before activating this Job."), frappe.ValidationError)
+				frappe.throw(_("Reserved Legal Capacity is required before activating this Job."), frappe.ValidationError)
 			if self.job_billing_method == "Direct Quote" and (
 				flt(self.quoted_amount) <= 0 or not self.sales_invoice or not self.payment_entry
 			):
 				frappe.throw(_("A paid Direct Quote is required before activating this Job."), frappe.ValidationError)
-		if matter.billing_method == "Quoted Price" and matter.quote_status != "Approved":
-			frappe.throw(_("The parent Matter quote has not been approved."), frappe.ValidationError)
-		if matter.billing_method == "LexPack" and matter.funding_status != "Funded":
-			frappe.throw(_("The parent Matter is not funded with reserved LexPoints."), frappe.ValidationError)
-
 	def _validate_job_documents(self):
 		for row in self.job_documents:
 			file_row = frappe.db.get_value(

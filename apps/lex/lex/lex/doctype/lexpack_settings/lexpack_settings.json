@@ -9,7 +9,7 @@
   "readiness_section", "readiness_html", "last_connection_test_on", "readiness_column", "last_connection_test_status", "last_connection_test_message",
   "checkout_section", "checkout_name", "checkout_description", "checkout_theme_color", "accounting_section",
   "company", "selling_item", "direct_quote_item", "mode_of_payment", "accounting_column", "razorpay_clearing_account", "income_account", "cost_center",
-  "intake_section", "intake_sla_version", "intake_sla_document", "quote_currency", "direct_quote_rate_per_point", "quote_validity_days", "low_confidence_threshold", "enable_ai_intake_analysis", "intake_ai_provider", "intake_ai_model", "auto_approve_ai_pricing", "auto_approve_ai_pricing_authorized_by", "auto_approve_ai_pricing_authorized_on", "intake_sla_terms",
+  "intake_section", "intake_sla_version", "intake_sla_document", "quote_currency", "quote_validity_days", "low_confidence_threshold", "enable_ai_intake_analysis", "intake_ai_provider", "intake_ai_model", "auto_approve_ai_pricing", "auto_approve_ai_pricing_authorized_by", "auto_approve_ai_pricing_authorized_on", "intake_sla_terms",
   "webhook_help"
  ],
  "fields": [
@@ -28,7 +28,7 @@
   {"fieldname": "last_connection_test_message", "fieldtype": "Small Text", "label": "Last API Test Result", "read_only": 1},
   {"fieldname": "checkout_section", "fieldtype": "Section Break", "label": "Checkout Presentation"},
   {"default": "Lexocrates Legal Services Pvt. Ltd.", "fieldname": "checkout_name", "fieldtype": "Data", "label": "Checkout Business Name"},
-  {"default": "Purchase prepaid legal capacity with non-expiring LexPoints.", "fieldname": "checkout_description", "fieldtype": "Small Text", "label": "Checkout Description"},
+  {"default": "Purchase prepaid, non-expiring Legal Capacity in your selected currency.", "fieldname": "checkout_description", "fieldtype": "Small Text", "label": "Checkout Description"},
   {"default": "#1f2937", "fieldname": "checkout_theme_color", "fieldtype": "Color", "label": "Checkout Theme Color"},
   {"fieldname": "accounting_section", "fieldtype": "Section Break", "label": "ERPNext Accounting"},
   {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company"},
@@ -43,7 +43,6 @@
   {"default": "CLIENT-INTAKE-SLA-1.0", "fieldname": "intake_sla_version", "fieldtype": "Data", "label": "Client Intake SLA Version"},
   {"fieldname": "intake_sla_document", "fieldtype": "Attach", "label": "Client Intake SLA PDF"},
   {"default": "CAD", "fieldname": "quote_currency", "fieldtype": "Link", "label": "Fixed Quote Currency", "options": "Currency"},
-  {"default": "3", "fieldname": "direct_quote_rate_per_point", "fieldtype": "Currency", "label": "Direct Quote Rate per LexPoint", "options": "quote_currency", "precision": "2"},
   {"default": "7", "fieldname": "quote_validity_days", "fieldtype": "Int", "label": "Quote Validity (Days)"},
   {"default": "72", "fieldname": "low_confidence_threshold", "fieldtype": "Percent", "label": "Operations Review Below Confidence"},
   {"default": "0", "fieldname": "enable_ai_intake_analysis", "fieldtype": "Check", "label": "Enable Governed AI Intake Analysis"},

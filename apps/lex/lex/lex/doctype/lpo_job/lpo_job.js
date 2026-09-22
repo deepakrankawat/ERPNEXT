@@ -16,11 +16,6 @@ frappe.ui.form.on("LPO Job", {
 				frappe.set_route("Form", "LPO Matter", frm.doc.engagement);
 			}, __("View"));
 		}
-		if (frm.doc.intake_estimate) {
-			frm.add_custom_button(__("Intake AI Estimate"), () => {
-				frappe.set_route("Form", "LPO AI Document Estimate", frm.doc.intake_estimate);
-			}, __("View"));
-		}
 		if (
 			frm.doc.work_intake &&
 			frm.doc.job_status === "Draft" &&
@@ -29,7 +24,7 @@ frappe.ui.form.on("LPO Job", {
 				["System Manager", "LPO_Admin", "LPO_Manager"].some((role) => frappe.user.has_role(role))
 			)
 		) {
-			frm.add_custom_button(__("Estimate Price & LexPoints"), () => {
+			frm.add_custom_button(__("Calculate Fixed Price"), () => {
 				open_system_job_estimator(frm);
 			}, __("Commercial")).addClass("btn-primary");
 		}
@@ -68,7 +63,7 @@ async function open_system_job_estimator(frm) {
 
 	const accept = (context.allowed_extensions || []).join(",");
 	const dialog = new frappe.ui.Dialog({
-		title: __("AI Cost & LexPoint Estimate — {0}", [context.job_title || frm.doc.name]),
+		title: __("Lextimator™ Fixed Price Estimate — {0}", [context.job_title || frm.doc.name]),
 		size: "large",
 		fields: [
 			{
@@ -77,7 +72,7 @@ async function open_system_job_estimator(frm) {
 				options: `
 					<div class="alert alert-info mb-3">
 						<strong>${__("Governed commercial estimation")}</strong><br>
-						${__("The document is stored privately, security-scanned, and used only to calculate scope, price, delivery time and LexPoints. General legal AI analysis is not run by this action.")}
+						${__("The document is stored privately and security-scanned. The server uses exact native PDF pages and the selected fixed-rate service to calculate the price. OCR and extracted text are not used for billing.")}
 					</div>
 					<div class="small text-muted mb-3">
 						${__("Existing Job documents")}: <strong>${Number(context.document_count || 0)}</strong>
@@ -132,7 +127,7 @@ async function open_system_job_estimator(frm) {
 					title: __("Estimate generated"),
 					indicator: result.low_confidence ? "orange" : "green",
 					message: `
-						<p><strong>${__("Required LexPoints")}:</strong> ${Number(result.required_lexpoints || 0)}</p>
+						<p><strong>${__("Legal Capacity required")}:</strong> ${frappe.utils.escape_html(result.currency || "")} ${Number(result.required_legal_capacity || result.quoted_amount || 0).toFixed(2)}</p>
 						<p><strong>${__("Fixed quote")}:</strong> ${frappe.utils.escape_html(result.currency || "")} ${Number(result.quoted_amount || 0).toFixed(2)}</p>
 						<p><strong>${__("Delivery timeline")}:</strong> ${Number(result.delivery_timeline_hours || 0)} ${__("hours")}</p>
 						<p><strong>${__("Method")}:</strong> ${frappe.utils.escape_html(result.estimate_method || "")}</p>

@@ -3,14 +3,28 @@ from __future__ import annotations
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import flt
 
 from lex.client_access import get_portal_user
 
 
 MANAGEMENT_ROLES = {"System Manager", "Accounts Manager", "Accounts User", "Lexocrates Finance", "LPO_Admin"}
+SUPPORTED_PURCHASE_CURRENCIES = {"CAD", "USD", "GBP"}
 
 
 class LexPackPurchase(Document):
+	def validate(self):
+		self.currency = (self.currency or "").strip().upper()
+		if self.currency not in SUPPORTED_PURCHASE_CURRENCIES:
+			frappe.throw(
+				_("LexPack Legal Capacity purchases are currently available only in CAD, USD, or GBP."),
+				frappe.ValidationError,
+			)
+		if flt(self.amount) <= 0:
+			frappe.throw(_("A LexPack purchase requires a positive paid amount."), frappe.ValidationError)
+		if flt(self.legal_capacity_amount) <= 0:
+			frappe.throw(_("A LexPack purchase requires a positive Legal Capacity amount."), frappe.ValidationError)
+
 	def before_insert(self):
 		if not getattr(frappe.flags, "lexpack_purchase_service", False):
 			frappe.throw(_("LexPack purchases must be created through the payment service."), frappe.PermissionError)
@@ -21,9 +35,9 @@ class LexPackPurchase(Document):
 		if self.has_value_changed("status") or any(
 			self.has_value_changed(fieldname)
 			for fieldname in (
-				"amount", "currency", "base_lexpoints", "bonus_lexpoints", "total_lexpoints",
+				"amount", "currency", "legal_capacity_amount",
 				"razorpay_order_id", "razorpay_payment_id", "sales_invoice", "payment_entry",
-				"wallet_transaction", "bonus_wallet_transactions", "work_intake",
+				"wallet_transaction", "work_intake",
 			)
 		):
 			frappe.throw(_("Commercial and payment fields are maintained by the LexPack payment service."), frappe.PermissionError)

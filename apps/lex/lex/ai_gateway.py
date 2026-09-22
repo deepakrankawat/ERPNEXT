@@ -26,8 +26,7 @@ SCOPE_LABELS = {"global": "Global", "provider": "Provider", "model": "Model", "u
 JOB_AI_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".csv", ".json"}
 MAX_JOB_AI_DOCUMENTS = 8
 MAX_JOB_AI_CONTEXT_CHARS = 48000
-CLIENT_COST_ESTIMATION_USE_CASE = "Client Work Intake LexPoint Estimation"
-STANDALONE_ESTIMATION_USE_CASE = "Standalone LexPoint Estimation"
+CLIENT_COST_ESTIMATION_USE_CASE = "Lextimator Legal Work Estimation"
 
 
 @frappe.whitelist()
@@ -234,12 +233,6 @@ def _authorize_gateway_caller(use_case: str):
 		frappe.throw(_("Authentication required."), frappe.AuthenticationError)
 	roles = set(frappe.get_roles(user))
 	if user == "Administrator" or roles.intersection(INTERNAL_AI_ROLES):
-		return
-	if (
-		use_case == STANDALONE_ESTIMATION_USE_CASE
-		and getattr(frappe.flags, "lexocrates_standalone_ai_estimation", False)
-		and frappe.db.get_value("User", user, "user_type") == "System User"
-	):
 		return
 	portal_user = get_portal_user(user)
 	if (
@@ -630,15 +623,9 @@ def _authorize_ai_subject(client_id, matter_id, job_id, *, use_case: str | None 
 				frappe.throw(_("You cannot use AI for this Job."), frappe.PermissionError)
 	else:
 		roles = set(frappe.get_roles(frappe.session.user))
-		sealed_standalone_estimate = (
-			use_case == STANDALONE_ESTIMATION_USE_CASE
-			and getattr(frappe.flags, "lexocrates_standalone_ai_estimation", False)
-			and frappe.db.get_value("User", frappe.session.user, "user_type") == "System User"
-		)
 		if (
 			frappe.session.user != "Administrator"
 			and not roles.intersection(INTERNAL_AI_ROLES)
-			and not sealed_standalone_estimate
 		):
 			frappe.throw(_("AI Gateway permission is required."), frappe.PermissionError)
 	if matter_id:

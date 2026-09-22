@@ -2,13 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
-import math
 import os
-import re
-import zipfile
 from datetime import timedelta
-from xml.etree import ElementTree
 
 import frappe
 from frappe import _
@@ -29,21 +24,10 @@ DEFAULT_SLA_TERMS = """Client Intake Service Level Agreement
 1. Documents remain encrypted/private and are scanned before processing.
 2. The preliminary timeline is not the operational SLA. The operational SLA starts only after clean documents, confirmed scope and successful funding.
 3. AI-assisted extraction may be used only within the approved Lexocrates processing environment; low-confidence output is reviewed by Legal Operations.
-4. A generated quote records fixed price, required LexPoints, confirmed scope and delivery timeline. The client may fund it with existing LexPoints, the recommended LexPack, or the fixed quote directly.
+4. A generated quote records an internal effort estimate, confirmed fixed price, required Legal Capacity and delivery timeline. The client may use existing Legal Capacity, a LexPack, or pay the fixed quote directly.
 5. Material scope changes require a revised quote and delivery timeline.
 6. Lexocrates retains an immutable audit trail of SLA acceptance, documents, quote, funding, execution, QA, approval and delivery.
 """
-BASE_POINTS = {
-	"Contract Review": 35,
-	"Legal Research": 30,
-	"Document Review": 28,
-	"Due Diligence": 55,
-	"Compliance Review": 42,
-	"Litigation Support": 60,
-	"Drafting": 45,
-	"Summarization": 20,
-	"Other": 40,
-}
 BASE_HOURS = {
 	"Contract Review": 48,
 	"Legal Research": 48,
@@ -54,6 +38,29 @@ BASE_HOURS = {
 	"Drafting": 72,
 	"Summarization": 24,
 	"Other": 72,
+}
+
+# Operational service types pre-date the fixed-rate Lextimator catalogue.  This
+# mapping is deliberately static: neither OCR nor AI classification is allowed
+# to select or alter the billable service.
+FIXED_PRICING_SERVICE_BY_INTAKE_TYPE = {
+	"Contract Review": "Contract Review",
+	"Legal Research": "Legal Research & Writing",
+	"Document Review": "eDiscovery & Document Review",
+	"Due Diligence": "Legal Operations Support",
+	"Compliance Review": "Compliance & Regulatory Support",
+	"Litigation Support": "Litigation Support",
+	"Drafting": "Paralegal & Virtual Legal Assistance",
+	"Summarization": "Legal Research & Writing",
+	"Other": "Legal Operations Support",
+	# Accept the current catalogue values directly as well.  This permits a
+	# gradual UI migration without changing an already-selected service.
+	"Legal Research & Writing": "Legal Research & Writing",
+	"Contract Lifecycle Management (CLM)": "Contract Lifecycle Management (CLM)",
+	"eDiscovery & Document Review": "eDiscovery & Document Review",
+	"Compliance & Regulatory Support": "Compliance & Regulatory Support",
+	"Paralegal & Virtual Legal Assistance": "Paralegal & Virtual Legal Assistance",
+	"Legal Operations Support": "Legal Operations Support",
 }
 
 
@@ -77,6 +84,8 @@ def create_work_intake(
 	opposing_counsel: str | None = None,
 ):
 	actor = _require_portal_user()
+	from lex.instant_estimator import _estimate_currency_for_client
+
 	if not has_portal_capability("can_create_matters"):
 		frappe.throw(_("You are not authorized to submit new work."), frappe.PermissionError)
 	if requested_delivery_date and get_datetime(requested_delivery_date) <= now_datetime():
@@ -101,9 +110,12 @@ def create_work_intake(
 		"sla_document_snapshot": sla_document,
 		"sla_terms_snapshot": sla_terms,
 		"sla_snapshot_hash": _sla_hash(sla_terms, sla_document),
-		"currency": _setting("quote_currency", "CAD"),
+		# A client's registered country determines the quotation currency.  The
+		# browser never submits or selects the stored currency.
+		"currency": _estimate_currency_for_client(actor.client)[0],
+		"selected_pricing_service": FIXED_PRICING_SERVICE_BY_INTAKE_TYPE.get(service_type),
 	}
-	if service_type not in BASE_POINTS:
+	if service_type not in FIXED_PRICING_SERVICE_BY_INTAKE_TYPE:
 		frappe.throw(_("Choose a supported Service Type."), frappe.ValidationError)
 	if priority not in {"Low", "Medium", "High", "Urgent"}:
 		frappe.throw(_("Choose a valid priority."), frappe.ValidationError)
@@ -128,7 +140,7 @@ def create_work_intake(
 		draft_due = (
 			get_datetime(requested_delivery_date)
 			if requested_delivery_date
-			else now_datetime() + timedelta(hours=BASE_HOURS[service_type])
+		else now_datetime() + timedelta(hours=BASE_HOURS.get(service_type, 72))
 		)
 		job = frappe.get_doc({
 			"doctype": "LPO Job",
@@ -381,10 +393,16 @@ def get_system_job_estimation_context(job: str) -> dict:
 		"clean_document_count": sum(
 			(row.custom_lex_scan_status or "Pending") == "Clean" for row in documents
 		),
-		"current_estimate": intake_doc.ai_document_estimate,
-		"required_lexpoints": cint(intake_doc.required_lexpoints),
+		"current_estimate": (
+			f"{intake_doc.currency} {flt(intake_doc.quoted_amount, 2):.2f}"
+			if flt(intake_doc.quoted_amount) > 0
+			else None
+		),
 		"quoted_amount": flt(intake_doc.quoted_amount, 2),
 		"currency": intake_doc.currency,
+		"required_legal_capacity": _required_legal_capacity(intake_doc),
+		"exact_pdf_page_count": cint(intake_doc.get("exact_pdf_page_count")),
+		"selected_pricing_service": intake_doc.get("selected_pricing_service"),
 		"estimate_method": intake_doc.estimate_method,
 		"quote_status": intake_doc.quote_status,
 		"pricing_approval_status": intake_doc.pricing_approval_status,
@@ -443,19 +461,14 @@ def estimate_system_job(
 
 	_process_documents(doc, None, estimate_only=True)
 	doc.reload()
-	estimate_status = None
-	if doc.ai_document_estimate:
-		estimate_status = frappe.db.get_value(
-			"LPO AI Document Estimate", doc.ai_document_estimate, "status"
-		)
 	return {
 		"job": job_doc.name,
 		"intake": doc.name,
 		"uploaded_document": upload,
-		"estimate": doc.ai_document_estimate,
-		"estimate_status": estimate_status,
+		"estimate": None,
+		"estimate_status": _job_estimate_status(doc),
 		"estimate_method": doc.estimate_method,
-		"required_lexpoints": cint(doc.required_lexpoints),
+		"required_legal_capacity": _required_legal_capacity(doc),
 		"quoted_amount": flt(doc.quoted_amount, 2),
 		"currency": doc.currency,
 		"delivery_timeline_hours": cint(doc.delivery_timeline_hours),
@@ -481,10 +494,13 @@ def _process_documents(
 	actor,
 	*,
 	estimate_only: bool,
-	model_override: str | None = None,
-	provider_override: str | None = None,
-	ai_model_registry: str | None = None,
 ):
+	"""Create the authoritative fixed-price estimate from native PDF pages.
+
+	Pricing never reads OCR output, extracted words, file size, AI classification,
+	priority or a browser-supplied amount.  The selected service and exact native
+	PDF page total are the only billable inputs.
+	"""
 	if not doc.sla_accepted:
 		frappe.throw(_("SLA acceptance is required before cost estimation."), frappe.PermissionError)
 	files = _intake_files(doc.name)
@@ -500,182 +516,84 @@ def _process_documents(
 			"security_status": doc.security_status,
 			"message": _("All documents must pass security scanning before cost estimation."),
 		}
+	from decimal import ROUND_CEILING
 
-	with _service_writes():
-		doc.status = "Analysis Pending"
-		doc.analysis_status = "Pending"
-		doc.extraction_status = "Pending"
-		doc.save(ignore_permissions=True)
-
-	chunks = []
-	unsupported = 0
-	for row in files:
-		text = _extract_file_text(frappe.get_doc("File", row.name))
-		if text:
-			chunks.append(f"[{row.file_name}]\n{text}")
-		else:
-			unsupported += 1
-	extracted = "\n\n".join(chunks)[:100000]
-	word_count = len(extracted.split())
-	confidence = _analysis_confidence(files, chunks, unsupported, word_count)
-	threshold = flt(_setting("low_confidence_threshold", 72))
-	low_confidence = confidence < threshold
-	# Client Website Users may request commercial estimation only.  The wider
-	# legal/risk analysis is an internal Operations capability and is never run
-	# from the client-facing endpoint.
-	ai_result, ai_error = (None, None) if estimate_only else _run_governed_ai_analysis(
-		doc, extracted, provider=provider_override, model=model_override
+	from lex.instant_estimator import (
+		_estimate_currency_for_client,
+		calculate_page_based_pricing,
 	)
-	if ai_error or (ai_result and ai_result.get("requires_human_review")):
-		low_confidence = True
 
-	ai_profile, ai_estimate_note = _estimation_profile_with_ai(
-		doc, extracted, len(files), word_count, provider=provider_override, model=model_override
-	)
-	from lex.lexpoint_estimation import calculate_estimate
-
-	estimation = calculate_estimate(
-		doc,
-		files,
-		extracted,
-		ai_profile=ai_profile,
-		auto_converge=True,
-	)
-	points = estimation["lexpoints"]
-	hours = estimation["delivery_hours"]
-	estimate_method = "AI-Assisted Formula" if ai_profile else "Formula"
-	quality_report = estimation.get("quality_report") or {}
-	if not quality_report.get("is_valid"):
-		low_confidence = True
-		quality_reasons = "; ".join(quality_report.get("defect_reasons") or [])
-		ai_estimate_note = " ".join(
-			filter(
-				None,
-				[
-					ai_estimate_note,
-					f"Quality gates require Operations review: {quality_reasons}"
-					if quality_reasons
-					else "Quality gates require Operations review.",
-				],
-			)
+	page_count = _exact_native_pdf_page_count(files)
+	selected_service = _selected_pricing_service(doc)
+	currency, _country = _estimate_currency_for_client(doc.client)
+	try:
+		pricing = calculate_page_based_pricing(
+			page_count,
+			selected_service,
+			currency=currency,
 		)
-	if cint(estimation.get("requires_human_review")):
-		low_confidence = True
-	if ai_profile:
-		confidence = min(confidence, flt(estimation.get("confidence") or confidence))
-		if cint(ai_profile.get("requires_human_review")):
-			low_confidence = True
-		estimation_settings = frappe.get_single("LPO LexPoint Settings")
-		if (
-			flt(estimation.get("document_type_confidence")) < flt(estimation_settings.classification_confidence)
-			or flt(estimation.get("jurisdiction_confidence")) < flt(estimation_settings.jurisdiction_confidence)
-		):
-			low_confidence = True
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
 
-	quote_amount = flt(estimation.get("quoted_price_cad"), 2)
-	scope = _scope_summary(doc, len(files), word_count)
-	recommended = _recommend_plan(doc.client, points)
+	quote_amount = flt(pricing["final_price"], 2)
+	delivery_hours = max(1, int(pricing["exact_hours"].to_integral_value(rounding=ROUND_CEILING)))
+	scope = _native_pdf_scope_summary(doc, selected_service, page_count)
+	recommended = _recommend_plan(doc.client, quote_amount, currency)
 	with _service_writes():
 		doc.reload()
-		doc.extracted_text = extracted
-		doc.extraction_status = "Complete" if chunks and not unsupported else ("Partial" if chunks else "Failed")
-		doc.analysis_status = "Operations Review" if low_confidence else "Complete"
-		doc.analysis_confidence = confidence
-		doc.low_confidence = int(low_confidence)
-		routed_ai = ai_profile or ai_result or {}
-		routed_label = "/".join(filter(None, [routed_ai.get("provider"), routed_ai.get("model")]))
-		if routed_ai.get("credential_name"):
-			routed_label = f"{routed_ai['credential_name']} - {routed_label}"
-		doc.analysis_provider = (
-			"Lexocrates Governed Cost Estimation Engine"
-			if estimate_only
-			else (
-				f"Governed AI Gateway - {routed_label}"
-				if ai_result or ai_profile else "Lexocrates Secure Extraction & Estimation Engine v1 (AI gateway not enabled)"
-			)
-		)
-		doc.ai_execution = (
-			(ai_profile or {}).get("ai_execution") or (ai_result or {}).get("ai_execution")
-		)
-		base_summary = (
-			f"Analyzed {len(files)} clean document(s), extracted approximately {word_count:,} words, "
-			f"and estimated {points} LexPoints via {estimate_method.lower()} pricing"
-			+ f" ({estimation['explanation']})"
-			+ ". "
-			+ ("Low confidence requires Legal Operations review." if low_confidence else "Confidence passed the configured auto-quote threshold.")
-		)
+		# Preserve analysis fields for operational state, but do not extract or
+		# inspect document text as a pricing input.
+		doc.extracted_text = None
+		doc.extraction_status = "Not Started"
+		doc.analysis_status = "Complete"
+		doc.analysis_confidence = 100
+		doc.low_confidence = 0
+		doc.analysis_provider = "Lextimator Native PDF Pricing"
+		doc.ai_execution = None
 		doc.analysis_summary = (
-			f"{base_summary}\n\nGoverned AI analysis:\n{ai_result.get('response_text', '')[:6000]}" if ai_result
-			else f"{base_summary}\n\n{ai_error}" if ai_error else base_summary
+			f"Lextimator calculated the fixed price from {page_count} exact native PDF page(s) "
+			f"and the selected service '{selected_service}'."
 		)
-		doc.required_lexpoints = points
 		doc.quoted_amount = quote_amount
-		doc.currency = estimation.get("currency") or doc.currency
-		doc.delivery_timeline_hours = hours
+		doc.currency = currency
+		doc.required_legal_capacity = quote_amount
+		doc.delivery_timeline_hours = delivery_hours
 		doc.scope_summary = scope
-		doc.estimate_method = estimate_method
+		doc.estimate_method = "Native PDF Fixed Rate"
+		doc.selected_pricing_service = selected_service
+		doc.exact_pdf_page_count = page_count
+		doc.calculated_hours = str(pricing["exact_hours"])
+		doc.fixed_service_rate_cad = flt(pricing["fixed_service_rate_cad"], 2)
+		doc.raw_price_cad = flt(pricing["raw_price_cad"], 2)
+		doc.final_rounded_price_cad = flt(pricing["final_price_cad"], 2)
+		doc.pricing_exchange_rate = flt(pricing["exchange_rate"], 9)
+		doc.pricing_exchange_rate_date = pricing["exchange_rate_date"]
+		doc.pricing_version = pricing["pricing_version"]
 		doc.quote_version = cint(doc.quote_version) + 1
 		doc.quote_valid_until = add_days(nowdate(), cint(_setting("quote_validity_days", 7)))
 		doc.recommended_plan = recommended
-		auto_approved = False
-		if low_confidence:
-			doc.quote_status = "Operations Review"
-			doc.status = "Operations Review"
-			doc.pricing_approval_status = "Not Required"
-		else:
-			doc.quote_issued_by = frappe.session.user
-			doc.quote_issued_on = now_datetime()
-			auto_approved = _route_quote_for_approval(doc, ai_profile=ai_profile)
-		doc.save(ignore_permissions=True)
-	estimate = _create_analysis_estimate(
-		doc,
-		files=files,
-		extracted=extracted,
-		word_count=word_count,
-		ai_result=ai_result,
-		estimation=estimation,
-		ai_model_registry=ai_model_registry,
-	)
-	with _service_writes():
-		doc.reload()
-		doc.ai_estimate_reference_doctype = "LPO AI Document Estimate"
-		doc.ai_document_estimate = estimate.name
+		# Fixed native-page pricing is deterministic and is automatically released.
+		doc.quote_issued_by = frappe.session.user
+		doc.quote_issued_on = now_datetime()
+		doc.pricing_approval_status = "Approved"
+		doc.pricing_approved_by = frappe.session.user
+		doc.pricing_approved_on = now_datetime()
+		doc.pricing_rejection_reason = None
+		doc.quote_status = "Ready"
+		doc.status = "Quote Ready"
 		doc.save(ignore_permissions=True)
 	_sync_job_commercial(doc)
-	if auto_approved:
-		_notify_client_quote_ready(doc)
-		_audit(
-			doc,
-			"AI Estimate Auto-Approved by CEO Policy",
-			{
-				"ai_execution": doc.ai_execution,
-				"confidence": confidence,
-				"required_lexpoints": points,
-				"quoted_amount": quote_amount,
-				"policy_authorized_by": doc.pricing_approved_by,
-				"policy_authorized_on": doc.pricing_approved_on,
-			},
-		)
-	elif not low_confidence:
-		_notify_ceo_of_pending_pricing(doc)
+	_notify_client_quote_ready(doc)
 	_audit(
 		doc,
-		(
-			"Client Cost Estimate Requested"
-			if estimate_only and actor
-			else "System User Cost Estimate Generated"
-			if estimate_only
-			else "Work Intake Analysis Completed"
-		),
+		"Client Cost Estimate Requested" if estimate_only and actor else "Job Fixed Price Generated",
 		{
-			"confidence": confidence,
-			"low_confidence": low_confidence,
-			"required_lexpoints": points,
-			"estimate_method": estimate_method,
-			"ai_estimate_note": ai_estimate_note,
-			"quality_gate_passed": bool(quality_report.get("is_valid")),
-			"quality_score": quality_report.get("quality_score"),
-			"custom_scope_required": bool(estimation.get("custom_scope_required")),
+			"exact_pdf_page_count": page_count,
+			"selected_service": selected_service,
+			"quoted_amount": quote_amount,
+			"currency": currency,
+			"required_legal_capacity": quote_amount,
+			"pricing_version": pricing["pricing_version"],
 		},
 	)
 	return _intake_row(doc, actor)
@@ -684,39 +602,23 @@ def _process_documents(
 @frappe.whitelist()
 def issue_quote(
 	intake: str,
-	required_lexpoints: int,
-	quoted_amount: float,
-	delivery_timeline_hours: int,
-	scope_summary: str,
 	review_notes: str | None = None,
 ):
+	"""Recalculate the server-side fixed quote for a Draft Job.
+
+	Price, Legal Capacity and delivery hours are intentionally not accepted as
+	API parameters.  A Desk user can record a review note, but cannot override
+	the deterministic native-PDF pricing calculation.
+	"""
 	_require_internal()
 	doc = frappe.get_doc("Lexocrates Work Intake", intake)
-	if doc.status not in {"Operations Review", "Analysis Pending", "Quote Ready", "Pending CEO Approval"}:
-		frappe.throw(_("This intake is not awaiting quote review."), frappe.ValidationError)
-	if cint(required_lexpoints) <= 0 or flt(quoted_amount) <= 0 or cint(delivery_timeline_hours) <= 0:
-		frappe.throw(_("Quote points, amount and delivery hours must be positive."), frappe.ValidationError)
-	with _service_writes():
-		doc.required_lexpoints = cint(required_lexpoints)
-		doc.quoted_amount = flt(quoted_amount, 2)
-		doc.delivery_timeline_hours = cint(delivery_timeline_hours)
-		doc.scope_summary = (scope_summary or "").strip()
-		doc.operations_review_notes = (review_notes or "").strip()
-		doc.low_confidence = 0
-		doc.analysis_status = "Complete"
-		doc.estimate_method = "Manual (Operations)"
-		doc.quote_version = cint(doc.quote_version) + 1
-		doc.quote_valid_until = add_days(nowdate(), cint(_setting("quote_validity_days", 7)))
-		doc.recommended_plan = _recommend_plan(doc.client, cint(required_lexpoints))
-		doc.quote_issued_by = frappe.session.user
-		doc.quote_issued_on = now_datetime()
-		_route_quote_for_approval(doc)
-		doc.save(ignore_permissions=True)
-	_sync_estimate_after_quote(doc)
-	_sync_job_commercial(doc)
-	_notify_ceo_of_pending_pricing(doc)
-	_audit(doc, "Work Intake Quote Issued", {"quote_version": doc.quote_version, "required_lexpoints": doc.required_lexpoints})
-	return {"name": doc.name, "status": doc.status, "quote_status": doc.quote_status}
+	result = _process_documents(doc, None, estimate_only=True)
+	if review_notes:
+		with _service_writes():
+			doc.reload()
+			doc.operations_review_notes = (review_notes or "").strip()
+			doc.save(ignore_permissions=True)
+	return result
 
 
 @frappe.whitelist()
@@ -743,12 +645,11 @@ def approve_quote_pricing(intake: str, decision: str, notes: str | None = None):
 			doc.quote_status = "Operations Review"
 			doc.status = "Operations Review"
 		doc.save(ignore_permissions=True)
-	_sync_estimate_approval(doc, decision, notes)
 	_sync_job_commercial(doc)
 	_audit(
 		doc,
 		"Matter Pricing Approval Decision",
-		{"decision": decision, "notes": notes, "quoted_amount": doc.quoted_amount, "required_lexpoints": doc.required_lexpoints},
+		{"decision": decision, "notes": notes, "quoted_amount": doc.quoted_amount, "required_legal_capacity": doc.required_legal_capacity},
 	)
 	_post_ceo_approval_decision(doc, decision, notes)
 	if decision == "Approved":
@@ -759,71 +660,12 @@ def approve_quote_pricing(intake: str, decision: str, notes: str | None = None):
 @frappe.whitelist()
 def submit_chat_pricing(
 	intake: str,
-	required_lexpoints: int,
-	quoted_amount: float,
-	delivery_timeline_hours: int,
-	scope_summary: str,
 	review_notes: str | None = None,
 ):
-	"""CEO/manual pricing action used by the internal Matter chat approval card."""
+	"""Recalculate the authoritative Job quote from the internal chat action."""
 	_require_pricing_authority()
 	doc = frappe.get_doc("Lexocrates Work Intake", intake)
-	if doc.status not in {"Operations Review", "Analysis Pending", "Pending CEO Approval", "Quote Ready"}:
-		frappe.throw(_("This intake is not available for manual pricing."), frappe.ValidationError)
-	if doc.funding_status in {"Payment Pending", "Funded"} or doc.status in {"Funding Pending", "Funded", "Matter Confirmed"}:
-		frappe.throw(_("Pricing is locked after payment or funding starts."), frappe.PermissionError)
-	if cint(required_lexpoints) <= 0 or flt(quoted_amount) <= 0 or cint(delivery_timeline_hours) <= 0:
-		frappe.throw(_("LexPoints, amount and delivery hours must be positive."), frappe.ValidationError)
-	scope_summary = (scope_summary or "").strip()
-	if not scope_summary:
-		frappe.throw(_("Scope summary is required before releasing pricing."), frappe.MandatoryError)
-	with _service_writes():
-		doc.required_lexpoints = cint(required_lexpoints)
-		doc.quoted_amount = flt(quoted_amount, 2)
-		doc.delivery_timeline_hours = cint(delivery_timeline_hours)
-		doc.scope_summary = scope_summary
-		doc.operations_review_notes = (review_notes or "").strip()
-		doc.low_confidence = 0
-		doc.analysis_status = "Complete"
-		doc.estimate_method = "Manual (Operations)"
-		doc.quote_version = cint(doc.quote_version) + 1
-		doc.quote_valid_until = add_days(nowdate(), cint(_setting("quote_validity_days", 7)))
-		doc.recommended_plan = _recommend_plan(doc.client, cint(required_lexpoints))
-		doc.quote_issued_by = frappe.session.user
-		doc.quote_issued_on = now_datetime()
-		doc.pricing_approval_status = "Approved"
-		doc.pricing_approved_by = frappe.session.user
-		doc.pricing_approved_on = now_datetime()
-		doc.pricing_rejection_reason = None
-		doc.quote_status = "Ready"
-		doc.status = "Quote Ready"
-		doc.save(ignore_permissions=True)
-	_sync_estimate_after_quote(doc)
-	_sync_estimate_approval(doc, "Approved")
-	_sync_job_commercial(doc)
-	_audit(
-		doc,
-		"CEO Chat Pricing Released",
-		{
-			"quote_version": doc.quote_version,
-			"required_lexpoints": doc.required_lexpoints,
-			"quoted_amount": doc.quoted_amount,
-			"delivery_timeline_hours": doc.delivery_timeline_hours,
-		},
-	)
-	_post_ceo_approval_decision(doc, "Approved", review_notes)
-	_notify_client_quote_ready(doc)
-	return {
-		"intake": doc.name,
-		"status": doc.status,
-		"quote_status": doc.quote_status,
-		"pricing_approval_status": doc.pricing_approval_status,
-		"required_lexpoints": cint(doc.required_lexpoints),
-		"quoted_amount": flt(doc.quoted_amount, 2),
-		"currency": doc.currency,
-		"delivery_timeline_hours": cint(doc.delivery_timeline_hours),
-		"quote_version": cint(doc.quote_version),
-	}
+	return issue_quote(intake=doc.name, review_notes=review_notes)
 
 
 @frappe.whitelist()
@@ -840,30 +682,34 @@ def get_chat_pricing_context(intake: str) -> dict:
 		"status": doc.status,
 		"quote_status": doc.quote_status,
 		"pricing_approval_status": doc.pricing_approval_status,
-		"required_lexpoints": cint(doc.required_lexpoints),
+		"required_legal_capacity": flt(doc.required_legal_capacity, 2),
 		"quoted_amount": flt(doc.quoted_amount, 2),
 		"currency": doc.currency,
 		"delivery_timeline_hours": cint(doc.delivery_timeline_hours),
-		"scope_summary": doc.scope_summary or _scope_summary(doc, len(files), len((doc.extracted_text or "").split())),
+		"scope_summary": doc.scope_summary or _native_pdf_scope_summary(
+			doc, _selected_pricing_service(doc), cint(doc.get("exact_pdf_page_count"))
+		),
 		"review_notes": doc.operations_review_notes or "",
 	}
 
 
 @frappe.whitelist()
-def fund_with_existing_lexpoints(intake: str):
+def fund_with_existing_legal_capacity(intake: str):
 	doc, actor = _require_intake_access(intake)
-	_require_funding_authority(actor, "Existing LexPoints")
+	_require_funding_authority(actor, "Existing Legal Capacity")
 	_validate_ready_quote(doc)
-	available = _available_lexpoints(doc.client)
-	if available < flt(doc.required_lexpoints):
+	_validate_legal_capacity_currency(doc.client, doc.currency)
+	available = _available_legal_capacity(doc.client)
+	required_capacity = _required_legal_capacity(doc)
+	if available < required_capacity:
 		frappe.throw(
-			_("Available balance is {0} LexPoints; this work requires {1}.").format(
-				cint(available), cint(doc.required_lexpoints)
+			_("Available Legal Capacity is {0}; this work requires {1}.").format(
+				flt(available, 2), flt(required_capacity, 2)
 			),
 			frappe.ValidationError,
 		)
 	with _service_writes():
-		doc.funding_route = "Existing LexPoints"
+		doc.funding_route = "Existing Legal Capacity"
 		doc.funding_status = "Funded"
 		doc.funded_on = now_datetime()
 		doc.quote_status = "Accepted"
@@ -879,10 +725,13 @@ def prepare_lexpack_purchase(intake: str, plan: str, actor=None):
 	doc, actor = _require_intake_access(intake, actor=actor)
 	_require_funding_authority(actor, "Recommended LexPack")
 	_validate_ready_quote(doc)
+	_validate_legal_capacity_currency(doc.client, doc.currency)
 	if doc.recommended_plan != plan:
 		frappe.throw(_("Purchase the LexPack recommended for this confirmed quote."), frappe.ValidationError)
-	plan_points = cint(frappe.db.get_value("LexPack Plan", plan, "lexpoints"))
-	if _available_lexpoints(doc.client) + plan_points < cint(doc.required_lexpoints):
+	from lex.lexpack import _checkout_pricing_for_plan
+	plan_doc = frappe.get_doc("LexPack Plan", plan)
+	plan_capacity = _checkout_pricing_for_plan(plan_doc, portal_user=actor, requested_currency=doc.currency)["legal_capacity_amount"]
+	if _available_legal_capacity(doc.client) + plan_capacity < _required_legal_capacity(doc):
 		frappe.throw(_("The selected LexPack does not fully fund this quote."), frappe.ValidationError)
 	with _service_writes():
 		doc.funding_route = "Recommended LexPack"
@@ -909,7 +758,7 @@ def complete_lexpack_funding(purchase_doc):
 		return None
 	frappe.db.savepoint("lexpack_intake_activation")
 	try:
-		if _available_lexpoints(doc.client) < flt(doc.required_lexpoints):
+		if _available_legal_capacity(doc.client) < _required_legal_capacity(doc):
 			with _service_writes():
 				doc.funding_status = "Payment Pending"
 				doc.failure_reason = _("LexPack was credited, but another reservation used the remaining balance. Add capacity to finish funding.")
@@ -1108,7 +957,7 @@ def portal_intakes(actor=None):
 			"sla_version", "sla_document_snapshot", "sla_terms_snapshot", "sla_snapshot_hash", "sla_accepted", "sla_accepted_by", "sla_accepted_on",
 			"document_count", "clean_document_count", "security_status", "extraction_status", "analysis_status",
 			"analysis_confidence", "low_confidence",
-			"quote_version", "quote_status", "quoted_amount", "currency", "required_lexpoints", "scope_summary",
+			"quote_version", "quote_status", "quoted_amount", "currency", "required_legal_capacity", "scope_summary",
 			"estimate_method", "pricing_approval_status",
 			"delivery_timeline_hours", "quote_valid_until", "recommended_plan", "funding_route", "funding_status",
 			"lexpack_purchase", "wallet_reservation", "failure_reason", "sales_invoice", "payment_entry",
@@ -1189,7 +1038,8 @@ def _confirm_funded_intake(doc):
 		reservation = _post_transaction(
 			client=doc.client,
 			transaction_type="Reservation",
-			points=doc.required_lexpoints,
+			legal_capacity_amount=_required_legal_capacity(doc),
+			currency=doc.currency,
 			idempotency_key=f"job-funding:{job.name}",
 			matter=matter.name,
 			reference_doctype="LPO Job",
@@ -1210,11 +1060,10 @@ def _confirm_funded_intake(doc):
 	job.received_at = start
 	job.due_date = due
 	job.source_document = primary
-	job.intake_estimate = doc.ai_document_estimate
 	job.job_billing_method = "Direct Quote" if doc.funding_route == "Direct Quote" else "LexPack"
 	job.estimate_status = "Accepted"
 	job.quote_version = doc.quote_version
-	job.required_lexpoints = doc.required_lexpoints
+	job.required_legal_capacity = _required_legal_capacity(doc)
 	job.quoted_amount = doc.quoted_amount
 	job.currency = doc.currency
 	job.funding_route = doc.funding_route
@@ -1227,7 +1076,6 @@ def _confirm_funded_intake(doc):
 	job.job_status = "Activated"
 	with _portal_service_writes():
 		job.save(ignore_permissions=True)
-	_activate_document_estimate(doc, matter.name, job.name)
 	_audit(
 		doc,
 		"Funded Work Activated",
@@ -1242,9 +1090,13 @@ def _intake_row(doc, actor):
 	if doc.get("recommended_plan"):
 		plan = frappe.db.get_value(
 			"LexPack Plan", doc.recommended_plan,
-			["name", "plan_code", "plan_name", "price", "currency", "lexpoints", "self_service", "enterprise_custom"],
+			["name", "plan_code", "plan_name", "price", "currency", "discount_percent", "self_service", "enterprise_custom"],
 			as_dict=True,
 		)
+		if plan:
+			from lex.lexpack import _checkout_pricing_for_plan
+			checkout = _checkout_pricing_for_plan(plan, requested_currency=doc.currency)
+			plan.update(checkout)
 	# ``frappe._dict`` returns ``None`` for unknown attributes, so
 	# ``hasattr(doc, "as_dict")`` is true even though the value is not callable.
 	# Portal list queries return ``frappe._dict`` rows while document APIs return
@@ -1262,9 +1114,12 @@ def _intake_row(doc, actor):
 		row["cost_estimate_status"] = "Not Requested"
 	for internal_field in (
 		"extraction_status", "extracted_text", "analysis_status", "analysis_confidence", "low_confidence",
-		"analysis_provider", "ai_execution", "ai_estimate_reference_doctype", "ai_document_estimate",
+		"analysis_provider", "ai_execution",
 		"analysis_summary", "operations_review_notes", "estimate_method",
 		"pricing_rejection_reason", "pricing_approved_by", "pricing_approved_on", "quote_issued_by", "quote_issued_on",
+		"selected_pricing_service", "exact_pdf_page_count", "calculated_hours", "fixed_service_rate_cad",
+		"raw_price_cad", "final_rounded_price_cad", "pricing_exchange_rate", "pricing_exchange_rate_date",
+		"pricing_version",
 	):
 		row.pop(internal_field, None)
 	row["sla_download_url"] = secure_download_url_for_file_url(row.get("sla_document_snapshot"))
@@ -1272,8 +1127,9 @@ def _intake_row(doc, actor):
 		add_secure_download_url(document)
 	row["documents"] = documents
 	row["recommended_plan_details"] = plan
-	row["available_lexpoints"] = _available_lexpoints(doc.client)
-	row["can_fund_lexpoints"] = bool(actor and actor.lexpack_purchase_access)
+	row["required_legal_capacity"] = _required_legal_capacity(doc)
+	row["available_legal_capacity"] = _available_legal_capacity(doc.client)
+	row["can_fund_legal_capacity"] = bool(actor and actor.lexpack_purchase_access)
 	row["can_pay_direct"] = bool(actor and actor.billing_access)
 	return row
 
@@ -1308,12 +1164,6 @@ def _invalidate_unfunded_estimate(doc):
 	doc.reload()
 	if doc.funding_status in {"Payment Pending", "Funded"}:
 		return
-	if doc.ai_document_estimate and frappe.db.exists("LPO AI Document Estimate", doc.ai_document_estimate):
-		estimate = frappe.get_doc("LPO AI Document Estimate", doc.ai_document_estimate)
-		if estimate.status != "Activated":
-			with _estimate_service_writes():
-				estimate.status = "Superseded"
-				estimate.save(ignore_permissions=True)
 	with _service_writes():
 		doc.analysis_status = "Not Started"
 		doc.extraction_status = "Not Started"
@@ -1321,7 +1171,7 @@ def _invalidate_unfunded_estimate(doc):
 		doc.low_confidence = 0
 		doc.quote_status = "Not Generated"
 		doc.quoted_amount = 0
-		doc.required_lexpoints = 0
+		doc.required_legal_capacity = 0
 		doc.scope_summary = None
 		doc.delivery_timeline_hours = 0
 		doc.quote_valid_until = None
@@ -1329,7 +1179,15 @@ def _invalidate_unfunded_estimate(doc):
 		doc.pricing_approval_status = "Not Required"
 		doc.funding_route = "Not Selected"
 		doc.funding_status = "Not Started"
-		doc.ai_document_estimate = None
+		doc.selected_pricing_service = None
+		doc.exact_pdf_page_count = 0
+		doc.calculated_hours = 0
+		doc.fixed_service_rate_cad = 0
+		doc.raw_price_cad = 0
+		doc.final_rounded_price_cad = 0
+		doc.pricing_exchange_rate = 0
+		doc.pricing_exchange_rate_date = None
+		doc.pricing_version = None
 		doc.save(ignore_permissions=True)
 	_sync_job_commercial(doc, estimate_status="Superseded" if doc.quote_version else "Not Requested")
 
@@ -1357,12 +1215,12 @@ def _sync_job_commercial(doc, *, estimate_status=None):
 	funding_route = doc.funding_route or "Not Selected"
 	job.job_billing_method = (
 		"Direct Quote" if funding_route == "Direct Quote"
-		else "LexPack" if funding_route in {"Existing LexPoints", "Recommended LexPack"}
+		else "LexPack" if funding_route in {"Existing Legal Capacity", "Recommended LexPack"}
 		else None
 	)
 	job.estimate_status = estimate_status or _job_estimate_status(doc)
 	job.quote_version = doc.quote_version
-	job.required_lexpoints = doc.required_lexpoints
+	job.required_legal_capacity = _required_legal_capacity(doc)
 	job.quoted_amount = doc.quoted_amount
 	job.currency = doc.currency
 	job.funding_route = funding_route
@@ -1372,7 +1230,15 @@ def _sync_job_commercial(doc, *, estimate_status=None):
 	job.payment_entry = doc.payment_entry
 	job.sla_started_on = doc.sla_started_on
 	job.delivery_due_on = doc.delivery_due_on
-	job.intake_estimate = doc.ai_document_estimate
+	job.selected_pricing_service = doc.get("selected_pricing_service")
+	job.exact_pdf_page_count = cint(doc.get("exact_pdf_page_count"))
+	job.calculated_hours = doc.get("calculated_hours") or 0
+	job.fixed_service_rate_cad = flt(doc.get("fixed_service_rate_cad"), 2)
+	job.raw_price_cad = flt(doc.get("raw_price_cad"), 2)
+	job.final_rounded_price_cad = flt(doc.get("final_rounded_price_cad"), 2)
+	job.pricing_exchange_rate = flt(doc.get("pricing_exchange_rate"), 9)
+	job.pricing_exchange_rate_date = doc.get("pricing_exchange_rate_date")
+	job.pricing_version = doc.get("pricing_version")
 	with _portal_service_writes():
 		job.save(ignore_permissions=True)
 
@@ -1401,476 +1267,59 @@ def _intake_files(intake):
 	)
 
 
-def _extract_file_text(file_doc):
-	content = file_doc.get_content()
-	if isinstance(content, str):
-		content = content.encode("utf-8")
-	extension = os.path.splitext((file_doc.file_name or "").lower())[1]
-	try:
-		if extension in {".txt", ".csv"}:
-			return content.decode("utf-8", errors="replace")[:50000]
-		if extension == ".docx":
-			with zipfile.ZipFile(io.BytesIO(content)) as archive:
-				root = ElementTree.fromstring(archive.read("word/document.xml"))
-			return " ".join(node.text or "" for node in root.iter() if node.tag.endswith("}t"))[:50000]
-		if extension == ".pdf":
-			try:
-				from pypdf import PdfReader
-			except ImportError:
-				try:
-					from PyPDF2 import PdfReader
-				except ImportError:
-					return ""
-			reader = PdfReader(io.BytesIO(content))
-			return "\n".join((page.extract_text() or "") for page in reader.pages)[:50000]
-	except (OSError, ValueError, KeyError, zipfile.BadZipFile):
-		return ""
-	return ""
+def _exact_native_pdf_page_count(files) -> int:
+	"""Return a sum of native PDF pages without OCR or text extraction."""
+	from pypdf import PdfReader
 
-
-def _analysis_confidence(files, chunks, unsupported, word_count):
-	if not chunks:
-		return 45
-	coverage = len(chunks) / max(1, len(files))
-	confidence = 70 + (20 * coverage)
-	if word_count < 40:
-		confidence -= 15
-	if unsupported:
-		confidence -= min(20, unsupported * 8)
-	return max(0, min(95, round(confidence, 1)))
-
-
-def _run_governed_ai_analysis(doc, extracted, provider=None, model=None):
-	if not cint(_setting("enable_ai_intake_analysis", 0)):
-		return None, None
-	if not extracted.strip():
-		return None, _("AI analysis was not run because no text could be extracted; Operations Review is required.")
-	from lex.ai_gateway import invoke_ai_gateway
-
-	if not model and not provider and frappe.db.exists("DocType", "LPO LexPoint Settings"):
-		default_ai_model = frappe.db.get_single_value("LPO LexPoint Settings", "default_ai_model")
-		if default_ai_model:
-			reg = frappe.db.get_value("LPO AI Model Registry", default_ai_model, ["provider", "model_id"], as_dict=True)
-			if reg:
-				provider = reg.provider
-				model = reg.model_id
-
-	prompt = (
-		"Analyze this legal work intake for scope, complexity, key risks, missing information and delivery assumptions. "
-		"Do not make a final legal conclusion or commercial decision. Ground every factual statement in the provided corpus.\n\n"
-		f"Service: {doc.service_type}\nJurisdiction: {doc.jurisdiction}\nExpected outcome: {doc.expected_outcome}\n"
-		f"Detailed instructions: {frappe.utils.strip_html(doc.detailed_instructions or '')}\n\nDocument corpus:\n{extracted[:50000]}"
-	)
-	try:
-		return invoke_ai_gateway(
-			use_case="Client Work Intake Analysis",
-			prompt_text=prompt,
-			client_id=doc.client,
-			provider=provider,
-			model=model,
-			prompt_version=None,
-			is_high_risk=0,
-			source_corpus=extracted[:50000],
-		), None
-	except Exception as exc:
-		return None, _("Governed AI analysis failed and the intake was routed to Operations Review: {0}").format(str(exc)[:300])
-
-
-def _estimation_profile_with_ai(doc, extracted, document_count, word_count, provider=None, model=None):
-	"""Ask governed AI for observable factors; ERP remains the pricing authority."""
-	if not cint(_setting("enable_ai_intake_analysis", 0)):
-		return None, "AI intake analysis is disabled; using the standard formula."
-	if not extracted.strip():
-		return None, "No text could be extracted; using the standard formula."
-	from lex.ai_gateway import invoke_ai_gateway
-
-	if not model and not provider and frappe.db.exists("DocType", "LPO LexPoint Settings"):
-		default_ai_model = frappe.db.get_single_value("LPO LexPoint Settings", "default_ai_model")
-		if default_ai_model:
-			reg = frappe.db.get_value("LPO AI Model Registry", default_ai_model, ["provider", "model_id"], as_dict=True)
-			if reg:
-				provider = reg.provider
-				model = reg.model_id
-
-	prompt = (
-		"You are the evidence-classification component of a governed legal-services estimation system. "
-		"Do not calculate LexPoints, price, margin, or make a final commercial decision. Classify only "
-		"observable scope factors grounded in the supplied corpus. Respond with ONLY one JSON object "
-		"(no prose or markdown) with this exact key structure: "
-		'{"document_type":"", "document_type_confidence":0, "alternative_matches":[], '
-		'"practice_modules":[], "recommended_service":"", "legal_domain":"", "jurisdiction":"", '
-		'"jurisdiction_confidence":0, "language":"", "ocr_quality":"Good|Moderate|Low", '
-		'"content_form":"Typed|Handwritten|Mixed|Unknown", "has_tables":false, "has_images":false, '
-		'"has_signatures":false, "has_annexures":false, "complexity_score":1, '
-		'"risk_level":"Low|Medium|High|Critical", "reviewer_level":"Junior Associate|Senior Associate|Subject Matter Expert|Partner|Mixed Team", '
-		'"task_count":1, "confidence":0, "requires_human_review":false, "explanation_factors":[]}.\n\n'
-		f"Service type: {doc.service_type}\nJurisdiction: {doc.jurisdiction}\nPriority: {doc.priority}\n"
-		f"Document count: {document_count}\nApproximate word count: {word_count}\n"
-		f"Expected outcome: {doc.expected_outcome}\n"
-		f"Detailed instructions: {frappe.utils.strip_html(doc.detailed_instructions or '')}\n\n"
-		f"Document corpus:\n{extracted[:50000]}"
-	)
-	try:
-		with _cost_estimation_gateway_call():
-			result = invoke_ai_gateway(
-				use_case="Client Work Intake LexPoint Estimation",
-				prompt_text=prompt,
-				client_id=doc.client,
-				provider=provider,
-				model=model,
-				prompt_version=None,
-				is_high_risk=0,
-				source_corpus=extracted[:50000],
+	total_pages = 0
+	pdf_count = 0
+	for row in files:
+		if not str(row.file_name or "").lower().endswith(".pdf"):
+			continue
+		try:
+			content = frappe.get_doc("File", row.name).get_content()
+			if isinstance(content, str):
+				content = content.encode("utf-8")
+			pages = len(PdfReader(io.BytesIO(content)).pages)
+		except Exception as exc:
+			frappe.throw(
+				_("The source PDF {0} could not be read for native page counting: {1}").format(
+					row.file_name, str(exc)[:200]
+				),
+				frappe.ValidationError,
 			)
-	except Exception as exc:
-		return None, f"AI classification failed; using the governed deterministic profile: {str(exc)[:300]}"
-
-	parsed = _parse_ai_json_object(result.get("response_text") or "")
-	if not parsed or not parsed.get("recommended_service") or not cint(parsed.get("complexity_score")):
-		return None, "AI response did not contain a valid classification profile; using the governed deterministic profile."
-	for key in ("confidence", "document_type_confidence", "jurisdiction_confidence"):
-		value = flt(parsed.get(key))
-		if 0 < value <= 1:
-			value *= 100
-		parsed[key] = max(0, min(100, value))
-	# File/page/document volume and the catalogue billing measure are objective
-	# inputs; the model may classify work but cannot alter those price drivers.
-	parsed.pop("volume", None)
-	parsed.pop("billing_measure", None)
-	parsed["ai_execution"] = result.get("ai_execution")
-	parsed["provider"] = result.get("provider")
-	parsed["model"] = result.get("model")
-	parsed["credential_name"] = result.get("credential_name")
-	parsed["requires_human_review"] = bool(
-		cint(parsed.get("requires_human_review")) or result.get("requires_human_review")
-	)
-	return parsed, None
-
-
-def _parse_ai_json_object(text):
-	text = (text or "").strip()
-	if not text:
-		return None
-	try:
-		return json.loads(text)
-	except (ValueError, TypeError):
-		pass
-	match = re.search(r"\{.*\}", text, re.DOTALL)
-	if not match:
-		return None
-	try:
-		return json.loads(match.group(0))
-	except (ValueError, TypeError):
-		return None
-
-
-@frappe.whitelist()
-def apply_document_estimate(estimate: str):
-	"""Apply editable Operations values to the controlled quote and re-route approval."""
-	_require_internal()
-	estimate_doc = frappe.get_doc("LPO AI Document Estimate", estimate)
-	intake = frappe.get_doc("Lexocrates Work Intake", estimate_doc.work_intake)
-	if intake.ai_document_estimate != estimate_doc.name or estimate_doc.status == "Superseded":
-		frappe.throw(_("Only the current estimate version can be applied."), frappe.ValidationError)
-	if intake.funding_status in {"Payment Pending", "Funded"} or intake.status == "Matter Confirmed":
-		frappe.throw(_("The estimate is locked after payment or funding starts."), frappe.PermissionError)
-	return issue_quote(
-		intake=intake.name,
-		required_lexpoints=cint(estimate_doc.reviewed_lexpoints),
-		quoted_amount=flt(estimate_doc.reviewed_amount, 2),
-		delivery_timeline_hours=cint(estimate_doc.reviewed_delivery_hours),
-		scope_summary=estimate_doc.reviewed_scope,
-		review_notes=estimate_doc.review_notes,
-	)
-
-
-def _create_analysis_estimate(doc, *, files, extracted, word_count, ai_result, estimation, ai_model_registry: str | None = None):
-	previous_name = doc.get("ai_document_estimate")
-	if previous_name and frappe.db.exists("LPO AI Document Estimate", previous_name):
-		previous = frappe.get_doc("LPO AI Document Estimate", previous_name)
-		if previous.status != "Activated":
-			with _estimate_service_writes():
-				previous.status = "Superseded"
-				previous.save(ignore_permissions=True)
-	version = cint(
-		frappe.db.sql(
-			"select coalesce(max(estimate_version), 0) from `tabLPO AI Document Estimate` where work_intake=%s",
-			doc.name,
-		)[0][0]
-	) + 1
-	manifest = [
-		{
-			"file": row.name,
-			"file_name": row.file_name,
-			"file_size": cint(row.file_size),
-			"scan_status": row.custom_lex_scan_status,
-		}
-		for row in files
-	]
-	reasoning = estimation.get("explanation") or ""
-	ai_execution = estimation.get("ai_execution") or ((ai_result or {}).get("ai_execution"))
-	execution_route = (
-		frappe.db.get_value("LPO AI Execution", ai_execution, ["provider", "model"], as_dict=True)
-		if ai_execution else None
-	) or {}
-	if not ai_model_registry and execution_route.get("model"):
-		ai_model_registry = frappe.db.get_value(
-			"LPO AI Model Registry",
-			{"model_id": execution_route.get("model"), "enabled": 1},
-			"name",
+		if pages <= 0:
+			frappe.throw(_("The source PDF {0} has no pages.").format(row.file_name), frappe.ValidationError)
+		pdf_count += 1
+		total_pages += pages
+	if not pdf_count:
+		frappe.throw(
+			_("Upload at least one clean PDF Job Document before estimating."),
+			frappe.ValidationError,
 		)
-	status = _estimate_status(doc)
-	values = {
-		"doctype": "LPO AI Document Estimate",
-		"estimate_title": f"{doc.intake_title} - Estimate v{version}",
-		"work_intake": doc.name,
-		"client": doc.client,
-		"portal_user": doc.portal_user,
-		"status": status,
-		"estimate_version": version,
-		"created_on": now_datetime(),
-		"document_count": doc.document_count,
-		"clean_document_count": doc.clean_document_count,
-		"page_count": estimation.get("page_count"),
-		"extracted_word_count": word_count,
-		"character_count": estimation.get("character_count"),
-		"file_size_bytes": estimation.get("file_size_bytes"),
-		"source_corpus_hash": hashlib.sha256((extracted or "").encode("utf-8")).hexdigest(),
-		"document_manifest_json": json.dumps(manifest, sort_keys=True, separators=(",", ":")),
-		"primary_language": estimation.get("primary_language"),
-		"ocr_quality": estimation.get("ocr_quality"),
-		"content_form": estimation.get("content_form"),
-		"has_tables": estimation.get("has_tables"),
-		"has_images": estimation.get("has_images"),
-		"has_signatures": estimation.get("has_signatures"),
-		"has_annexures": estimation.get("has_annexures"),
-		"analysis_status": doc.analysis_status,
-		"analysis_confidence": doc.analysis_confidence,
-		"low_confidence": doc.low_confidence,
-		"ai_model": ai_model_registry,
-		"analysis_provider": execution_route.get("provider") or ("Formula Engine" if not ai_execution else None),
-		"analysis_model": execution_route.get("model"),
-		"ai_execution": ai_execution,
-		"analysis_summary": doc.analysis_summary,
-		"ai_reasoning": reasoning,
-		"detected_document_type": estimation.get("detected_document_type"),
-		"document_type_confidence": estimation.get("document_type_confidence"),
-		"alternative_matches": json.dumps(estimation.get("alternative_matches") or [], separators=(",", ":")),
-		"practice_module": estimation.get("practice_module"),
-		"recommended_service": estimation.get("service_code"),
-		"legal_domain": estimation.get("legal_domain"),
-		"detected_jurisdiction": estimation.get("detected_jurisdiction"),
-		"jurisdiction_confidence": estimation.get("jurisdiction_confidence"),
-		"complexity_score": estimation.get("complexity_score"),
-		"complexity_classification": estimation.get("complexity_classification"),
-		"risk_level": estimation.get("risk_level"),
-		"reviewer_level": estimation.get("reviewer_level"),
-		"formula_version": estimation.get("formula_version"),
-		"billing_measure": estimation.get("billing_measure"),
-		"estimated_volume": estimation.get("volume"),
-		"task_count": estimation.get("task_count"),
-		"base_quantity": estimation.get("base_quantity"),
-		"base_lexpoints": estimation.get("base_lexpoints"),
-		"billable_units": estimation.get("billable_units"),
-		"junior_hours": estimation.get("junior_hours"),
-		"senior_hours": estimation.get("senior_hours"),
-		"partner_hours": estimation.get("partner_hours"),
-		"normal_sla_hours": estimation.get("normal_sla_hours"),
-		"fast_track_sla_hours": estimation.get("fast_track_sla_hours"),
-		"express_sla_hours": estimation.get("express_sla_hours"),
-		"expected_completion": estimation.get("expected_completion"),
-		"factor_breakdown_json": json.dumps(estimation.get("factor_breakdown") or {}, sort_keys=True, separators=(",", ":")),
-		"explanation": estimation.get("explanation"),
-		"estimate_source": doc.estimate_method,
-		"proposed_lexpoints": doc.required_lexpoints,
-		"proposed_amount": doc.quoted_amount,
-		"currency": doc.currency,
-		"proposed_delivery_hours": doc.delivery_timeline_hours,
-		"proposed_scope": doc.scope_summary,
-		"reviewed_lexpoints": doc.required_lexpoints,
-		"reviewed_amount": doc.quoted_amount,
-		"reviewed_delivery_hours": doc.delivery_timeline_hours,
-		"reviewed_scope": doc.scope_summary,
-		"approval_status": doc.pricing_approval_status,
-		"applied_to_intake_on": now_datetime(),
-	}
-	with _estimate_service_writes():
-		return frappe.get_doc(values).insert(ignore_permissions=True)
+	return total_pages
 
 
-def _sync_estimate_after_quote(doc):
-	name = doc.get("ai_document_estimate")
-	if name and frappe.db.exists("LPO AI Document Estimate", name):
-		estimate = frappe.get_doc("LPO AI Document Estimate", name)
-	else:
-		version = cint(
-			frappe.db.sql(
-				"select coalesce(max(estimate_version), 0) from `tabLPO AI Document Estimate` where work_intake=%s",
-				doc.name,
-			)[0][0]
-		) + 1
-		with _estimate_service_writes():
-			estimate = frappe.get_doc({
-				"doctype": "LPO AI Document Estimate",
-				"estimate_title": f"{doc.intake_title} - Manual Estimate v{version}",
-				"work_intake": doc.name,
-				"client": doc.client,
-				"portal_user": doc.portal_user,
-				"status": _estimate_status(doc),
-				"estimate_version": version,
-				"created_on": now_datetime(),
-				"document_count": doc.document_count,
-				"clean_document_count": doc.clean_document_count,
-				"extracted_word_count": len((doc.extracted_text or "").split()),
-				"source_corpus_hash": hashlib.sha256((doc.extracted_text or "").encode("utf-8")).hexdigest(),
-				"document_manifest_json": "[]",
-				"analysis_status": doc.analysis_status,
-				"analysis_confidence": doc.analysis_confidence,
-				"low_confidence": doc.low_confidence,
-				"analysis_provider": doc.analysis_provider,
-				"ai_execution": doc.ai_execution,
-				"analysis_summary": doc.analysis_summary,
-				"estimate_source": "Manual (Operations)",
-				"proposed_lexpoints": doc.required_lexpoints,
-				"proposed_amount": doc.quoted_amount,
-				"currency": doc.currency,
-				"proposed_delivery_hours": doc.delivery_timeline_hours,
-				"proposed_scope": doc.scope_summary,
-				"reviewed_lexpoints": doc.required_lexpoints,
-				"reviewed_amount": doc.quoted_amount,
-				"reviewed_delivery_hours": doc.delivery_timeline_hours,
-				"reviewed_scope": doc.scope_summary,
-				"approval_status": doc.pricing_approval_status,
-			}).insert(ignore_permissions=True)
-		with _service_writes():
-			doc.reload()
-			doc.ai_estimate_reference_doctype = "LPO AI Document Estimate"
-			doc.ai_document_estimate = estimate.name
-			doc.save(ignore_permissions=True)
-	with _estimate_service_writes():
-		estimate.reviewed_lexpoints = doc.required_lexpoints
-		estimate.reviewed_amount = doc.quoted_amount
-		estimate.reviewed_delivery_hours = doc.delivery_timeline_hours
-		estimate.reviewed_scope = doc.scope_summary
-		estimate.review_notes = doc.operations_review_notes
-		estimate.reviewed_by = frappe.session.user
-		estimate.reviewed_on = now_datetime()
-		estimate.status = _estimate_status(doc)
-		estimate.approval_status = doc.pricing_approval_status
-		estimate.applied_to_intake_on = now_datetime()
-		estimate.save(ignore_permissions=True)
-	return estimate
+def _selected_pricing_service(doc) -> str:
+	"""Resolve and validate the explicitly stored fixed-rate service."""
+	from lex.instant_estimator import FIXED_SERVICE_RATES_CAD
+
+	service = str(
+		doc.get("selected_pricing_service")
+		or FIXED_PRICING_SERVICE_BY_INTAKE_TYPE.get(doc.service_type)
+		or ""
+	).strip()
+	if service not in FIXED_SERVICE_RATES_CAD:
+		frappe.throw(_("Select a valid fixed-rate service before estimating."), frappe.ValidationError)
+	return service
 
 
-def _sync_estimate_approval(doc, decision, notes=None):
-	name = doc.get("ai_document_estimate")
-	if not name or not frappe.db.exists("LPO AI Document Estimate", name):
-		return
-	estimate = frappe.get_doc("LPO AI Document Estimate", name)
-	with _estimate_service_writes():
-		estimate.status = "Approved" if decision == "Approved" else "Rejected"
-		estimate.approval_status = decision
-		estimate.approved_by = frappe.session.user
-		estimate.approved_on = now_datetime()
-		estimate.rejection_reason = (notes or "").strip() or None
-		estimate.save(ignore_permissions=True)
-
-
-def _estimate_status(doc):
-	if doc.status == "Matter Confirmed":
-		return "Activated"
-	if doc.pricing_approval_status == "Pending CEO Approval":
-		return "Pending CEO Approval"
-	if doc.pricing_approval_status == "Approved" or (
-		doc.pricing_approval_status == "Not Required" and doc.quote_status == "Ready"
-	):
-		return "Approved"
-	if doc.pricing_approval_status == "Rejected":
-		return "Rejected"
-	return "Operations Review"
-
-
-class _estimate_service_writes:
-	def __enter__(self):
-		self.previous = getattr(frappe.flags, "lexocrates_estimate_service", False)
-		frappe.flags.lexocrates_estimate_service = True
-
-	def __exit__(self, exc_type, exc_value, traceback):
-		frappe.flags.lexocrates_estimate_service = self.previous
-
-
-def _activate_document_estimate(doc, matter: str, job: str):
-	name = doc.get("ai_document_estimate")
-	if not name or not frappe.db.exists("LPO AI Document Estimate", name):
-		return
-	estimate = frappe.get_doc("LPO AI Document Estimate", name)
-	with _estimate_service_writes():
-		estimate.matter = matter
-		estimate.job = job
-		estimate.status = "Activated"
-		estimate.save(ignore_permissions=True)
-
-
-def _route_quote_for_approval(doc, *, ai_profile=None):
-	"""Auto-release only estimates covered by the CEO-approved AI policy."""
-	policy = _eligible_ai_auto_approval(doc, ai_profile)
-	if policy:
-		doc.pricing_approval_status = "Approved"
-		doc.pricing_approved_by = policy["authorized_by"]
-		doc.pricing_approved_on = now_datetime()
-		doc.pricing_rejection_reason = None
-		doc.quote_status = "Ready"
-		doc.status = "Quote Ready"
-		return True
-
-	doc.pricing_approval_status = "Pending CEO Approval"
-	doc.pricing_approved_by = None
-	doc.pricing_approved_on = None
-	doc.pricing_rejection_reason = None
-	doc.quote_status = "Pending CEO Approval"
-	doc.status = "Pending CEO Approval"
-	return False
-
-
-def _eligible_ai_auto_approval(doc, ai_profile):
-	"""Return the active CEO policy only when all immutable safety gates pass."""
-	if not cint(_setting("auto_approve_ai_pricing", 0)):
-		return None
-	if not cint(_setting("enable_ai_intake_analysis", 0)):
-		return None
-	if doc.estimate_method != "AI-Assisted Formula" or not ai_profile or cint(doc.low_confidence):
-		return None
-	if cint(ai_profile.get("requires_human_review")):
-		return None
-	authorized_by = _setting("auto_approve_ai_pricing_authorized_by")
-	authorized_on = _setting("auto_approve_ai_pricing_authorized_on")
-	if not authorized_by or not authorized_on:
-		return None
-	if authorized_by != "Administrator" and "CEO" not in frappe.get_roles(authorized_by):
-		return None
-	if flt(doc.analysis_confidence) < flt(_setting("low_confidence_threshold", 72)):
-		return None
-	execution_name = ai_profile.get("ai_execution") or doc.ai_execution
-	if not execution_name:
-		return None
-	execution = frappe.db.get_value(
-		"LPO AI Execution",
-		execution_name,
-		["status", "evaluation_status", "provider", "model", "api_credential"],
-		as_dict=True,
+def _native_pdf_scope_summary(doc, selected_service: str, page_count: int) -> str:
+	return (
+		f"{selected_service}; {page_count} exact native PDF page(s). "
+		f"Requested outcome: {doc.expected_outcome}. "
+		f"Client instructions: {frappe.utils.strip_html(doc.detailed_instructions or doc.preliminary_details or '')[:1200]}"
 	)
-	if not execution or execution.status != "Completed" or execution.evaluation_status != "Passed":
-		return None
-	if not execution.provider or not execution.model:
-		return None
-	return {
-		"authorized_by": authorized_by,
-		"authorized_on": authorized_on,
-		"execution": execution_name,
-		"provider": execution.provider,
-		"model": execution.model,
-		"credential_name": execution.api_credential,
-	}
 
 
 def _notify_ceo_of_pending_pricing(doc):
@@ -1892,13 +1341,13 @@ def _notify_ceo_of_pending_pricing(doc):
 	message = _(
 		"<p>A new quote is ready for your approval before the client can pay.</p>"
 		"<p><b>Matter:</b> {0}<br><b>Client:</b> {1}<br><b>Service type:</b> {2}<br>"
-		"<b>Estimated price:</b> {3} {4}<br><b>Required LexPoints:</b> {5}<br>"
+		"<b>Estimated price:</b> {3} {4}<br><b>Legal Capacity required:</b> {5} {4}<br>"
 		"<b>Delivery timeline:</b> {6} hours<br><b>Estimate method:</b> {7}</p>"
 		"<p><a href=\"{8}\">Open in Lexocrates Desk to approve or reject</a></p>"
 	).format(
 		frappe.utils.escape_html(doc.intake_title), doc.client, doc.service_type,
-		doc.quoted_amount, doc.currency, doc.required_lexpoints, doc.delivery_timeline_hours,
-		doc.estimate_method or "Formula", link,
+		doc.quoted_amount, doc.currency, _required_legal_capacity(doc), doc.delivery_timeline_hours,
+		doc.estimate_method or "Native PDF Fixed Rate", link,
 	)
 	for user in ceo_users:
 		frappe.get_doc({
@@ -1919,7 +1368,7 @@ def _notify_ceo_of_pending_pricing(doc):
 	_audit(
 		doc,
 		"CEO Pricing Approval Requested",
-		{"quoted_amount": doc.quoted_amount, "required_lexpoints": doc.required_lexpoints, "notified": ceo_users},
+		{"quoted_amount": doc.quoted_amount, "required_legal_capacity": _required_legal_capacity(doc), "notified": ceo_users},
 	)
 	_post_ceo_approval_card(doc)
 
@@ -1961,7 +1410,7 @@ def _post_ceo_approval_card(doc):
 			f"- **Client:** {client_name} ({doc.client}) | **Submitted by:** {doc.submitted_by or 'Client'}\n"
 			f"- **Service Type:** {doc.service_type} | **Jurisdiction:** {doc.jurisdiction or 'N/A'}\n"
 			f"- **Estimated Price:** **{flt(doc.quoted_amount):,.2f} {doc.currency}**\n"
-			f"- **Required LexPoints:** **{cint(doc.required_lexpoints)} LexPoints**\n"
+			f"- **Legal Capacity Required:** **{flt(_required_legal_capacity(doc)):,.2f} {doc.currency}**\n"
 			f"- **Delivery Timeline:** **{cint(doc.delivery_timeline_hours)} hours**\n"
 			f"- **Estimate Method:** {doc.estimate_method or 'Formula'}\n"
 			f"{instructions_snippet}\n\n"
@@ -1999,7 +1448,7 @@ def _post_ceo_approval_decision(doc, decision: str, notes: str | None = None):
 		if decision == "Approved":
 			msg = (
 				f"✅ **Matter Pricing Approved** for [{doc.intake_title}]({desk_url}) by **{frappe.session.user}**!\n"
-				f"- **Approved Amount:** **{flt(doc.quoted_amount):,.2f} {doc.currency}** ({cint(doc.required_lexpoints)} LexPoints)\n"
+				f"- **Approved Amount:** **{flt(doc.quoted_amount):,.2f} {doc.currency}**\n"
 				f"- **Delivery Timeline:** **{cint(doc.delivery_timeline_hours)} hours**\n"
 				f"Client payment gateway (Razorpay / LexPack) is now **unlocked** on Client Portal."
 			)
@@ -2039,7 +1488,7 @@ def _post_ceo_payment_confirmation(doc):
 		msg = (
 			f"🎉 **Work Funded & Activated** for [{doc.intake_title}]({desk_url})!\n"
 			f"- **Funding Route:** {doc.funding_route}\n"
-			f"- **Amount:** **{flt(doc.quoted_amount):,.2f} {doc.currency}** ({cint(doc.required_lexpoints)} LexPoints)\n"
+			f"- **Amount:** **{flt(doc.quoted_amount):,.2f} {doc.currency}**\n"
 			f"{payment_id_info}{invoice_info}{entry_info}"
 			f"- **Operational SLA:** Started on `{doc.sla_started_on}` | Delivery due `{doc.delivery_due_on}`\n"
 			f"Job **{doc.job}** under Matter **{doc.matter}** is now **Active**."
@@ -2111,50 +1560,29 @@ def _notify_client_quote_ready(doc):
 		frappe.log_error(frappe.get_traceback(), f"Client quote-ready email failed for {doc.name}")
 
 
-def _calculate_estimate(doc, word_count, document_count):
-	points = BASE_POINTS.get(doc.service_type, 40)
-	points += max(0, math.ceil(word_count / 750) - 1) * 4
-	points += max(0, document_count - 1) * 5
-	if doc.priority == "High":
-		points = math.ceil(points * 1.15)
-	elif doc.priority == "Urgent":
-		points = math.ceil(points * 1.35)
-	if "," in (doc.jurisdiction or ""):
-		points += 8
-	points = max(10, int(math.ceil(points / 5) * 5))
-	hours = BASE_HOURS.get(doc.service_type, 72)
-	if word_count > 10000:
-		hours += 24
-	if document_count > 5:
-		hours += 24
-	if doc.priority == "Urgent":
-		hours = max(12, math.ceil(hours * 0.6))
-	elif doc.priority == "High":
-		hours = max(18, math.ceil(hours * 0.8))
-	return points, hours
+def _required_legal_capacity(doc) -> float:
+	return flt(doc.get("required_legal_capacity") or doc.get("quoted_amount") or 0, 2)
 
 
-def _scope_summary(doc, document_count, word_count):
-	return (
-		f"{doc.service_type} for {doc.jurisdiction}. Review {document_count} client document(s) "
-		f"({word_count:,} extracted words) to deliver: {doc.expected_outcome}. "
-		f"Client instructions: {frappe.utils.strip_html(doc.detailed_instructions or doc.preliminary_details or '')[:1200]}"
-	)
-
-
-def _recommend_plan(client, required_points):
-	available = _available_lexpoints(client)
-	if available >= required_points:
+def _recommend_plan(client, required_capacity, currency: str = "CAD"):
+	available = _available_legal_capacity(client)
+	if available >= required_capacity:
 		return None
-	shortfall = required_points - available
+	shortfall = required_capacity - available
 	plans = frappe.get_all(
 		"LexPack Plan",
-		filters={"status": "Active", "self_service": 1, "enterprise_custom": 0, "lexpoints": [">=", shortfall]},
-		fields=["name", "lexpoints", "price", "display_order"],
-		order_by="lexpoints asc, display_order asc",
-		limit_page_length=1,
+		filters={"status": "Active", "self_service": 1, "enterprise_custom": 0},
+		fields=["name", "plan_code", "currency", "price", "display_order", "discount_percent"],
+		order_by="display_order asc",
+		limit_page_length=50,
 	)
-	return plans[0].name if plans else None
+	from lex.lexpack import _checkout_pricing_for_plan
+	eligible = []
+	for plan in plans:
+		checkout = _checkout_pricing_for_plan(plan, requested_currency=currency)
+		if flt(checkout["legal_capacity_amount"]) >= shortfall and flt(checkout["price"]) <= required_capacity:
+			eligible.append((flt(checkout["price"]), cint(plan.display_order), plan.name))
+	return min(eligible)[2] if eligible else None
 
 
 def _validate_ready_quote(doc):
@@ -2238,8 +1666,30 @@ def _checkout_payload(doc, actor, settings, payload):
 	}
 
 
-def _available_lexpoints(client):
-	return flt(frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "current_balance") or 0)
+def _available_legal_capacity(client):
+	wallet = frappe.db.get_value(
+		"Lexocrates Client Wallet", {"client": client}, ["current_balance", "capacity_currency"], as_dict=True
+	) or {}
+	# Legacy points must never be silently displayed or consumed as currency capacity.
+	if flt(wallet.get("current_balance")) and not wallet.get("capacity_currency"):
+		return 0
+	return flt(wallet.get("current_balance") or 0)
+
+
+def _validate_legal_capacity_currency(client: str, currency: str):
+	wallet = frappe.db.get_value(
+		"Lexocrates Client Wallet", {"client": client}, ["current_balance", "capacity_currency"], as_dict=True
+	) or {}
+	if flt(wallet.get("current_balance")) and not wallet.get("capacity_currency"):
+		frappe.throw(
+			_("This legacy wallet must be reconciled to Legal Capacity before it can fund work."),
+			frappe.ValidationError,
+		)
+	if wallet.get("capacity_currency") and wallet.capacity_currency != currency:
+		frappe.throw(
+			_("Available Legal Capacity is held in {0}, but this quote is in {1}.").format(wallet.capacity_currency, currency),
+			frappe.ValidationError,
+		)
 
 
 def _practice_area(service_type):
@@ -2335,7 +1785,7 @@ def _require_system_job_estimation_access(job: str):
 def _require_funding_authority(actor, route):
 	if _is_internal():
 		return
-	if route in {"Existing LexPoints", "Recommended LexPack"} and not (actor and actor.lexpack_purchase_access):
+	if route in {"Existing Legal Capacity", "Recommended LexPack"} and not (actor and actor.lexpack_purchase_access):
 		frappe.throw(_("LexPack purchase authority is required."), frappe.PermissionError)
 	if route == "Direct Quote" and not (actor and actor.billing_access):
 		frappe.throw(_("Billing access is required for direct quote payment."), frappe.PermissionError)
@@ -2379,17 +1829,6 @@ class _portal_service_writes:
 		frappe.flags.lexocrates_portal_service = self.previous
 
 
-class _cost_estimation_gateway_call:
-	"""Unforgeable request-local capability used only by the intake service."""
-
-	def __enter__(self):
-		self.previous = getattr(frappe.flags, "lexocrates_client_cost_estimation", False)
-		frappe.flags.lexocrates_client_cost_estimation = True
-
-	def __exit__(self, exc_type, exc_value, traceback):
-		frappe.flags.lexocrates_client_cost_estimation = self.previous
-
-
 def _set_values(doc, **values):
 	with _service_writes():
 		doc.update(values)
@@ -2424,28 +1863,4 @@ def _funding_result(doc, duplicate=False):
 		"delivery_due_on": doc.delivery_due_on,
 		"duplicate": duplicate,
 	}
-
-
-@frappe.whitelist()
-def reestimate_intake_with_model(intake_name: str, model_registry_name: str | None = None, current_estimate_name: str | None = None) -> dict:
-	"""Re-run AI intake analysis and estimation using a chosen LPO AI Model Registry model."""
-	_require_internal()
-	doc, actor = _require_intake_access(intake_name)
-	provider = None
-	model = None
-	if model_registry_name:
-		model_row = frappe.db.get_value("LPO AI Model Registry", model_registry_name, ["provider", "model_id"], as_dict=True)
-		if not model_row:
-			model_row = frappe.db.get_value("LPO AI Model Registry", {"model_id": model_registry_name, "enabled": 1}, ["provider", "model_id"], as_dict=True)
-		if model_row:
-			provider = model_row.provider
-			model = model_row.model_id
-	return _process_documents(
-		doc,
-		actor,
-		estimate_only=False,
-		model_override=model,
-		provider_override=provider,
-		ai_model_registry=model_registry_name,
-	)
 

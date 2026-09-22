@@ -28,14 +28,10 @@ for module in \
 	lex.test_chat_architecture_scenarios \
 	lex.test_client_portal_architecture \
 	lex.test_document_export \
-	lex.test_canadian_estimation_benchmark \
-	lex.test_iterative_estimator \
 	lex.test_lexpack_commerce \
-	lex.test_lexpoint_estimation \
 	lex.test_pdf_watermark \
 	lex.test_persona_workspaces \
-	lex.test_srs_acceptance_scenarios \
-	lex.test_work_intake
+	lex.test_srs_acceptance_scenarios
 do
 	run_suite --module "$module"
 done

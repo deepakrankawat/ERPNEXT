@@ -35,16 +35,6 @@
   "conflict_matches_html",
   "billing_section",
   "billing_method",
-  "quoted_amount",
-  "quote_status",
-  "quote_approved_by",
-  "quote_approved_on",
-  "billing_column_break",
-  "lexpoints_estimated",
-  "lexpoints_reserved",
-  "lexpoints_consumed",
-  "funding_status",
-  "funding_transaction",
   "execution_section",
   "workflow_version_snapshot",
   "sop_version_snapshot",
@@ -252,86 +242,17 @@
   {
    "fieldname": "billing_section",
    "fieldtype": "Section Break",
-   "label": "Matter Billing"
+   "label": "Job-Based Commercial Handling"
   },
   {
-   "default": "Quoted Price",
+   "default": "Job Based",
    "fieldname": "billing_method",
    "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Billing Method",
-   "options": "Job Based\nQuoted Price\nLexPack",
+   "label": "Pricing and Funding",
+   "options": "Job Based",
+   "read_only": 1,
    "reqd": 1
-  },
-  {
-   "depends_on": "eval:doc.billing_method=='Quoted Price'",
-   "fieldname": "quoted_amount",
-   "fieldtype": "Currency",
-   "label": "Quoted Amount",
-   "non_negative": 1
-  },
-  {
-   "default": "Pending Client Approval",
-   "depends_on": "eval:doc.billing_method=='Quoted Price'",
-   "fieldname": "quote_status",
-   "fieldtype": "Select",
-   "label": "Quote Status",
-   "options": "Not Required\nDraft\nPending Client Approval\nApproved\nRejected",
-   "read_only": 1
-  },
-  {
-   "fieldname": "quote_approved_by",
-   "fieldtype": "Link",
-   "label": "Quote Decision By",
-   "options": "User",
-   "read_only": 1
-  },
-  {
-   "fieldname": "quote_approved_on",
-   "fieldtype": "Datetime",
-   "label": "Quote Decision On",
-   "read_only": 1
-  },
-  {
-   "fieldname": "billing_column_break",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:doc.billing_method=='LexPack'",
-   "fieldname": "lexpoints_estimated",
-   "fieldtype": "Float",
-   "label": "Estimated LexPoints",
-   "non_negative": 1
-  },
-  {
-   "fieldname": "lexpoints_reserved",
-   "fieldtype": "Float",
-   "label": "Reserved LexPoints",
-   "non_negative": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "lexpoints_consumed",
-   "fieldtype": "Float",
-   "label": "Consumed LexPoints",
-   "non_negative": 1,
-   "read_only": 1
-  },
-  {
-   "default": "Pending",
-   "depends_on": "eval:doc.billing_method=='LexPack'",
-   "fieldname": "funding_status",
-   "fieldtype": "Select",
-   "label": "Funding Status",
-   "options": "Not Required\nPending\nFunded\nInsufficient\nReleased",
-   "read_only": 1
-  },
-  {
-   "fieldname": "funding_transaction",
-   "fieldtype": "Link",
-   "label": "Funding Reservation",
-   "options": "Lexocrates Wallet Transaction",
-   "read_only": 1
   },
   {
    "fieldname": "execution_section",

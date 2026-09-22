@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, get_datetime, now_datetime, nowdate
+from frappe.utils import add_days, cint, flt, get_datetime, now_datetime, nowdate
 
 from lex.client_access import (
 	can_approve_deliverables,
@@ -39,12 +39,21 @@ def get_portal_dashboard():
 		fields=[
 			"name", "job_title", "engagement", "job_status", "priority", "due_date", "modified",
 			"job_type", "delivery_document", "client_approval_status", "client_approved_on",
-			"work_intake", "estimate_status", "quote_version", "required_lexpoints", "quoted_amount",
+			"work_intake", "estimate_status", "quote_version", "required_legal_capacity", "quoted_amount",
 			"currency", "funding_route", "funding_status", "sla_started_on", "delivery_due_on",
 		],
 		order_by="due_date asc",
 		limit_page_length=100,
 	)
+	matter_titles = {row.name: row.matter_title for row in matters}
+	for job in jobs:
+		# Keep the document names internally for access checks, but return the
+		# readable Matter title for all client-facing labels.
+		job.matter_title = matter_titles.get(job.engagement) or _("Matter")
+	job_titles = {row.name: row.job_title for row in jobs}
+	for intake in intakes:
+		intake.matter_title = matter_titles.get(intake.get("matter")) or _("Matter pending")
+		intake.job_title = job_titles.get(intake.get("job")) or _("Draft Job pending")
 	for job in jobs:
 		# The canonical final deliverable is intentionally unavailable until the
 		# operational Job reaches Completed.  Ready-for-Delivery and Delivered are
@@ -65,6 +74,8 @@ def get_portal_dashboard():
 		)
 	open_jobs = sum(row.job_status not in {"Delivered", "Completed", "Cancelled"} for row in jobs)
 	wallet, transactions = _wallet_data(portal_user)
+	for transaction in transactions:
+		transaction.matter_title = matter_titles.get(transaction.matter) or ""
 	from lex.lexpack import get_lexpack_portal_data
 
 	lexpack = get_lexpack_portal_data(portal_user)
@@ -110,7 +121,7 @@ def get_portal_dashboard():
 			"open_jobs": open_jobs,
 			"approvals": len(approvals),
 			"documents": len(documents),
-			"lexpoints": wallet.current_balance if wallet else None,
+			"legal_capacity": wallet.current_balance if wallet else None,
 		},
 		"onboarding": _onboarding(intakes, matters, jobs),
 		"intakes": intakes,
@@ -145,17 +156,24 @@ def _wallet_data(portal_user):
 		"Lexocrates Client Wallet",
 		{"client": portal_user.client},
 		[
-			"name", "status", "current_balance", "reserved_balance", "total_purchased", "total_topped_up",
-			"total_consumed", "current_pricing_tier", "rolling_12_month_spend", "bonus_points_earned",
+			"name", "status", "capacity_currency", "current_balance", "reserved_balance", "total_purchased", "total_topped_up",
+			"total_consumed", "current_pricing_tier", "rolling_12_month_spend",
 		],
 		as_dict=True,
 	)
 	transactions = []
 	if wallet:
+		wallet.requires_legal_capacity_reconciliation = bool(
+			not wallet.get("capacity_currency")
+			and any(flt(wallet.get(fieldname)) for fieldname in ("current_balance", "reserved_balance", "total_purchased", "total_consumed"))
+		)
 		transactions = frappe.get_all(
 			"Lexocrates Wallet Transaction",
 			filters={"wallet": wallet.name},
-			fields=["name", "transaction_type", "points", "posted_on", "matter", "available_balance_after"],
+			fields=[
+				"name", "transaction_type", "currency", "legal_capacity_amount", "posted_on", "matter",
+				"available_balance_after",
+			],
 			order_by="posted_on desc",
 			limit_page_length=50,
 		)
@@ -312,7 +330,6 @@ def create_matter(
 	engagement_title: str | None = None,
 	matter_title: str | None = None,
 	billing_method: str = "Quoted Price",
-	lexpoints_estimated: float = 0,
 ):
 	_require_portal_user()
 	frappe.throw(
@@ -395,20 +412,20 @@ def generate_portal_report(report_name: str):
 		frappe.throw(_("This report is not enabled for your account."), frappe.PermissionError)
 	if report_name == "Matter Status Report":
 		rows = frappe.get_list(
-			"LPO Matter", fields=["name", "matter_title", "practice_area", "status", "end_date"],
+			"LPO Matter", fields=["matter_title", "practice_area", "status", "end_date"],
 			order_by="modified desc", limit_page_length=500,
 		)
-		columns = ["name", "matter_title", "practice_area", "status", "end_date"]
+		columns = ["matter_title", "practice_area", "status", "end_date"]
 	elif report_name == "Financial Summary":
 		rows = _invoices(portal_user.client)
-		columns = ["name", "posting_date", "due_date", "status", "currency", "grand_total", "outstanding_amount"]
+		columns = ["posting_date", "due_date", "status", "currency", "grand_total", "outstanding_amount"]
 	else:
 		rows = frappe.get_all(
 			"Lexocrates Portal Audit Event", filters={"client": portal_user.client},
-			fields=["event_timestamp", "action", "result", "object_type", "object_id", "user"],
+			fields=["event_timestamp", "action", "result", "object_type", "user"],
 			order_by="event_timestamp desc", limit_page_length=500,
 		)
-		columns = ["event_timestamp", "action", "result", "object_type", "object_id", "user"]
+		columns = ["event_timestamp", "action", "result", "object_type", "user"]
 	record_report_download(report_name)
 	return {"name": report_name, "columns": columns, "rows": rows}
 

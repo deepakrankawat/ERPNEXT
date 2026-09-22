@@ -24,17 +24,17 @@ class TestLexPackCommerce(FrappeTestCase):
 	def test_pdf_plan_catalog_is_prepaid_and_non_expiring(self):
 		plans = frappe.get_all(
 			"LexPack Plan",
-			fields=["name", "price", "lexpoints", "value_advantage", "no_expiry", "enterprise_custom"],
+			fields=["name", "discount_percent", "value_advantage", "no_expiry", "enterprise_custom"],
 			order_by="display_order asc",
 		)
 		self.assertEqual(
-			[(row.name, row.price, row.lexpoints, row.value_advantage) for row in plans],
+			[(row.name, row.discount_percent, row.value_advantage) for row in plans],
 			[
-				("STARTER", 299.0, 100, "Standard"),
-				("GROWTH", 899.0, 350, "Save 14%"),
-				("PROFESSIONAL", 1999.0, 900, "Save 26%"),
-				("BUSINESS", 3999.0, 2000, "Save 33%"),
-				("ENTERPRISE", 0.0, 0, "Custom Commercial Terms"),
+				("STARTER", 7.0, "7% savings"),
+				("GROWTH", 14.0, "14% savings"),
+				("PROFESSIONAL", 21.0, "21% savings"),
+				("BUSINESS", 28.0, "28% savings"),
+				("ENTERPRISE", 0.0, "Custom commercial terms"),
 			],
 		)
 		self.assertTrue(all(row.no_expiry for row in plans))
@@ -55,8 +55,7 @@ class TestLexPackCommerce(FrappeTestCase):
 					"currency": "USD",
 					"amount": 299,
 					"exchange_rate": 1,
-					"base_lexpoints": 100,
-					"total_lexpoints": 100,
+					"legal_capacity_amount": 321.51,
 				}
 			).insert(ignore_permissions=True)
 
@@ -116,7 +115,7 @@ class TestLexPackCommerce(FrappeTestCase):
 		self.assertIsNone(kwargs["json"])
 
 	def test_portal_catalog_uses_client_country_currency(self):
-		client = _make_client()
+		client = _make_client(default_currency="CAD")
 		if frappe.get_meta("Customer").has_field("custom_primary_jurisdiction"):
 			frappe.db.set_value("Customer", client, "custom_primary_jurisdiction", "Canada", update_modified=False)
 		user = _make_user()
@@ -129,11 +128,23 @@ class TestLexPackCommerce(FrappeTestCase):
 		self.assertEqual(data["selected_currency"], "CAD")
 		self.assertEqual(starter.currency, "CAD")
 		self.assertEqual(starter.price, 399)
+		self.assertEqual(len(data["currency_options"]), 1)
+		self.assertEqual(data["currency_options"][0]["code"], "CAD")
 		self.assertTrue(data["purchase_access"])
+
+	def test_checkout_currency_cannot_be_overridden_from_client_portal(self):
+		_configure_test_gateway(enabled=1)
+		client = _make_client(default_currency="CAD")
+		user = _make_user()
+		_make_portal_user(user.name, client, "Client Administrator")
+		frappe.set_user(user.name)
+
+		with self.assertRaises(frappe.ValidationError):
+			lexpack.create_razorpay_order("STARTER", currency="USD")
 
 	def test_direct_dashboard_razorpay_order_credits_wallet_after_capture(self):
 		_configure_test_gateway(enabled=1)
-		client = _make_client()
+		client = _make_client(default_currency="USD")
 		user = _make_user()
 		_make_portal_user(user.name, client, "Client Administrator")
 		frappe.set_user(user.name)
@@ -176,15 +187,16 @@ class TestLexPackCommerce(FrappeTestCase):
 		self.assertIsNone(order["work_intake"])
 		self.assertEqual(order["currency"], "USD")
 		self.assertEqual(result["status"], "Paid")
-		self.assertEqual(
-			frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "current_balance"),
-			100,
+		wallet = frappe.db.get_value(
+			"Lexocrates Client Wallet", {"client": client}, ["current_balance", "capacity_currency"], as_dict=True
 		)
+		self.assertEqual(wallet.current_balance, 321.51)
+		self.assertEqual(wallet.capacity_currency, "USD")
 
 	def test_failed_webhook_processing_is_auditable_and_idempotent(self):
 		_configure_test_gateway(enabled=1)
 		client = _make_client()
-		purchase = _service_purchase(client, "STARTER", 299, 100)
+		purchase = _service_purchase(client, "STARTER", 299, 321.51)
 		lexpack._set_purchase_values(purchase, razorpay_order_id="order_failed_webhook")
 		payload = {
 			"event": "payment.failed",
@@ -207,37 +219,39 @@ class TestLexPackCommerce(FrappeTestCase):
 		duplicate = lexpack.process_razorpay_webhook(payload, "event_failed_webhook")
 		self.assertEqual(duplicate["status"], "duplicate")
 
-	def test_fair_pricing_bonus_is_atomic_and_idempotent(self):
+	def test_wallet_is_single_currency_and_keeps_cent_precision(self):
 		client = _make_client()
 		_post_transaction(
 			client=client,
 			transaction_type="Purchase",
-			points=350,
-			idempotency_key=f"lexpack-test-base:{client}",
+			legal_capacity_amount=100.10,
+			currency="USD",
+			idempotency_key=f"legal-capacity-test-base:{client}",
 		)
-		purchase = _service_purchase(client, "GROWTH", 899, 350)
-		result = lexpack.recalculate_client_pricing(client, purchase.name)
-		self.assertEqual(result["tier_after"], "GROWTH")
-		self.assertEqual(result["bonus_points"], 30)
+		_post_transaction(
+			client=client,
+			transaction_type="Reservation",
+			legal_capacity_amount=50.05,
+			currency="USD",
+			idempotency_key=f"legal-capacity-reserve:{client}",
+		)
+		with self.assertRaises(frappe.ValidationError):
+			_post_transaction(
+				client=client,
+				transaction_type="Top-Up",
+				legal_capacity_amount=10,
+				currency="CAD",
+				idempotency_key=f"legal-capacity-wrong-currency:{client}",
+			)
 		wallet = frappe.db.get_value(
 			"Lexocrates Client Wallet",
 			{"client": client},
-			["current_balance", "current_pricing_tier", "rolling_12_month_spend", "bonus_points_earned"],
+			["current_balance", "reserved_balance", "capacity_currency"],
 			as_dict=True,
 		)
-		self.assertEqual(wallet.current_balance, 380)
-		self.assertEqual(wallet.current_pricing_tier, "GROWTH")
-		self.assertEqual(wallet.rolling_12_month_spend, 899)
-		self.assertEqual(wallet.bonus_points_earned, 30)
-		duplicate = lexpack.recalculate_client_pricing(client, purchase.name)
-		self.assertEqual(duplicate["bonus_points"], 0)
-		self.assertEqual(
-			frappe.db.count(
-				"Lexocrates Wallet Transaction",
-				{"idempotency_key": f"lexpack-fair-pricing:{client}:GROWTH"},
-			),
-			1,
-		)
+		self.assertEqual(wallet.current_balance, 50.05)
+		self.assertEqual(wallet.reserved_balance, 50.05)
+		self.assertEqual(wallet.capacity_currency, "USD")
 
 	def test_captured_payment_posts_sales_invoice_payment_entry_and_wallet(self):
 		company = frappe.db.get_value("Company", {"default_currency": "USD"}, "name")
@@ -264,8 +278,8 @@ class TestLexPackCommerce(FrappeTestCase):
 		set_encrypted_password("LexPack Settings", "LexPack Settings", "unit-test-key-secret", "key_secret")
 		set_encrypted_password("LexPack Settings", "LexPack Settings", "unit-test-webhook-secret", "webhook_secret")
 		frappe.clear_cache(doctype="LexPack Settings")
-		client = _make_client()
-		purchase = _service_purchase(client, "STARTER", 299, 100)
+		client = _make_client(default_currency="USD")
+		purchase = _service_purchase(client, "STARTER", 299, 321.51)
 		lexpack._set_purchase_values(purchase, razorpay_order_id="order_unit_lexpack")
 		result = lexpack._complete_purchase(
 			purchase,
@@ -284,7 +298,7 @@ class TestLexPackCommerce(FrappeTestCase):
 		self.assertEqual(frappe.db.get_value("Payment Entry", result["payment_entry"], "docstatus"), 1)
 		self.assertEqual(
 			frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "current_balance"),
-			100,
+			321.51,
 		)
 
 	def test_manual_executive_lexpack_approval_generates_invoice_and_credits_wallet(self):
@@ -305,13 +319,12 @@ class TestLexPackCommerce(FrappeTestCase):
 			},
 		)
 		frappe.clear_cache(doctype="LexPack Settings")
-		client = _make_client()
+		client = _make_client(default_currency="USD")
 		result = lexpack.manually_approve_lexpack_plan(
 			client=client,
 			plan="STARTER",
 			approval_reason="Custom Enterprise Manual Approval and Commercial SLA Agreement",
 			amount=299,
-			lexpoints=100,
 			create_payment_entry=True,
 		)
 		self.assertEqual(result["status"], "Paid")
@@ -325,7 +338,7 @@ class TestLexPackCommerce(FrappeTestCase):
 		self.assertEqual(purchase_doc.approval_reason, "Custom Enterprise Manual Approval and Commercial SLA Agreement")
 		self.assertEqual(
 			frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "current_balance"),
-			100,
+			321.51,
 		)
 
 	def test_accounting_workspace_contains_lexpack_controls(self):
@@ -337,10 +350,10 @@ class TestLexPackCommerce(FrappeTestCase):
 				pluck="label",
 			)
 		)
-		self.assertTrue({"LexPack Plans", "LexPack Purchases", "LexPoint Wallets", "Razorpay Settings"}.issubset(links))
+		self.assertTrue({"LexPack Plans", "LexPack Purchases", "Legal Capacity Wallets", "Razorpay Settings"}.issubset(links))
 
 
-def _make_client():
+def _make_client(default_currency="USD"):
 	suffix = frappe.generate_hash(length=8).lower()
 	return frappe.get_doc(
 		{
@@ -349,6 +362,7 @@ def _make_client():
 			"customer_type": "Company",
 			"customer_group": frappe.db.get_value("Customer Group", {"is_group": 0}, "name"),
 			"territory": frappe.db.get_value("Territory", {"is_group": 0}, "name"),
+			"default_currency": default_currency,
 		}
 	).insert(ignore_permissions=True).name
 
@@ -383,7 +397,7 @@ def _make_portal_user(user: str, client: str, portal_role: str):
 	).insert(ignore_permissions=True)
 
 
-def _service_purchase(client, plan, amount, points):
+def _service_purchase(client, plan, amount, legal_capacity_amount, currency="USD"):
 	previous = getattr(frappe.flags, "lexpack_purchase_service", False)
 	frappe.flags.lexpack_purchase_service = True
 	try:
@@ -397,11 +411,10 @@ def _service_purchase(client, plan, amount, points):
 				"status": "Payment Pending",
 				"gateway": "Razorpay",
 				"created_on": now_datetime(),
-				"currency": "USD",
+				"currency": currency,
 				"amount": amount,
 				"exchange_rate": 1,
-				"base_lexpoints": points,
-				"total_lexpoints": points,
+				"legal_capacity_amount": legal_capacity_amount,
 			}
 		).insert(ignore_permissions=True)
 	finally:

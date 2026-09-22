@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 from decimal import Decimal, ROUND_CEILING
 from typing import Any
 
@@ -12,7 +13,16 @@ from frappe.utils import cint, now_datetime, nowdate
 from lex.client_access import get_portal_user
 
 PAGES_PER_HOUR = 30
-PRICING_VERSION = "CAD-FIXED-30PPH-1.0"
+PRICING_VERSION = "COUNTRY-CURRENCY-FIXED-30PPH-1.1"
+SUPPORTED_ESTIMATE_CURRENCIES = {"CAD", "USD", "GBP"}
+COUNTRY_CURRENCY = {
+	"canada": "CAD",
+	"united states": "USD",
+	"usa": "USD",
+	"united kingdom": "GBP",
+	"uk": "GBP",
+	"great britain": "GBP",
+}
 FIXED_SERVICE_RATES_CAD: dict[str, Decimal] = {
 	"Legal Research & Writing": Decimal("24.50"),
 	"Litigation Support": Decimal("28.00"),
@@ -24,6 +34,56 @@ FIXED_SERVICE_RATES_CAD: dict[str, Decimal] = {
 	"Legal Operations Support": Decimal("38.51"),
 }
 SERVICES_LIST = list(FIXED_SERVICE_RATES_CAD)
+
+
+def _store_instant_estimate_document_on_job(job, filename: str, pdf_bytes: bytes) -> dict[str, Any]:
+	"""Store the instant-estimate source PDF on its Draft Job, never the Matter.
+
+	The Matter remains the commercial/legal parent only.  The Job is the source
+	of truth for the assignment document, including scan result and checksum.
+	This deliberately does not invalidate the already-calculated fixed quote.
+	"""
+	from frappe.utils.file_manager import save_file
+	from lex.file_quarantine import scan_and_validate_inbound_file
+
+	filename = os.path.basename((filename or "").strip())
+	if not filename:
+		frappe.throw(_("A source PDF filename is required."), frappe.ValidationError)
+
+	with _service_writes():
+		file_doc = save_file(
+			filename,
+			pdf_bytes,
+			"LPO Job",
+			job.name,
+			is_private=1,
+			df="source_document",
+		)
+
+	scan = scan_and_validate_inbound_file(file_doc.name)
+	file_doc.reload()
+	job.reload()
+	with _portal_service_writes():
+		job.append("job_documents", {
+			"file": file_doc.name,
+			"file_name": file_doc.file_name,
+			"document_role": "Source",
+			"scan_status": scan["status"],
+			"checksum": file_doc.get("custom_lex_checksum"),
+			"document_version": 1,
+			"included_in_estimate": 1,
+			"uploaded_by": frappe.session.user,
+			"uploaded_on": now_datetime(),
+		})
+		if scan["status"] == "Clean":
+			job.source_document = file_doc.file_url
+		job.save(ignore_permissions=True)
+
+	return {
+		"file": file_doc.name,
+		"scan_status": scan["status"],
+		"quarantine_passed": scan["quarantine_passed"],
+	}
 
 
 def extract_pdf_pages_and_text(pdf_bytes: bytes) -> tuple[int, str]:
@@ -38,14 +98,48 @@ def extract_pdf_pages_and_text(pdf_bytes: bytes) -> tuple[int, str]:
 
 
 def round_up_to_cad_five(amount: Decimal) -> Decimal:
-	"""Round a non-negative CAD amount upward to the next whole $5 amount."""
+	"""Round a non-negative amount upward to the next whole multiple of five."""
 	if amount < 0:
 		raise ValueError("CAD amount cannot be negative.")
 	return (amount / Decimal("5")).to_integral_value(rounding=ROUND_CEILING) * Decimal("5")
 
 
-def calculate_page_based_pricing(pages: int, service: str, turnaround: str = "Standard (3-5 Business Days)") -> dict[str, Any]:
-	"""Return the authoritative, deterministic fixed-rate CAD estimate.
+def _estimate_currency_for_client(client: str | None) -> tuple[str, str]:
+	"""Resolve the estimate currency from the client's registered country."""
+	if not client:
+		return "CAD", "Canada"
+	customer = frappe.db.get_value(
+		"Customer", client, ["custom_primary_jurisdiction", "territory", "default_currency"], as_dict=True
+	) or {}
+	country = str(customer.get("custom_primary_jurisdiction") or customer.get("territory") or "Canada").strip()
+	lookup = country.lower()
+	for marker, currency in COUNTRY_CURRENCY.items():
+		if marker in lookup:
+			return currency, country
+	configured = str(customer.get("default_currency") or "").upper()
+	return (configured if configured in SUPPORTED_ESTIMATE_CURRENCIES else "CAD"), country
+
+
+def _cad_exchange_rate(currency: str) -> Decimal:
+	if currency == "CAD":
+		return Decimal("1")
+	from erpnext.setup.utils import get_exchange_rate
+
+	rate = Decimal(str(get_exchange_rate("CAD", currency, nowdate(), "for_selling") or 0))
+	if rate <= 0:
+		raise ValueError(f"A current CAD to {currency} exchange rate is required before estimating this assignment.")
+	return rate
+
+
+def calculate_page_based_pricing(
+	pages: int,
+	service: str,
+	turnaround: str = "Standard (3-5 Business Days)",
+	*,
+	currency: str = "CAD",
+	exchange_rate: Decimal | None = None,
+) -> dict[str, Any]:
+	"""Return the authoritative country-currency fixed-rate PDF estimate.
 
 	Turnaround is recorded for scope/audit continuity but deliberately does not
 	change the fixed hourly rate.  Browser, OCR and integrations must consume
@@ -63,32 +157,41 @@ def calculate_page_based_pricing(pages: int, service: str, turnaround: str = "St
 	exact_hours = Decimal(pages) / Decimal(PAGES_PER_HOUR)
 	# Multiply before division so amounts such as 29.40 x 100 / 30 remain
 	# exact Decimal values instead of carrying a repeating intermediate value.
-	raw_price = (Decimal(pages) * rate) / Decimal(PAGES_PER_HOUR)
+	raw_price_cad = (Decimal(pages) * rate) / Decimal(PAGES_PER_HOUR)
+	currency = str(currency or "CAD").upper()
+	if currency not in SUPPORTED_ESTIMATE_CURRENCIES:
+		raise ValueError("Only CAD, USD and GBP are supported for country-based pricing.")
+	fx_rate = Decimal(str(exchange_rate)) if exchange_rate is not None else _cad_exchange_rate(currency)
+	if fx_rate <= 0:
+		raise ValueError("A positive exchange rate is required.")
+	raw_price = raw_price_cad * fx_rate
 	final_price = round_up_to_cad_five(raw_price)
 	turnaround_text = str(turnaround or "Standard (3-5 Business Days)").strip()
 
 	return {
 		"has_error": False,
-		"price_amount": f"{int(final_price)} CAD",
+		"price_amount": f"{int(final_price)} {currency}",
 		"volume_text": f"{pages} exact native PDF pages / {PAGES_PER_HOUR} pages/hour = {exact_hours} hours",
 		"service_text": service,
 		"rate_text": f"{rate:.2f} CAD/hour",
-		"fx_text": "CAD pricing; no currency conversion applied.",
+		"fx_text": "CAD base pricing; converted server-side using the saved exchange rate.",
 		"turnaround_text": turnaround_text,
 		"page_count_source": "Exact native PDF page count",
-		"calculation_text": "Final CAD price is calculated server-side from exact native PDF pages and the selected fixed CAD hourly rate.",
+		"calculation_text": "Final price is calculated server-side from exact native PDF pages and the selected fixed CAD hourly rate.",
 		"pages": pages,
 		"estimated_hours": exact_hours,
 		"exact_hours": exact_hours,
 		"fixed_service_rate_cad": rate,
-		"raw_price_cad": raw_price,
-		"final_price_cad": final_price,
+		"raw_price_cad": raw_price_cad,
+		"final_price_cad": round_up_to_cad_five(raw_price_cad),
+		"raw_price": raw_price,
+		"final_price": final_price,
 		"price_min": final_price,
 		"price_max": final_price,
-		"currency": "CAD",
+		"currency": currency,
 		"source_currency": "CAD",
-		"exchange_rate": Decimal("1"),
-		"exchange_rate_date": None,
+		"exchange_rate": fx_rate,
+		"exchange_rate_date": nowdate(),
 		"pages_per_hour": PAGES_PER_HOUR,
 		"pricing_version": PRICING_VERSION,
 	}
@@ -220,9 +323,14 @@ def calculate_instant_pdf_estimate(
 			"calculation_text": "Please upload a valid PDF and try again.",
 		}
 
+	portal_user = get_portal_user()
+	client = portal_user.client if portal_user else None
+	estimate_currency, client_country = _estimate_currency_for_client(client)
 	selected_service = str(service or "").strip()
 	try:
-		pricing = calculate_page_based_pricing(pages, selected_service, turnaround or "Standard (3-5 Business Days)")
+		pricing = calculate_page_based_pricing(
+			pages, selected_service, turnaround or "Standard (3-5 Business Days)", currency=estimate_currency
+		)
 	except ValueError as exc:
 		return {
 			"has_error": True,
@@ -237,23 +345,21 @@ def calculate_instant_pdf_estimate(
 			"calculation_text": "Choose a service from the fixed CAD pricing table.",
 		}
 	detected_service = selected_service
-	final_price_cad = int(pricing["final_price_cad"])
+	final_price = int(pricing["final_price"])
+	delivery_hours = max(1, int(pricing["exact_hours"].to_integral_value(rounding=ROUND_CEILING)))
 	pricing_audit = (
 		f"Pricing version {pricing['pricing_version']}; exact native PDF pages={pages}; "
 		f"calculated hours={pricing['exact_hours']}; selected service={detected_service}; "
 		f"fixed CAD/hour={pricing['fixed_service_rate_cad']}; raw CAD price={pricing['raw_price_cad']}; "
-		f"final rounded CAD price={final_price_cad}; exchange rate=1 CAD/CAD."
+		f"final rounded {pricing['currency']} price={final_price}; CAD/{pricing['currency']} exchange rate={pricing['exchange_rate']}."
 	)
 
 
 	# Link or create intake & Razorpay order
-	portal_user = get_portal_user()
-	client = portal_user.client if portal_user else None
 	intake_name = None
 	matter_name = None
 
 	if client:
-		from frappe.utils.file_manager import save_file
 		from lex.work_intake import _sla_hash, _sla_snapshot
 
 		intake_title = f"{detected_service} - {filename[:60]} ({pages} pp)"
@@ -276,8 +382,8 @@ def calculate_instant_pdf_estimate(
 				"our_side_role": "Represented Party",
 				"billing_method": "Job Based",
 				"practice_area": practice_area,
-				"jurisdictions": "Canada",
-				"description": f"Instant native PDF estimate: {pricing['price_amount']} ({pages} pages). {pricing_audit}",
+				"jurisdictions": client_country,
+				"description": "Parent Matter for the Draft Job created from this client request.",
 				"start_date": frappe.utils.nowdate(),
 				"standard_turnaround_hours": 72,
 				"sla_warning_hours": 8,
@@ -305,7 +411,7 @@ def calculate_instant_pdf_estimate(
 				"matter": matter.name,
 				"service_type": intake_service,
 				"priority": "Urgent" if "Emergency" in str(turnaround) else ("High" if "Rush" in str(turnaround) else "Medium"),
-				"jurisdiction": "Canada",
+				"jurisdiction": client_country,
 				"status": "Quote Ready",
 				"created_on": frappe.utils.now_datetime(),
 				"expected_outcome": f"Instant native PDF estimate: {pricing['price_amount']} ({pages} pages)",
@@ -317,13 +423,22 @@ def calculate_instant_pdf_estimate(
 				"sla_accepted": 1,
 				"sla_accepted_by": frappe.session.user,
 				"sla_accepted_on": frappe.utils.now_datetime(),
-				"currency": "CAD",
-				"exchange_rate": 1,
+				"currency": pricing["currency"],
+				"exchange_rate": pricing["exchange_rate"],
 				"document_count": 1,
-				"page_count": pages,
+				"selected_pricing_service": detected_service,
+				"exact_pdf_page_count": pages,
+				"calculated_hours": str(pricing["exact_hours"]),
+				"fixed_service_rate_cad": pricing["fixed_service_rate_cad"],
+				"raw_price_cad": pricing["raw_price_cad"],
+				"final_rounded_price_cad": pricing["final_price_cad"],
+				"pricing_exchange_rate": pricing["exchange_rate"],
+				"pricing_exchange_rate_date": pricing["exchange_rate_date"],
+				"pricing_version": pricing["pricing_version"],
 				"quote_status": "Ready",
-				"quoted_amount": final_price_cad,
-				"required_lexpoints": max(1, final_price_cad),
+				"quoted_amount": final_price,
+				"required_legal_capacity": final_price,
+				"delivery_timeline_hours": delivery_hours,
 				"scope_summary": pricing_audit,
 				"pricing_approval_status": "Approved",
 				"detailed_instructions": pricing_audit,
@@ -341,6 +456,20 @@ def calculate_instant_pdf_estimate(
 				"priority": intake.priority,
 				"confidentiality_level": "Confidential",
 				"task_description": f"Instant PDF estimate: {pricing['price_amount']}",
+				"estimate_status": "Ready",
+				"quote_version": 1,
+				"required_legal_capacity": final_price,
+				"quoted_amount": final_price,
+				"currency": pricing["currency"],
+				"selected_pricing_service": detected_service,
+				"exact_pdf_page_count": pages,
+				"calculated_hours": str(pricing["exact_hours"]),
+				"fixed_service_rate_cad": pricing["fixed_service_rate_cad"],
+				"raw_price_cad": pricing["raw_price_cad"],
+				"final_rounded_price_cad": pricing["final_price_cad"],
+				"pricing_exchange_rate": pricing["exchange_rate"],
+				"pricing_exchange_rate_date": pricing["exchange_rate_date"],
+				"pricing_version": pricing["pricing_version"],
 				"received_at": frappe.utils.now_datetime(),
 				"due_date": frappe.utils.add_days(frappe.utils.nowdate(), 3),
 				"qa_required": 1,
@@ -349,19 +478,14 @@ def calculate_instant_pdf_estimate(
 			intake.job = job.name
 			intake.save(ignore_permissions=True)
 
-			# Save attached PDF to the intake
-			save_file(
-				filename,
-				pdf_bytes,
-				"Lexocrates Work Intake",
-				intake.name,
-				is_private=1,
-				df="documents",
-			)
+			# The uploaded PDF and its estimate lineage belong to the Draft Job.
+			# Matter is intentionally only the parent legal/commercial container.
+			_store_instant_estimate_document_on_job(job, filename, pdf_bytes)
 
 	# Prepare Razorpay order payload
 	razorpay_order = _prepare_razorpay_checkout(
-		amount_cad=final_price_cad,
+		amount=final_price,
+		currency=pricing["currency"],
 		service_name=detected_service,
 		pages=pages,
 		turnaround=pricing["turnaround_text"],
@@ -377,7 +501,8 @@ def calculate_instant_pdf_estimate(
 
 
 def _prepare_razorpay_checkout(
-	amount_cad: int,
+	amount: int,
+	currency: str,
 	service_name: str,
 	pages: int,
 	turnaround: str,
@@ -389,8 +514,8 @@ def _prepare_razorpay_checkout(
 	if not intake_name:
 		return {
 			"is_live_order": False,
-			"currency": "CAD",
-			"amount": amount_cad * 100,
+			"currency": currency,
+			"amount": amount * 100,
 			"reason": "Sign in through the Client Portal before creating a Razorpay order.",
 		}
 	try:
@@ -401,8 +526,8 @@ def _prepare_razorpay_checkout(
 		frappe.log_error(frappe.get_traceback(), "Instant Estimator Razorpay Order")
 		return {
 			"is_live_order": False,
-			"currency": "CAD",
-			"amount": amount_cad * 100,
+			"currency": currency,
+			"amount": amount * 100,
 			"intake": intake_name,
 			"matter": matter_name,
 			"reason": str(exc)[:300],

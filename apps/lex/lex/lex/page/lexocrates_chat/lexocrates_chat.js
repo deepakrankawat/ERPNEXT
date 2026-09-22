@@ -1342,25 +1342,21 @@ class LexocratesChatPage {
 			return;
 		}
 		const dialog = new frappe.ui.Dialog({
-			title: __("Set Job Pricing"),
+			title: __("Recalculate Job Fixed Price"),
 			fields: [
 				{ fieldname: "job_context", fieldtype: "HTML", options: `<div class="lex-chat__pricing-context"><strong>${frappe.utils.escape_html(context.intake_title || intake)}</strong><span>${frappe.utils.escape_html(context.matter || "")} · ${frappe.utils.escape_html(context.job || "")}</span></div>` },
-				{ fieldname: "required_lexpoints", fieldtype: "Int", label: __("Required LexPoints"), reqd: 1, default: context.required_lexpoints || "" },
-				{ fieldname: "quoted_amount", fieldtype: "Currency", label: __("Fixed Quote Amount"), reqd: 1, default: context.quoted_amount || "" },
-				{ fieldname: "currency", fieldtype: "Data", label: __("Currency"), read_only: 1, default: context.currency || "INR" },
-				{ fieldname: "delivery_timeline_hours", fieldtype: "Int", label: __("Delivery Timeline Hours"), reqd: 1, default: context.delivery_timeline_hours || "" },
-				{ fieldname: "scope_summary", fieldtype: "Small Text", label: __("Scope Summary"), reqd: 1, default: context.scope_summary || "" },
+				{ fieldtype: "HTML", options: `<div class="alert alert-info">${__("The server uses this Job's exact native PDF page count and selected fixed-rate service. Price and Legal Capacity cannot be entered manually.")}</div>` },
 				{ fieldname: "review_notes", fieldtype: "Small Text", label: __("Internal Pricing Notes"), default: context.review_notes || "" },
 			],
-			primary_action_label: __("Submit Pricing"),
+			primary_action_label: __("Recalculate Price"),
 			primary_action: async (values) => {
 				dialog.get_primary_btn().prop("disabled", true);
 				try {
 					await frappe.call({
 						method: "lex.work_intake.submit_chat_pricing",
-						args: { intake, ...values },
+						args: { intake, review_notes: values.review_notes },
 						freeze: true,
-						freeze_message: __("Releasing pricing..."),
+						freeze_message: __("Calculating the fixed price..."),
 					});
 					dialog.hide();
 					frappe.show_alert({ message: __("Pricing submitted. Client payment is now available in the portal."), indicator: "green" });

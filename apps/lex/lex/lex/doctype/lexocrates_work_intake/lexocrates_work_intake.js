@@ -13,11 +13,6 @@ frappe.ui.form.on("Lexocrates Work Intake", {
 				frappe.set_route("Form", "LPO Job", frm.doc.job);
 			}, __("Intake"));
 		}
-		if (!frm.is_new() && frm.doc.ai_document_estimate) {
-			frm.add_custom_button(__("Open AI Estimate"), () => {
-				frappe.set_route("Form", "LPO AI Document Estimate", frm.doc.ai_document_estimate);
-			}, __("Intake"));
-		}
 		if (!frm.is_new() && ["Security Review", "Analysis Pending"].includes(frm.doc.status)) {
 			frm.add_custom_button(__("Run Secure Analysis"), async () => {
 				await frappe.call({
@@ -64,8 +59,8 @@ function decide_pricing(frm, decision) {
 		return;
 	}
 	frappe.confirm(
-		__("Approve {0} {1} for {2} LexPoints on {3}? The client will be able to pay as soon as you confirm.", [
-			frm.doc.currency, frm.doc.quoted_amount, frm.doc.required_lexpoints, frm.doc.intake_title,
+		__("Approve the confirmed fixed price of {0} {1} on {2}? The client will be able to pay as soon as you confirm.", [
+			frm.doc.currency, frm.doc.quoted_amount, frm.doc.intake_title,
 		]),
 		() => proceed(null)
 	);
@@ -73,16 +68,12 @@ function decide_pricing(frm, decision) {
 
 function show_quote_dialog(frm) {
 	const dialog = new frappe.ui.Dialog({
-		title: __("Issue Confirmed Work Quote"),
+		title: __("Recalculate Confirmed Work Quote"),
 		fields: [
-			{ fieldname: "required_lexpoints", label: __("Required LexPoints"), fieldtype: "Int", reqd: 1, default: frm.doc.required_lexpoints || 1 },
-			{ fieldname: "quoted_amount", label: __("Fixed Quote"), fieldtype: "Currency", reqd: 1, default: frm.doc.quoted_amount || 1, options: "currency" },
-			{ fieldname: "currency", label: __("Currency"), fieldtype: "Data", read_only: 1, default: frm.doc.currency },
-			{ fieldname: "delivery_timeline_hours", label: __("Delivery Timeline (Hours)"), fieldtype: "Int", reqd: 1, default: frm.doc.delivery_timeline_hours || 24 },
-			{ fieldname: "scope_summary", label: __("Confirmed Scope"), fieldtype: "Small Text", reqd: 1, default: frm.doc.scope_summary || "" },
+			{ fieldtype: "HTML", options: `<div class="alert alert-info">${__("The server recalculates this Job from exact native PDF pages and its selected fixed-rate service. Price and Legal Capacity cannot be entered manually.")}</div>` },
 			{ fieldname: "review_notes", label: __("Operations Review Notes"), fieldtype: "Small Text", default: frm.doc.operations_review_notes || "" },
 		],
-		primary_action_label: __("Issue Quote"),
+		primary_action_label: __("Recalculate Quote"),
 		primary_action: async (values) => {
 			dialog.disable_primary_action();
 			try {
