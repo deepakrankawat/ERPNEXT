@@ -12,8 +12,10 @@ MANAGEMENT_ROLES = {"System Manager", "LPO_Admin", "LPO_Manager", "Lexocrates Fi
 LOCKED_AFTER_FUNDING = {
 	"client", "portal_user", "submitted_by", "service_type", "jurisdiction", "priority",
 	"preliminary_details", "detailed_instructions", "expected_outcome", "sla_terms_snapshot", "sla_snapshot_hash",
-	"quoted_amount", "currency", "required_lexpoints", "scope_summary", "delivery_timeline_hours",
-	"funding_route", "matter", "job", "ai_document_estimate",
+	"quoted_amount", "currency", "required_legal_capacity", "scope_summary", "delivery_timeline_hours",
+	"selected_pricing_service", "exact_pdf_page_count", "calculated_hours", "fixed_service_rate_cad",
+	"raw_price_cad", "final_rounded_price_cad", "pricing_exchange_rate", "pricing_exchange_rate_date",
+	"pricing_version", "funding_route", "matter", "job",
 }
 
 
@@ -28,8 +30,21 @@ class LexocratesWorkIntake(Document):
 		if self.document_count and not self.sla_accepted:
 			frappe.throw(_("Document upload remains locked until the SLA is accepted."), frappe.ValidationError)
 		if self.quote_status in {"Ready", "Accepted"}:
-			if flt(self.quoted_amount) <= 0 or flt(self.required_lexpoints) <= 0 or not self.scope_summary:
-				frappe.throw(_("A ready quote requires an amount, LexPoints and confirmed scope."), frappe.ValidationError)
+			if (
+				flt(self.quoted_amount) <= 0
+				or flt(self.required_legal_capacity) <= 0
+				or not self.scope_summary
+				or not self.selected_pricing_service
+				or not self.exact_pdf_page_count
+			):
+				frappe.throw(
+					_("A ready quote requires a fixed amount, matching Legal Capacity, native PDF pages, selected service and confirmed scope."),
+					frappe.ValidationError,
+				)
+			if abs(flt(self.quoted_amount) - flt(self.required_legal_capacity)) > 0.001:
+				frappe.throw(_("Legal Capacity must equal the fixed quote in the selected currency."), frappe.ValidationError)
+			if self.currency not in {"CAD", "USD", "GBP"}:
+				frappe.throw(_("A fixed quote must use CAD, USD or GBP."), frappe.ValidationError)
 		if self.funding_status == "Funded" and self.funding_route == "Not Selected":
 			frappe.throw(_("A funded intake must record its funding route."), frappe.ValidationError)
 		previous = self.get_doc_before_save()

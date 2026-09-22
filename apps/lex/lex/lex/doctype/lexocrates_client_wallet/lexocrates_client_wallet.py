@@ -3,24 +3,39 @@ from __future__ import annotations
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import flt
 
 from lex.client_access import get_portal_user
 
 
 MANAGEMENT_ROLES = {"LPO_Admin", "LPO_Manager", "System Manager", "Lexocrates Finance"}
 BALANCE_FIELDS = {"current_balance", "reserved_balance", "total_purchased", "total_topped_up", "total_consumed", "last_transaction_on"}
+SUPPORTED_CAPACITY_CURRENCIES = {"CAD", "USD", "GBP"}
+LEDGER_FIELDS = BALANCE_FIELDS | {"capacity_currency"}
 
 
 class LexocratesClientWallet(Document):
 	def validate(self):
+		self.capacity_currency = (self.capacity_currency or "").strip().upper() or None
+		if self.capacity_currency and self.capacity_currency not in SUPPORTED_CAPACITY_CURRENCIES:
+			frappe.throw(
+				_("Legal Capacity is currently available only in CAD, USD, or GBP."),
+				frappe.ValidationError,
+			)
+		if self.is_new() and not getattr(frappe.flags, "lexocrates_wallet_posting", False):
+			if self.capacity_currency or any(flt(self.get(fieldname)) for fieldname in BALANCE_FIELDS):
+				frappe.throw(
+					_("Initial Legal Capacity balances and currency can only be created through the transaction ledger."),
+					frappe.PermissionError,
+				)
 		existing = frappe.db.get_value("Lexocrates Client Wallet", {"client": self.client}, "name")
 		if existing and existing != self.name:
 			frappe.throw(_("Each Client can have only one LexPack Wallet."), frappe.DuplicateEntryError)
 		if not self.is_new() and not getattr(frappe.flags, "lexocrates_wallet_posting", False):
 			previous = self.get_doc_before_save()
-			changed = [fieldname for fieldname in BALANCE_FIELDS if previous and self.get(fieldname) != previous.get(fieldname)]
+			changed = [fieldname for fieldname in LEDGER_FIELDS if previous and self.get(fieldname) != previous.get(fieldname)]
 			if changed:
-				frappe.throw(_("Wallet balances can only change through the transaction ledger."), frappe.PermissionError)
+				frappe.throw(_("Wallet balances and currency can only change through the transaction ledger."), frappe.PermissionError)
 
 	def on_trash(self):
 		frappe.throw(_("Client Wallets cannot be deleted."), frappe.PermissionError)

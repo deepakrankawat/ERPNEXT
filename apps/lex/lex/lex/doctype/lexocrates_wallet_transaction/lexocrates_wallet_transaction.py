@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -14,6 +16,8 @@ TRANSACTION_TYPES = {
 	"Purchase", "Top-Up", "Reservation", "Release", "Reserved Consumption",
 	"Direct Consumption", "Adjustment Credit", "Adjustment Debit", "Reversal",
 }
+SUPPORTED_CAPACITY_CURRENCIES = {"CAD", "USD", "GBP"}
+CAPACITY_QUANTUM = Decimal("0.01")
 
 
 class LexocratesWalletTransaction(Document):
@@ -57,7 +61,7 @@ def get_permission_query_conditions(user=None):
 def post_transaction(
 	client: str,
 	transaction_type: str,
-	points: float,
+	legal_capacity_amount: float,
 	currency: str | None = None,
 	idempotency_key: str | None = None,
 	matter: str | None = None,
@@ -72,7 +76,7 @@ def post_transaction(
 	return _post_transaction(
 		client=client,
 		transaction_type=transaction_type,
-		points=points,
+		legal_capacity_amount=legal_capacity_amount,
 		currency=currency,
 		idempotency_key=idempotency_key,
 		matter=matter,
@@ -97,7 +101,7 @@ def reverse_transaction(transaction: str, reason: str, idempotency_key: str):
 	return _post_transaction(
 		client=original.client,
 		transaction_type="Reversal",
-		points=original.points,
+		legal_capacity_amount=original.legal_capacity_amount,
 		currency=original.currency,
 		idempotency_key=idempotency_key,
 		matter=original.matter,
@@ -110,7 +114,7 @@ def reverse_transaction(transaction: str, reason: str, idempotency_key: str):
 
 def _post_transaction(**values):
 	transaction_type = values["transaction_type"]
-	points = flt(values["points"])
+	legal_capacity_amount = _capacity_decimal(values.get("legal_capacity_amount"))
 	client = values["client"]
 	idempotency_key = (values.get("idempotency_key") or "").strip() or None
 	if idempotency_key:
@@ -123,7 +127,7 @@ def _post_transaction(**values):
 			return frappe.get_doc("Lexocrates Wallet Transaction", existing)
 	if transaction_type not in TRANSACTION_TYPES:
 		frappe.throw(_("Unsupported Legal Capacity transaction type."), frappe.ValidationError)
-	if points <= 0:
+	if legal_capacity_amount <= 0:
 		frappe.throw(_("Legal Capacity must be greater than zero."), frappe.ValidationError)
 
 	wallet_name = frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "name")
@@ -135,17 +139,27 @@ def _post_transaction(**values):
 	wallet = frappe.get_doc("Lexocrates Client Wallet", wallet_name)
 	if wallet.status != "Active":
 		frappe.throw(_("The Client Wallet is frozen."), frappe.ValidationError)
-	currency = (values.get("currency") or wallet.get("capacity_currency") or frappe.db.get_value("Customer", client, "default_currency") or "CAD").upper()
-	if wallet.get("capacity_currency") and wallet.capacity_currency != currency:
+	currency = _capacity_currency(values.get("currency") or wallet.get("capacity_currency") or "CAD")
+	wallet_currency = (wallet.get("capacity_currency") or "").strip().upper()
+	if wallet_currency and wallet_currency != currency:
 		frappe.throw(
-			_("Legal Capacity currency must match the Client Wallet currency ({0}).").format(wallet.capacity_currency),
+			_("Legal Capacity currency must match the Client Wallet currency ({0}).").format(wallet_currency),
 			frappe.ValidationError,
 		)
-	if not wallet.get("capacity_currency"):
+	if not wallet_currency:
+		# A first credit establishes the wallet currency.  It must match the
+		# client's country policy; Desk/API callers cannot seed an arbitrary one.
+		from lex.lexpack import _country_currency_for_client
+
+		if currency != _country_currency_for_client(client):
+			frappe.throw(
+				_("Legal Capacity currency must match the client's country currency."),
+				frappe.ValidationError,
+			)
 		wallet.capacity_currency = currency
 
-	available = flt(wallet.current_balance)
-	reserved = flt(wallet.reserved_balance)
+	available = _capacity_decimal(wallet.current_balance)
+	reserved = _capacity_decimal(wallet.reserved_balance)
 	original = None
 	if transaction_type == "Reversal":
 		reversal_of = values.get("reversal_of")
@@ -169,34 +183,39 @@ def _post_transaction(**values):
 				frappe.ValidationError,
 			)
 	if transaction_type in {"Purchase", "Top-Up", "Adjustment Credit"}:
-		available += points
+		available += legal_capacity_amount
 	elif transaction_type == "Reservation":
-		_require_balance(available, points)
-		available -= points
-		reserved += points
+		_require_balance(available, legal_capacity_amount)
+		available -= legal_capacity_amount
+		reserved += legal_capacity_amount
 	elif transaction_type == "Release":
-		_require_reserved(reserved, points)
-		reserved -= points
-		available += points
+		_require_reserved(reserved, legal_capacity_amount)
+		reserved -= legal_capacity_amount
+		available += legal_capacity_amount
 	elif transaction_type == "Reserved Consumption":
-		_require_reserved(reserved, points)
-		reserved -= points
-		wallet.total_consumed = flt(wallet.total_consumed) + points
+		_require_reserved(reserved, legal_capacity_amount)
+		reserved -= legal_capacity_amount
+		wallet.total_consumed = _capacity_decimal(wallet.total_consumed) + legal_capacity_amount
 	elif transaction_type in {"Direct Consumption", "Adjustment Debit"}:
-		_require_balance(available, points)
-		available -= points
+		_require_balance(available, legal_capacity_amount)
+		available -= legal_capacity_amount
 		if transaction_type == "Direct Consumption":
-			wallet.total_consumed = flt(wallet.total_consumed) + points
+			wallet.total_consumed = _capacity_decimal(wallet.total_consumed) + legal_capacity_amount
 	elif transaction_type == "Reversal":
-		available, reserved = _apply_reversal(wallet, original, available, reserved, points)
+		available, reserved = _apply_reversal(wallet, original, available, reserved, legal_capacity_amount)
 
 	if transaction_type == "Purchase":
-		wallet.total_purchased = flt(wallet.total_purchased) + points
+		wallet.total_purchased = _capacity_decimal(wallet.total_purchased) + legal_capacity_amount
 	elif transaction_type == "Top-Up":
-		wallet.total_topped_up = flt(wallet.total_topped_up) + points
+		wallet.total_topped_up = _capacity_decimal(wallet.total_topped_up) + legal_capacity_amount
 
-	wallet.current_balance = available
-	wallet.reserved_balance = reserved
+	available = _capacity_decimal(available)
+	reserved = _capacity_decimal(reserved)
+	wallet.current_balance = flt(available, 2)
+	wallet.reserved_balance = flt(reserved, 2)
+	wallet.total_purchased = flt(_capacity_decimal(wallet.total_purchased), 2)
+	wallet.total_topped_up = flt(_capacity_decimal(wallet.total_topped_up), 2)
+	wallet.total_consumed = flt(_capacity_decimal(wallet.total_consumed), 2)
 	wallet.last_transaction_on = now_datetime()
 	previous_flag = getattr(frappe.flags, "lexocrates_wallet_posting", False)
 	frappe.flags.lexocrates_wallet_posting = True
@@ -209,11 +228,11 @@ def _post_transaction(**values):
 				"client": client,
 				"currency": currency,
 				"transaction_type": transaction_type,
-				"points": points,
+				"legal_capacity_amount": flt(legal_capacity_amount, 2),
 				"posted_on": wallet.last_transaction_on,
 				"posted_by": frappe.session.user,
-				"available_balance_after": available,
-				"reserved_balance_after": reserved,
+				"available_balance_after": flt(available, 2),
+				"reserved_balance_after": flt(reserved, 2),
 				"idempotency_key": idempotency_key,
 				"matter": values.get("matter"),
 				"reference_doctype": values.get("reference_doctype"),
@@ -231,59 +250,80 @@ def _post_transaction(**values):
 		object_type="Lexocrates Wallet Transaction",
 		object_id=transaction.name,
 		new_value={
-			"legal_capacity": points,
+			"legal_capacity_amount": flt(legal_capacity_amount, 2),
 			"currency": currency,
-			"available": available,
-			"reserved": reserved,
+			"available": flt(available, 2),
+			"reserved": flt(reserved, 2),
 			"reversal_of": values.get("reversal_of"),
 		},
 	)
 	return transaction
 
 
-def _require_balance(balance, points):
-	if points > balance:
+def _require_balance(balance, legal_capacity_amount):
+	if legal_capacity_amount > balance:
 		frappe.throw(_("Insufficient available Legal Capacity."), frappe.ValidationError)
 
 
-def _require_reserved(balance, points):
-	if points > balance:
+def _require_reserved(balance, legal_capacity_amount):
+	if legal_capacity_amount > balance:
 		frappe.throw(_("Insufficient reserved Legal Capacity."), frappe.ValidationError)
 
 
-def _apply_reversal(wallet, original, available, reserved, points):
+def _apply_reversal(wallet, original, available, reserved, legal_capacity_amount):
 	"""Undo the accounting effect of exactly one immutable original entry."""
 	type_ = original.transaction_type
 	if type_ == "Purchase":
-		_require_balance(available, points)
-		available -= points
-		wallet.total_purchased = max(0, flt(wallet.total_purchased) - points)
+		_require_balance(available, legal_capacity_amount)
+		available -= legal_capacity_amount
+		wallet.total_purchased = max(Decimal("0"), _capacity_decimal(wallet.total_purchased) - legal_capacity_amount)
 	elif type_ == "Top-Up":
-		_require_balance(available, points)
-		available -= points
-		wallet.total_topped_up = max(0, flt(wallet.total_topped_up) - points)
+		_require_balance(available, legal_capacity_amount)
+		available -= legal_capacity_amount
+		wallet.total_topped_up = max(Decimal("0"), _capacity_decimal(wallet.total_topped_up) - legal_capacity_amount)
 	elif type_ == "Reservation":
-		_require_reserved(reserved, points)
-		reserved -= points
-		available += points
+		_require_reserved(reserved, legal_capacity_amount)
+		reserved -= legal_capacity_amount
+		available += legal_capacity_amount
 	elif type_ == "Release":
-		_require_balance(available, points)
-		available -= points
-		reserved += points
+		_require_balance(available, legal_capacity_amount)
+		available -= legal_capacity_amount
+		reserved += legal_capacity_amount
 	elif type_ == "Reserved Consumption":
-		reserved += points
-		wallet.total_consumed = max(0, flt(wallet.total_consumed) - points)
+		reserved += legal_capacity_amount
+		wallet.total_consumed = max(Decimal("0"), _capacity_decimal(wallet.total_consumed) - legal_capacity_amount)
 	elif type_ == "Direct Consumption":
-		available += points
-		wallet.total_consumed = max(0, flt(wallet.total_consumed) - points)
+		available += legal_capacity_amount
+		wallet.total_consumed = max(Decimal("0"), _capacity_decimal(wallet.total_consumed) - legal_capacity_amount)
 	elif type_ == "Adjustment Credit":
-		_require_balance(available, points)
-		available -= points
+		_require_balance(available, legal_capacity_amount)
+		available -= legal_capacity_amount
 	elif type_ == "Adjustment Debit":
-		available += points
+		available += legal_capacity_amount
 	else:
 		frappe.throw(_("Unsupported original transaction type for reversal."), frappe.ValidationError)
 	return available, reserved
+
+
+def _capacity_decimal(value) -> Decimal:
+	"""Normalize money-like Legal Capacity values before a ledger calculation."""
+	try:
+		amount = Decimal(str(value if value not in (None, "") else 0))
+	except (InvalidOperation, ValueError, TypeError):
+		frappe.throw(_("Legal Capacity must be a valid currency amount."), frappe.ValidationError)
+	if not amount.is_finite():
+		frappe.throw(_("Legal Capacity must be a valid currency amount."), frappe.ValidationError)
+	return amount.quantize(CAPACITY_QUANTUM, rounding=ROUND_HALF_UP)
+
+
+def _capacity_currency(value) -> str:
+	currency = str(value or "").strip().upper()
+	if currency not in SUPPORTED_CAPACITY_CURRENCIES:
+		frappe.throw(
+			_("Legal Capacity is currently available only in CAD, USD, or GBP."),
+			frappe.ValidationError,
+		)
+	return currency
 
 
 def on_doctype_update():

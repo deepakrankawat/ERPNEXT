@@ -9,8 +9,8 @@
  "field_order": [
   "identity_section", "plan_code", "plan_name", "status", "display_order", "identity_column",
   "value_advantage", "discount_percent", "self_service", "enterprise_custom", "no_expiry", "pricing_section",
-  "currency", "price", "lexpoints", "pricing_column", "rolling_qualification_spend",
-  "qualification_bonus_points", "description", "commercial_note"
+  "currency", "price", "pricing_column", "rolling_qualification_spend",
+  "description", "commercial_note"
  ],
  "fields": [
   {"fieldname": "identity_section", "fieldtype": "Section Break", "label": "LexPack Bundle"},
@@ -27,10 +27,8 @@
   {"fieldname": "pricing_section", "fieldtype": "Section Break", "label": "Commercial Terms"},
   {"default": "USD", "fieldname": "currency", "fieldtype": "Link", "in_list_view": 1, "label": "Currency", "options": "Currency", "reqd": 1},
   {"fieldname": "price", "fieldtype": "Currency", "in_list_view": 1, "label": "Bundle Price", "options": "currency", "precision": "2"},
-  {"fieldname": "lexpoints", "fieldtype": "Int", "in_list_view": 1, "label": "Legacy Internal Units", "permlevel": 1},
   {"fieldname": "pricing_column", "fieldtype": "Column Break"},
   {"fieldname": "rolling_qualification_spend", "fieldtype": "Currency", "label": "Rolling 12-Month Qualification Spend", "options": "currency", "precision": "2"},
-  {"default": "0", "description": "Legacy field retained for audit only. LexPack value is now applied through the tier discount.", "fieldname": "qualification_bonus_points", "fieldtype": "Int", "label": "Legacy Qualification Adjustment", "permlevel": 1},
   {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
   {"default": "Illustrative pricing from LexPack Business Model v1.0; subject to final commercial approval.", "fieldname": "commercial_note", "fieldtype": "Small Text", "label": "Commercial Note", "read_only": 1}
  ],

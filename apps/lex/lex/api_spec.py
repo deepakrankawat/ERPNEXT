@@ -31,7 +31,7 @@ def get_openapi_specification() -> dict:
 			},
 			"/api/method/lex.wallet_statement.generate_wallet_statement_data": {
 				"get": {
-					"summary": "Get reconciled LexPoint ledger statement",
+					"summary": "Get reconciled Legal Capacity ledger statement",
 					"responses": {"200": {"description": "Wallet statement"}},
 				}
 			},

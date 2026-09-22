@@ -47,36 +47,37 @@ LEXPACK_MODE_OF_PAYMENT = "Razorpay"
 LEGAL_DOCUMENT_MAX_UPLOAD_MB = 500
 LEXPACK_PLANS = (
 	{
-		"plan_code": "STARTER", "plan_name": "Starter", "price": 299, "lexpoints": 100,
-		"value_advantage": "Standard", "display_order": 1, "rolling_qualification_spend": 299,
-		"qualification_bonus_points": 0, "description": "Entry prepaid legal-capacity bundle.",
+		"plan_code": "STARTER", "plan_name": "Starter", "currency": "USD", "price": 299,
+		"discount_percent": 7, "value_advantage": "7% savings", "display_order": 1,
+		"rolling_qualification_spend": 299, "description": "Entry prepaid legal-capacity bundle.",
 	},
 	{
-		"plan_code": "GROWTH", "plan_name": "Growth", "price": 899, "lexpoints": 350,
-		"value_advantage": "Save 14%", "display_order": 2, "rolling_qualification_spend": 899,
-		"qualification_bonus_points": 30, "description": "Growth bundle with the concept-note value advantage.",
+		"plan_code": "GROWTH", "plan_name": "Growth", "currency": "USD", "price": 899,
+		"discount_percent": 14, "value_advantage": "14% savings", "display_order": 2,
+		"rolling_qualification_spend": 899, "description": "Growth prepaid legal-capacity bundle.",
 	},
 	{
-		"plan_code": "PROFESSIONAL", "plan_name": "Professional", "price": 1999, "lexpoints": 900,
-		"value_advantage": "Save 26%", "display_order": 3, "rolling_qualification_spend": 1999,
-		"qualification_bonus_points": 145, "description": "Professional legal-capacity bundle.",
+		"plan_code": "PROFESSIONAL", "plan_name": "Professional", "currency": "USD", "price": 1999,
+		"discount_percent": 21, "value_advantage": "21% savings", "display_order": 3,
+		"rolling_qualification_spend": 1999, "description": "Professional legal-capacity bundle.",
 	},
 	{
-		"plan_code": "BUSINESS", "plan_name": "Business", "price": 3999, "lexpoints": 2000,
-		"value_advantage": "Save 33%", "display_order": 4, "rolling_qualification_spend": 3999,
-		"qualification_bonus_points": 0, "description": "Business legal-capacity bundle.",
+		"plan_code": "BUSINESS", "plan_name": "Business", "currency": "USD", "price": 3999,
+		"discount_percent": 28, "value_advantage": "28% savings", "display_order": 4,
+		"rolling_qualification_spend": 3999, "description": "Business legal-capacity bundle.",
 	},
 	{
-		"plan_code": "ENTERPRISE", "plan_name": "Enterprise", "price": 0, "lexpoints": 0,
+		"plan_code": "ENTERPRISE", "plan_name": "Enterprise", "currency": "USD", "price": 0,
+		"discount_percent": 0,
 		"value_advantage": "Custom Commercial Terms", "display_order": 5, "rolling_qualification_spend": 0,
-		"qualification_bonus_points": 0, "description": "Custom enterprise commercial agreement.",
+		"description": "Custom enterprise commercial agreement.",
 		"enterprise_custom": 1, "self_service": 0,
 	},
 )
 ACCOUNTING_WORKSPACE_ACTIONS = (
 	{"id": "lexpack_plans_shortcut", "label": "LexPack Plans", "type": "DocType", "link_to": "LexPack Plan", "color": "#2490ef"},
 	{"id": "lexpack_purchases_shortcut", "label": "LexPack Purchases", "type": "DocType", "link_to": "LexPack Purchase", "color": "#29cd42"},
-	{"id": "lexpack_wallets_shortcut", "label": "LexPoint Wallets", "type": "DocType", "link_to": "Lexocrates Client Wallet", "color": "#f8c629"},
+	{"id": "lexpack_wallets_shortcut", "label": "Legal Capacity Wallets", "type": "DocType", "link_to": "Lexocrates Client Wallet", "color": "#f8c629"},
 	{"id": "lexpack_settings_shortcut", "label": "Razorpay Settings", "type": "DocType", "link_to": "LexPack Settings", "color": "#ff5858"},
 )
 ACCOUNTING_WORKSPACE_BLOCK_IDS = {
@@ -136,11 +137,6 @@ def after_install():
 	from lex.lex.doctype.lpo_ai_settings.lpo_ai_settings import ensure_ai_provider_registry
 
 	ensure_ai_provider_registry()
-	ensure_standalone_estimation_ai_route()
-	from lex.lexpoint_estimation import ensure_default_lexpoint_rules
-
-	ensure_default_lexpoint_rules()
-	ensure_ai_document_estimate_workspace_link()
 
 
 def ensure_legal_document_upload_capacity():
@@ -170,42 +166,6 @@ def ensure_legal_document_upload_capacity():
 	frappe.clear_cache()
 
 
-def ensure_standalone_estimation_ai_route():
-	"""Enable the dedicated estimator route and inherit the verified intake route once."""
-	if not frappe.db.exists("DocType", "LPO AI Settings"):
-		return
-	meta = frappe.get_meta("LPO AI Settings")
-	if not meta.has_field("enable_standalone_estimation"):
-		return
-	settings = frappe.get_single("LPO AI Settings")
-	initialized_fields = {
-		row[0]
-		for row in frappe.db.sql(
-			"""select `field` from `tabSingles`
-			where `doctype` = %s and `field` in
-			('enable_standalone_estimation', 'estimation_credential', 'estimation_provider', 'estimation_model')""",
-			("LPO AI Settings",),
-		)
-	}
-	values = {}
-	if "enable_standalone_estimation" not in initialized_fields:
-		values["enable_standalone_estimation"] = 1
-	for target, source in (
-		("estimation_credential", "intake_credential"),
-		("estimation_provider", "intake_provider"),
-		("estimation_model", "intake_model"),
-	):
-		if (
-			meta.has_field(target)
-			and target not in initialized_fields
-			and settings.get(source)
-		):
-			values[target] = settings.get(source)
-	if values:
-		frappe.db.set_value("LPO AI Settings", "LPO AI Settings", values, update_modified=False)
-	frappe.clear_cache(doctype="LPO AI Settings")
-
-
 def ensure_lexpack_master_data():
 	"""Create neutral accounting masters without guessing a clearing account or enabling payments."""
 	if frappe.db.exists("DocType", "Mode of Payment") and not frappe.db.exists("Mode of Payment", LEXPACK_MODE_OF_PAYMENT):
@@ -227,7 +187,7 @@ def ensure_lexpack_master_data():
 					"doctype": "Item",
 					"item_code": LEXPACK_ITEM_CODE,
 					"item_name": "LexPack Legal Capacity",
-					"description": "Prepaid, non-expiring legal capacity issued as LexPoints.",
+			"description": "Prepaid, non-expiring Legal Capacity in the client's selected currency.",
 					"item_group": item_group,
 					"stock_uom": stock_uom,
 					"is_stock_item": 0,
@@ -263,7 +223,7 @@ def ensure_lexpack_master_data():
 			"test_mode": 1,
 			"api_timeout_seconds": 15,
 			"checkout_name": "Lexocrates Legal Services Pvt. Ltd.",
-			"checkout_description": "Purchase prepaid legal capacity with non-expiring LexPoints.",
+			"checkout_description": "Purchase prepaid, non-expiring Legal Capacity in the selected currency.",
 			"checkout_theme_color": "#1f2937",
 			"selling_item": LEXPACK_ITEM_CODE if frappe.db.exists("Item", LEXPACK_ITEM_CODE) else None,
 			"direct_quote_item": FIXED_QUOTE_ITEM_CODE if frappe.db.exists("Item", FIXED_QUOTE_ITEM_CODE) else None,
@@ -271,7 +231,6 @@ def ensure_lexpack_master_data():
 			"company": companies[0] if companies else None,
 			"intake_sla_version": "CLIENT-INTAKE-SLA-1.0",
 			"quote_currency": "CAD",
-			"direct_quote_rate_per_point": 3,
 			"quote_validity_days": 7,
 			"low_confidence_threshold": 72,
 			"enable_ai_intake_analysis": 0,
@@ -281,7 +240,7 @@ def ensure_lexpack_master_data():
 		for fieldname, value in defaults.items():
 			current = frappe.db.get_single_value("LexPack Settings", fieldname)
 			positive_numeric_fields = {
-				"api_timeout_seconds", "direct_quote_rate_per_point", "quote_validity_days",
+				"api_timeout_seconds", "quote_validity_days",
 				"low_confidence_threshold",
 			}
 			is_missing = current in (None, "") or (
@@ -333,7 +292,7 @@ def ensure_accounting_workspace_actions():
 			"id": "lexpack_accounting_header",
 			"type": "header",
 			"data": {
-				"text": '<span class="h4"><b>LexPack Prepaid Legal Capacity</b></span><p class="text-muted">Plans, Razorpay purchases, Sales Invoices, Payment Entries and LexPoint wallets.</p>',
+				"text": '<span class="h4"><b>LexPack Prepaid Legal Capacity</b></span><p class="text-muted">Plans, Razorpay purchases, Sales Invoices, Payment Entries and Legal Capacity wallets.</p>',
 				"col": 12,
 			},
 		}
@@ -374,73 +333,6 @@ def ensure_accounting_workspace_actions():
 			changed = True
 	if changed:
 		frappe.db.set_value("Workspace", "Accounting", "content", updated_content, update_modified=False)
-		frappe.clear_cache()
-
-
-def ensure_ai_document_estimate_workspace_link():
-	"""Expose governed estimation records and management-controlled pricing rules."""
-	if (
-		not frappe.db.exists("DocType", "Workspace")
-		or not frappe.db.exists("Workspace", "AI Workspace")
-	):
-		return
-	managed_links = (
-		("Standalone LexPoint Estimator", "lexpoint-estimator", "Page"),
-		("Standalone Estimate History", "LPO Standalone Estimate", "DocType"),
-		("Intake AI Estimates", "LPO AI Document Estimate", "DocType"),
-		("LexPoint Service Rules", "LPO LexPoint Service Rule", "DocType"),
-		("LexPoint Multipliers", "LPO LexPoint Multiplier", "DocType"),
-		("LexPoint Formula Settings", "LPO LexPoint Settings", "DocType"),
-	)
-	changed = False
-	next_idx = frappe.db.get_value(
-		"Workspace Link",
-		{"parent": "AI Workspace", "parenttype": "Workspace", "parentfield": "links"},
-		"max(idx)",
-	) or 0
-	for label, link_to, link_type in managed_links:
-		if not frappe.db.exists(link_type, link_to):
-			continue
-		existing = frappe.get_all(
-			"Workspace Link",
-			filters={
-				"parent": "AI Workspace", "parenttype": "Workspace", "parentfield": "links",
-				"type": "Link", "link_to": link_to,
-			},
-			fields=["name", "label", "link_type"], limit_page_length=1,
-		)
-		if existing:
-			row = existing[0]
-			if row.label != label or row.link_type != link_type:
-				frappe.db.set_value(
-					"Workspace Link", row.name, {"label": label, "link_type": link_type}, update_modified=False,
-				)
-				changed = True
-			continue
-		next_idx += 1
-		frappe.get_doc({
-			"doctype": "Workspace Link", "parent": "AI Workspace", "parenttype": "Workspace",
-			"parentfield": "links", "idx": int(next_idx), "type": "Link", "label": label,
-			"link_to": link_to, "link_type": link_type,
-		}).db_insert()
-		changed = True
-
-	card = frappe.get_all(
-		"Workspace Link",
-		filters={"parent": "AI Workspace", "parenttype": "Workspace", "parentfield": "links", "type": "Card Break"},
-		fields=["name", "link_count"],
-		order_by="idx asc",
-		limit_page_length=1,
-	)
-	link_count = frappe.db.count(
-		"Workspace Link",
-		{"parent": "AI Workspace", "parenttype": "Workspace", "parentfield": "links", "type": "Link"},
-	)
-	if card and card[0].link_count != link_count:
-		frappe.db.set_value("Workspace Link", card[0].name, "link_count", link_count, update_modified=False)
-		changed = True
-
-	if changed:
 		frappe.clear_cache()
 
 
@@ -846,7 +738,7 @@ def ensure_lexocrates_email_templates():
 		},
 		{
 			"name": "Lexocrates LexPack Legal Capacity Purchase",
-			"subject": "LexPack Capacity Purchase Confirmed - {{ doc.plan_name }} ({{ doc.lexpoints }} LexPoints)",
+			"subject": "LexPack Legal Capacity Purchase Confirmed - {{ doc.plan_name }}",
 			"use_html": 1,
 			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
 	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">LexPack Legal Capacity Confirmed</h2>
@@ -859,8 +751,8 @@ def ensure_lexocrates_email_templates():
 				<td style="padding: 6px 0; font-weight: 700; color: #0f172a; text-align: right;">{{ doc.plan_name }}</td>
 			</tr>
 			<tr>
-				<td style="padding: 6px 0; color: #64748b;">LexPoints Credited:</td>
-				<td style="padding: 6px 0; font-weight: 800; font-size: 16px; color: #0284c7; text-align: right;">+{{ doc.lexpoints }} LexPoints</td>
+				<td style="padding: 6px 0; color: #64748b;">Legal Capacity Credited:</td>
+				<td style="padding: 6px 0; font-weight: 800; font-size: 16px; color: #0284c7; text-align: right;">{{ doc.currency }} {{ doc.legal_capacity_amount }}</td>
 			</tr>
 			<tr>
 				<td style="padding: 6px 0; color: #64748b;">Amount Paid:</td>
@@ -868,7 +760,7 @@ def ensure_lexocrates_email_templates():
 			</tr>
 		</table>
 	</div>
-	<p>Your LexPoints do not expire and can be redeemed across all legal research, contract management, and compliance workflows.</p>
+	<p>Your Legal Capacity does not expire and can be used for eligible legal assignments in the same currency.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates LexPack Services</strong></p>
 </div>"""
 		},

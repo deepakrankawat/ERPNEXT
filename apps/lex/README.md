@@ -85,7 +85,8 @@ permission, Matter-access, login, and financial events are appended to
 `Lexocrates Portal Audit Event`; audit events cannot be edited or deleted and
 are linked by a persisted SHA-256 chain that can be independently verified.
 
-Matter activation is server-gated by an approved quote or a successful LexPoint
+Matter is the legal container; each operational Job is server-gated by its own
+confirmed fixed price and successful same-currency payment or Legal Capacity
 reservation. Operational Jobs require pinned Published Workflow and Effective
 SOP versions. Source, evidence, and delivery Files remain quarantined until
 their content signature matches and ClamAV returns clean; document checksums,

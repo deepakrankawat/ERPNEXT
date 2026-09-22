@@ -157,7 +157,7 @@ def _wallet_data(portal_user):
 		{"client": portal_user.client},
 		[
 			"name", "status", "capacity_currency", "current_balance", "reserved_balance", "total_purchased", "total_topped_up",
-			"total_consumed", "current_pricing_tier", "rolling_12_month_spend", "bonus_points_earned",
+			"total_consumed", "current_pricing_tier", "rolling_12_month_spend",
 		],
 		as_dict=True,
 	)
@@ -170,7 +170,10 @@ def _wallet_data(portal_user):
 		transactions = frappe.get_all(
 			"Lexocrates Wallet Transaction",
 			filters={"wallet": wallet.name},
-			fields=["name", "transaction_type", "currency", "points", "posted_on", "matter", "available_balance_after"],
+			fields=[
+				"name", "transaction_type", "currency", "legal_capacity_amount", "posted_on", "matter",
+				"available_balance_after",
+			],
 			order_by="posted_on desc",
 			limit_page_length=50,
 		)
@@ -327,7 +330,6 @@ def create_matter(
 	engagement_title: str | None = None,
 	matter_title: str | None = None,
 	billing_method: str = "Quoted Price",
-	lexpoints_estimated: float = 0,
 ):
 	_require_portal_user()
 	frappe.throw(

@@ -26,8 +26,8 @@ def generate_wallet_statement_data(client_id: str | None = None, from_date: str 
 		"Lexocrates Client Wallet",
 		{"client": client_id},
 		[
-			"name", "current_balance", "reserved_balance", "total_purchased", "total_consumed",
-			"current_pricing_tier", "rolling_12_month_spend", "bonus_points_earned",
+			"name", "capacity_currency", "current_balance", "reserved_balance", "total_purchased",
+			"total_consumed", "current_pricing_tier", "rolling_12_month_spend",
 		],
 		as_dict=True,
 	)
@@ -46,7 +46,8 @@ def generate_wallet_statement_data(client_id: str | None = None, from_date: str 
 		fields=[
 			"name",
 			"transaction_type",
-			"points",
+			"currency",
+			"legal_capacity_amount",
 			"posted_on",
 			"matter",
 			"reference_doctype",
@@ -69,9 +70,10 @@ def generate_wallet_statement_data(client_id: str | None = None, from_date: str 
 	return {
 		"client": client_id,
 		"wallet": wallet.name,
-		# The current balance is the total unconsumed balance.  Reservations move
-		# points between the available and reserved buckets; they do not consume
-		# them.
+		"currency": wallet.capacity_currency,
+		# The current balance is the total unconsumed Legal Capacity. Reservations
+		# move currency value between available and reserved buckets; they do not
+		# consume it.
 		"current_balance": flt(wallet.current_balance) + flt(wallet.reserved_balance),
 		"reserved_balance": flt(wallet.reserved_balance),
 		"available_balance": flt(wallet.current_balance),
@@ -79,7 +81,6 @@ def generate_wallet_statement_data(client_id: str | None = None, from_date: str 
 		"total_consumed": flt(wallet.total_consumed),
 		"current_pricing_tier": wallet.current_pricing_tier,
 		"rolling_12_month_spend": flt(wallet.rolling_12_month_spend),
-		"bonus_points_earned": flt(wallet.bonus_points_earned),
 		"transactions": transactions,
 	}
 
@@ -93,24 +94,26 @@ def download_wallet_statement_csv(client_id: str | None = None, from_date: str |
 
 	writer.writerow(["Statement Date", str(now_datetime())])
 	writer.writerow(["Client", data["client"]])
-	writer.writerow(["Current LexPoint Balance", data["current_balance"]])
-	writer.writerow(["Reserved LexPoints", data["reserved_balance"]])
-	writer.writerow(["Available Balance", data["available_balance"]])
+	writer.writerow(["Currency", data["currency"] or ""])
+	writer.writerow(["Current Legal Capacity", data["current_balance"]])
+	writer.writerow(["Reserved Legal Capacity", data["reserved_balance"]])
+	writer.writerow(["Available Legal Capacity", data["available_balance"]])
 	writer.writerow([])
-	writer.writerow(["Transaction ID", "Posted On", "Type", "Points", "Matter", "Job", "Balance After"])
+	writer.writerow(["Transaction ID", "Posted On", "Type", "Currency", "Legal Capacity", "Matter", "Job", "Balance After"])
 
 	for txn in data["transactions"]:
 		writer.writerow([
 			txn.name,
 			str(txn.posted_on),
 			txn.transaction_type,
-			txn.points,
+			txn.currency,
+			txn.legal_capacity_amount,
 			txn.matter or "",
 			txn.job or "",
 			txn.available_balance_after,
 		])
 
-	frappe.response["filename"] = f"LexPoint_Statement_{data['client']}.csv"
+	frappe.response["filename"] = f"Legal_Capacity_Statement_{data['client']}.csv"
 	frappe.response["filecontent"] = output.getvalue().encode("utf-8")
 	frappe.response["type"] = "binary"
 
@@ -130,10 +133,11 @@ def handle_payment_topup_webhook():
 	data = frappe.request.get_json() or {}
 	idempotency_key = data.get("idempotency_key") or data.get("payment_id")
 	client_id = data.get("client_id")
-	lexpoints = flt(data.get("points") or 0)
+	legal_capacity_amount = flt(data.get("legal_capacity_amount") or data.get("amount") or 0)
+	currency = str(data.get("currency") or "").upper()
 	event_timestamp = data.get("timestamp")
 
-	if not idempotency_key or not client_id or lexpoints <= 0 or not event_timestamp:
+	if not idempotency_key or not client_id or legal_capacity_amount <= 0 or currency not in {"CAD", "USD", "GBP"} or not event_timestamp:
 		frappe.throw(_("Invalid webhook payload."), frappe.ValidationError)
 	try:
 		age_seconds = abs((now_datetime() - get_datetime(event_timestamp)).total_seconds())
@@ -152,7 +156,8 @@ def handle_payment_topup_webhook():
 	txn = _post_transaction(
 		client=client_id,
 		transaction_type="Purchase",
-		points=lexpoints,
+		legal_capacity_amount=legal_capacity_amount,
+		currency=currency,
 		idempotency_key=idempotency_key,
 	)
 
@@ -161,7 +166,12 @@ def handle_payment_topup_webhook():
 		action="LexPack Webhook Top-Up Posted",
 		object_type="Lexocrates Wallet Transaction",
 		object_id=txn.name,
-		new_value={"points": lexpoints, "idempotency_key": idempotency_key},
+		new_value={"legal_capacity_amount": legal_capacity_amount, "currency": currency, "idempotency_key": idempotency_key},
 	)
 
-	return {"status": "success", "transaction": txn.name, "points": lexpoints}
+	return {
+		"status": "success",
+		"transaction": txn.name,
+		"legal_capacity_amount": legal_capacity_amount,
+		"currency": currency,
+	}

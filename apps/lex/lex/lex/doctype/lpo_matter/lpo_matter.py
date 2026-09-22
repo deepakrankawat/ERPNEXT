@@ -3,7 +3,7 @@ from __future__ import annotations
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt, getdate, now_datetime
+from frappe.utils import getdate
 
 from lex.client_access import (
 	get_portal_user,
@@ -31,7 +31,7 @@ class LPOMatter(Document):
 		self._protect_client_submission()
 		self._validate_parties()
 		self._validate_dates()
-		self._validate_billing()
+		self._set_job_based_commercial_handling()
 		self._validate_activation_gates()
 		self._set_default_execution_snapshots()
 		self._protect_execution_snapshots()
@@ -94,8 +94,6 @@ class LPOMatter(Document):
 		self.status = "Draft"
 		self.matter_manager = "Administrator"
 		self.allow_ai_processing_by_default = 0
-		self.lexpoints_reserved = 0
-		self.lexpoints_consumed = 0
 		self.set("authorized_portal_users", [])
 		self.append(
 			"authorized_portal_users",
@@ -128,32 +126,9 @@ class LPOMatter(Document):
 				frappe.throw(_("The same Additional Party cannot be added twice."), frappe.ValidationError)
 			seen.add(key)
 
-	def _validate_billing(self):
-		if self.billing_method == "Job Based":
-			self.quoted_amount = 0
-			self.quote_status = "Not Required"
-			self.quote_approved_by = None
-			self.quote_approved_on = None
-			self.lexpoints_estimated = 0
-			self.lexpoints_reserved = 0
-			self.lexpoints_consumed = 0
-			self.funding_status = "Not Required"
-			self.funding_transaction = None
-		elif self.billing_method == "Quoted Price":
-			self.lexpoints_estimated = 0
-			self.lexpoints_reserved = 0
-			self.lexpoints_consumed = 0
-			self.funding_status = "Not Required"
-			self.funding_transaction = None
-			self.quote_status = self.quote_status if self.quote_status not in {None, "", "Not Required"} else "Pending Client Approval"
-		elif self.billing_method == "LexPack" and (self.lexpoints_estimated or 0) < 0:
-			frappe.throw(_("Estimated LexPoints cannot be negative."), frappe.ValidationError)
-		elif self.billing_method == "LexPack":
-			self.quoted_amount = 0
-			self.quote_status = "Not Required"
-			self.quote_approved_by = None
-			self.quote_approved_on = None
-			self.funding_status = self.funding_status if self.funding_status not in {None, "", "Not Required"} else "Pending"
+	def _set_job_based_commercial_handling(self):
+		"""Matter is legal context only; every quote and funding record belongs to a Job."""
+		self.billing_method = "Job Based"
 
 	def _validate_activation_gates(self):
 		if self.status != "Active":
@@ -162,22 +137,6 @@ class LPOMatter(Document):
 			frappe.throw(_("Cannot activate a Matter with 'Declined' acceptance status."), frappe.ValidationError)
 		if self.conflict_check_status == "Escalated":
 			frappe.throw(_("Cannot activate a Matter while Conflict Check is Escalated."), frappe.ValidationError)
-		if self.billing_method == "Quoted Price":
-			if flt(self.quoted_amount) <= 0 or self.quote_status != "Approved":
-				frappe.throw(
-					_("A positive Client-approved quote is required before activating this Matter."),
-					frappe.ValidationError,
-				)
-		elif self.billing_method == "LexPack":
-			if flt(self.lexpoints_estimated) <= 0:
-				frappe.throw(_("Estimated LexPoints are required before activation."), frappe.ValidationError)
-			if (
-				self.funding_status != "Funded"
-				or flt(self.lexpoints_reserved) < flt(self.lexpoints_estimated)
-				or not self.funding_transaction
-			):
-				frappe.throw(_("Reserve sufficient LexPoints before activating this Matter."), frappe.ValidationError)
-
 	def _protect_execution_snapshots(self):
 		previous = self.get_doc_before_save()
 		if not previous or previous.status == "Draft":
@@ -279,88 +238,6 @@ def _authorization_map(rows):
 def _has_management_access(user: str) -> bool:
 	roles = set(frappe.get_roles(user))
 	return user == "Administrator" or bool(roles.intersection({"LPO_Admin", "LPO_Manager", "System Manager"}))
-
-
-@frappe.whitelist()
-def decide_quote(matter: str, decision: str, quoted_amount: float | None = None, notes: str | None = None):
-	"""Record a commercial quote decision with Client-scoped authorization."""
-	doc = frappe.get_doc("LPO Matter", matter)
-	if doc.billing_method != "Quoted Price":
-		frappe.throw(_("Quote decisions apply only to Quoted Price Matters."), frappe.ValidationError)
-	if decision not in {"Approved", "Rejected"}:
-		frappe.throw(_("Decision must be Approved or Rejected."), frappe.ValidationError)
-	if not _has_management_access(frappe.session.user):
-		portal_user = get_portal_user()
-		if not (
-			portal_user
-			and portal_user.client == doc.customer
-			and portal_user.approval_authority in {"Commercial Approval", "All Client Approvals"}
-			and has_matter_access(doc.name, "approve")
-		):
-			frappe.throw(_("Commercial approval authority is required."), frappe.PermissionError)
-	elif quoted_amount is not None:
-		doc.quoted_amount = flt(quoted_amount)
-	if decision == "Approved" and flt(doc.quoted_amount) <= 0:
-		frappe.throw(_("A positive quoted amount is required."), frappe.ValidationError)
-	previous = {"quote_status": doc.quote_status, "quoted_amount": doc.quoted_amount}
-	doc.quote_status = decision
-	doc.quote_approved_by = frappe.session.user
-	doc.quote_approved_on = now_datetime()
-	previous_flag = getattr(frappe.flags, "lexocrates_portal_service", False)
-	frappe.flags.lexocrates_portal_service = True
-	try:
-		doc.save(ignore_permissions=True)
-	finally:
-		frappe.flags.lexocrates_portal_service = previous_flag
-	create_portal_audit_event(
-		client=doc.customer,
-		matter=doc.name,
-		action="Matter Quote Decision",
-		object_type=doc.doctype,
-		object_id=doc.name,
-		previous_value=previous,
-		new_value={"quote_status": decision, "quoted_amount": doc.quoted_amount, "notes": (notes or "").strip()},
-	)
-	return {"matter": doc.name, "quote_status": doc.quote_status, "quoted_amount": doc.quoted_amount}
-
-
-@frappe.whitelist()
-def reserve_matter_funding(matter: str, idempotency_key: str):
-	"""Atomically reserve the Matter estimate from its Client-owned wallet."""
-	doc = frappe.get_doc("LPO Matter", matter)
-	if doc.billing_method != "LexPack" or flt(doc.lexpoints_estimated) <= 0:
-		frappe.throw(_("A positive LexPack estimate is required."), frappe.ValidationError)
-	if not _has_management_access(frappe.session.user):
-		portal_user = get_portal_user()
-		if not (
-			portal_user
-			and portal_user.client == doc.customer
-			and portal_user.lexpack_purchase_access
-			and has_matter_access(doc.name, "billing")
-		):
-			frappe.throw(_("LexPack purchase authority is required."), frappe.PermissionError)
-	from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import _post_transaction
-
-	transaction = _post_transaction(
-		client=doc.customer,
-		transaction_type="Reservation",
-		points=doc.lexpoints_estimated,
-		idempotency_key=idempotency_key,
-		matter=doc.name,
-		reference_doctype="LPO Matter",
-		reference_name=doc.name,
-		description="Matter funding reservation",
-	)
-	doc.lexpoints_reserved = flt(doc.lexpoints_estimated)
-	doc.funding_status = "Funded"
-	doc.funding_transaction = transaction.name
-	previous_flag = getattr(frappe.flags, "lexocrates_portal_service", False)
-	frappe.flags.lexocrates_portal_service = True
-	try:
-		doc.save(ignore_permissions=True)
-	finally:
-		frappe.flags.lexocrates_portal_service = previous_flag
-	return {"matter": doc.name, "funding_status": doc.funding_status, "transaction": transaction.name}
 
 
 def has_permission(doc, ptype="read", user=None, debug=False):

@@ -442,7 +442,6 @@ function renderCeoDashboard(d) {
 					{ fieldname: "plan", fieldtype: "Link", options: "LexPack Plan", label: __("LexPack Plan"), reqd: 1 },
 					{ fieldname: "approval_reason", fieldtype: "Small Text", label: __("Approval Reason / Remarks"), reqd: 1, description: __("Mandatory executive reason for manual approval & invoice generation.") },
 					{ fieldname: "amount", fieldtype: "Currency", label: __("Paid Amount (Override Price)") },
-					{ fieldname: "lexpoints", fieldtype: "Int", label: __("LexPoints Credited (Override Points)") },
 					{ fieldname: "work_intake", fieldtype: "Link", options: "Lexocrates Work Intake", label: __("Link Work Intake (Optional)") },
 					{ fieldname: "create_payment_entry", fieldtype: "Check", label: __("Create Payment Entry (Payment Received)"), default: 1 }
 				],

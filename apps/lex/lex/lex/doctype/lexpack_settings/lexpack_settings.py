@@ -65,7 +65,7 @@ def set_ai_estimate_auto_approval(enabled: int = 0) -> dict:
 		provider, model, credential_name = resolve_ai_route(
 			None,
 			None,
-			"Client Work Intake LexPoint Estimation",
+			"Lextimator Legal Work Estimation",
 		)
 	settings.auto_approve_ai_pricing = enabled
 	settings.auto_approve_ai_pricing_authorized_by = frappe.session.user if enabled else None

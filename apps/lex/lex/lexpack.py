@@ -51,6 +51,7 @@ LEXPACK_DISCOUNT_PERCENTAGES = {
 	"BUSINESS": Decimal("28"),
 }
 DEFAULT_CHECKOUT_CURRENCY = "CAD"
+SUPPORTED_CAPACITY_CURRENCIES = frozenset(LEXPACK_CHECKOUT_CURRENCIES)
 
 
 def get_lexpack_portal_data(portal_user=None):
@@ -64,7 +65,7 @@ def get_lexpack_portal_data(portal_user=None):
 		fields=[
 			"name", "plan_code", "plan_name", "currency", "price", "value_advantage", "discount_percent",
 			"display_order", "self_service", "enterprise_custom", "no_expiry",
-			"rolling_qualification_spend", "qualification_bonus_points", "description", "commercial_note",
+			"rolling_qualification_spend", "description", "commercial_note",
 		],
 		order_by="display_order asc",
 		limit_page_length=50,
@@ -90,7 +91,9 @@ def get_lexpack_portal_data(portal_user=None):
 		"payment_enabled": readiness["payment_enabled"],
 		"purchase_access": bool(portal_user.lexpack_purchase_access),
 		"selected_currency": selected_currency,
-		"currency_options": list(LEXPACK_CHECKOUT_CURRENCIES.values()),
+		# Currency is derived from the client's country; the portal must not offer a
+		# client-controlled currency switch for the same Legal Capacity wallet.
+		"currency_options": [LEXPACK_CHECKOUT_CURRENCIES[selected_currency]],
 		"accounting_currency": accounting_currency or "INR",
 		"fair_pricing_note": _("Rolling 12-month tier upgrades are automatic. Legal Capacity never expires."),
 		"commercial_note": _("LexPack bundle checkout is available directly from the dashboard. Job quote payments remain inside the Job funding flow."),
@@ -307,7 +310,7 @@ def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None
 	previous_flag = getattr(frappe.flags, "lexpack_purchase_service", False)
 	frappe.flags.lexpack_purchase_service = True
 	try:
-		checkout_currency = currency or plan_doc.currency
+		checkout_currency = _validate_capacity_currency(currency or plan_doc.currency)
 		checkout_amount = flt(amount if amount is not None else plan_doc.price)
 		legal_capacity_amount = calculate_legal_capacity(checkout_amount, _plan_discount_percent(plan_doc))
 		_ensure_wallet_capacity_currency(client, checkout_currency)
@@ -326,9 +329,6 @@ def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None
 				"amount": checkout_amount,
 				"exchange_rate": exchange_rate,
 				"legal_capacity_amount": legal_capacity_amount,
-				"base_lexpoints": cint(legal_capacity_amount),
-				"bonus_lexpoints": 0,
-				"total_lexpoints": cint(legal_capacity_amount),
 			}
 		).insert(ignore_permissions=True)
 	finally:
@@ -349,8 +349,12 @@ def _plan_for_checkout_currency(plan, currency: str):
 	return plan
 
 
-def _checkout_pricing_for_plan(plan_doc, portal_user=None, requested_currency: str | None = None):
-	currency = _resolve_checkout_currency(portal_user=portal_user, requested_currency=requested_currency)
+def _checkout_pricing_for_plan(plan_doc, portal_user=None, requested_currency: str | None = None, client: str | None = None):
+	currency = _resolve_checkout_currency(
+		portal_user=portal_user,
+		requested_currency=requested_currency,
+		client=client,
+	)
 	plan_code = str(plan_doc.get("plan_code") or plan_doc.name or "").upper()
 	prices = LEXPACK_PUBLIC_PRICES.get(plan_code)
 	if not prices:
@@ -390,7 +394,12 @@ def calculate_legal_capacity(paid_amount: float | Decimal, discount_percent: flo
 
 
 def _ensure_wallet_capacity_currency(client: str, currency: str):
-	"""Keep each client wallet in one currency; never silently reinterpret legacy units."""
+	"""Reject mixed-currency capacity before a purchase is created.
+
+	The currency is assigned by the immutable ledger when capacity is actually
+	credited.  A failed or abandoned checkout must not lock an empty wallet.
+	"""
+	currency = _validate_capacity_currency(currency)
 	wallet_name = frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "name")
 	if not wallet_name:
 		return
@@ -406,15 +415,24 @@ def _ensure_wallet_capacity_currency(client: str, currency: str):
 			_("This legacy wallet must be reconciled to Legal Capacity before a new LexPack purchase."),
 			frappe.ValidationError,
 		)
-	if not existing_currency:
-		frappe.db.set_value("Lexocrates Client Wallet", wallet.name, "capacity_currency", currency, update_modified=False)
 
 
-def _resolve_checkout_currency(portal_user=None, requested_currency: str | None = None) -> str:
+def _resolve_checkout_currency(portal_user=None, requested_currency: str | None = None, client: str | None = None) -> str:
+	client = client or (portal_user.client if portal_user else None)
+	country_currency = _country_currency_for_client(client)
 	requested_currency = (requested_currency or "").strip().upper()
-	if requested_currency in LEXPACK_CHECKOUT_CURRENCIES:
+	if requested_currency:
+		_validate_capacity_currency(requested_currency)
+		if client and requested_currency != country_currency:
+			frappe.throw(
+				_("Legal Capacity currency is fixed by the client's country ({0}).").format(country_currency),
+				frappe.ValidationError,
+			)
 		return requested_currency
-	client = portal_user.client if portal_user else None
+	return country_currency
+
+
+def _country_currency_for_client(client: str | None) -> str:
 	if not client:
 		return DEFAULT_CHECKOUT_CURRENCY
 	fields = ["default_currency", "territory"]
@@ -426,9 +444,6 @@ def _resolve_checkout_currency(portal_user=None, requested_currency: str | None 
 		fields,
 		as_dict=True,
 	) or {}
-	default_currency = (customer.get("default_currency") or "").strip().upper()
-	if default_currency in LEXPACK_CHECKOUT_CURRENCIES:
-		return default_currency
 	text = " ".join(
 		str(customer.get(fieldname) or "").lower()
 		for fieldname in ("custom_primary_jurisdiction", "territory")
@@ -439,7 +454,20 @@ def _resolve_checkout_currency(portal_user=None, requested_currency: str | None 
 		return "GBP"
 	if any(token in text for token in ("united states", "usa", "u.s.", "america")):
 		return "USD"
+	default_currency = (customer.get("default_currency") or "").strip().upper()
+	if default_currency in SUPPORTED_CAPACITY_CURRENCIES:
+		return default_currency
 	return DEFAULT_CHECKOUT_CURRENCY
+
+
+def _validate_capacity_currency(currency: str | None) -> str:
+	currency = (currency or "").strip().upper()
+	if currency not in SUPPORTED_CAPACITY_CURRENCIES:
+		frappe.throw(
+			_("Legal Capacity is currently available only in CAD, USD, or GBP."),
+			frappe.ValidationError,
+		)
+	return currency
 
 
 def _complete_purchase(purchase_doc, payment, source: str):
@@ -469,7 +497,7 @@ def _complete_purchase(purchase_doc, payment, source: str):
 		wallet_entry = _post_transaction(
 			client=purchase_doc.client,
 			transaction_type="Purchase",
-			points=purchase_doc.legal_capacity_amount,
+			legal_capacity_amount=purchase_doc.legal_capacity_amount,
 			currency=purchase_doc.currency,
 			idempotency_key=f"lexpack-purchase:{purchase_doc.name}",
 			reference_doctype="LexPack Purchase",
@@ -488,9 +516,6 @@ def _complete_purchase(purchase_doc, payment, source: str):
 		rolling_spend_after=pricing["rolling_spend_after"],
 		tier_before=pricing["tier_before"],
 		tier_after=pricing["tier_after"],
-		bonus_lexpoints=0,
-		total_lexpoints=cint(purchase_doc.legal_capacity_amount),
-		bonus_wallet_transactions="[]",
 		failure_reason=None,
 	)
 	create_portal_audit_event(
@@ -521,18 +546,24 @@ def recalculate_client_pricing(client: str, triggering_purchase: str | None = No
 		wallet_name = frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "name")
 	frappe.db.sql("select name from `tabLexocrates Client Wallet` where name=%s for update", wallet_name)
 	wallet = frappe.get_doc("Lexocrates Client Wallet", wallet_name)
+	wallet_currency = (wallet.get("capacity_currency") or "").strip().upper()
 	cutoff = add_months(nowdate(), -12)
+	filters = [client, cutoff]
+	currency_condition = ""
+	if wallet_currency:
+		currency_condition = " and currency=%s"
+		filters.append(wallet_currency)
 	rolling_after = flt(
 		frappe.db.sql(
 			"""select coalesce(sum(amount), 0) from `tabLexPack Purchase`
-			where client=%s and status='Paid' and date(paid_on) >= %s""",
-			(client, cutoff),
+			where client=%s and status='Paid' and date(paid_on) >= %s{0}""".format(currency_condition),
+			filters,
 		)[0][0]
 	)
 	if triggering_purchase:
 		trigger = frappe.get_doc("LexPack Purchase", triggering_purchase)
 		# The triggering row is marked Paid only after the atomic fulfilment succeeds.
-		if trigger.status != "Paid":
+		if trigger.status != "Paid" and (not wallet_currency or trigger.currency == wallet_currency):
 			rolling_after += flt(trigger.amount)
 	rolling_before = max(0, rolling_after - (flt(trigger.amount) if triggering_purchase else 0))
 	plans = frappe.get_all(
@@ -554,7 +585,6 @@ def recalculate_client_pricing(client: str, triggering_purchase: str | None = No
 		{
 			"rolling_12_month_spend": rolling_after,
 			"current_pricing_tier": current_tier,
-			"bonus_points_earned": 0,
 			"pricing_calculated_on": now_datetime(),
 		},
 		update_modified=False,
@@ -564,8 +594,6 @@ def recalculate_client_pricing(client: str, triggering_purchase: str | None = No
 		"rolling_spend_after": rolling_after,
 		"tier_before": tier_before,
 		"tier_after": current_tier,
-		"bonus_points": 0,
-		"bonus_transactions": [],
 	}
 
 
@@ -1087,7 +1115,6 @@ def manually_approve_lexpack_plan(
 	approval_reason: str,
 	work_intake: str | None = None,
 	amount: float | None = None,
-	lexpoints: int | None = None,
 	create_payment_entry: bool = True,
 ):
 	"""Manually approve and grant a LexPack Plan to a Customer with a mandatory approval reason and automatic ERPNext Sales Invoice generation."""
@@ -1113,11 +1140,13 @@ def manually_approve_lexpack_plan(
 	plan_doc = frappe.get_doc("LexPack Plan", plan)
 	settings = _get_settings(require_enabled=False)
 	company = _resolve_company(settings)
-	exchange_rate = _resolve_exchange_rate(plan_doc.currency, company)
+	checkout = _checkout_pricing_for_plan(plan_doc, client=client)
+	capacity_currency = checkout["currency"]
+	exchange_rate = _resolve_exchange_rate(capacity_currency, company)
 
-	paid_amount = flt(amount) if amount is not None and flt(amount) > 0 else flt(plan_doc.price)
+	paid_amount = flt(amount) if amount is not None and flt(amount) > 0 else flt(checkout["price"])
 	legal_capacity_amount = calculate_legal_capacity(paid_amount, _plan_discount_percent(plan_doc))
-	_ensure_wallet_capacity_currency(client, plan_doc.currency)
+	_ensure_wallet_capacity_currency(client, capacity_currency)
 
 	prev_ignore_perm = getattr(frappe.flags, "ignore_permissions", False)
 	prev_service_flag = getattr(frappe.flags, "lexpack_purchase_service", False)
@@ -1136,13 +1165,10 @@ def manually_approve_lexpack_plan(
 				"gateway": "Manual Executive Approval",
 				"created_on": now_datetime(),
 				"paid_on": now_datetime(),
-				"currency": plan_doc.currency,
+				"currency": capacity_currency,
 				"amount": paid_amount,
 				"legal_capacity_amount": legal_capacity_amount,
 				"exchange_rate": exchange_rate,
-				"base_lexpoints": cint(legal_capacity_amount),
-				"bonus_lexpoints": 0,
-				"total_lexpoints": cint(legal_capacity_amount),
 				"is_manual_approval": 1,
 				"approval_reason": str(approval_reason).strip(),
 			}
@@ -1164,8 +1190,8 @@ def manually_approve_lexpack_plan(
 		wallet_entry = _post_transaction(
 			client=client,
 			transaction_type="Purchase",
-			points=legal_capacity_amount,
-			currency=plan_doc.currency,
+			legal_capacity_amount=legal_capacity_amount,
+			currency=capacity_currency,
 			idempotency_key=f"lexpack-purchase:{purchase_doc.name}",
 			reference_doctype="LexPack Purchase",
 			reference_name=purchase_doc.name,
@@ -1180,9 +1206,6 @@ def manually_approve_lexpack_plan(
 			rolling_spend_after=pricing["rolling_spend_after"],
 			tier_before=pricing["tier_before"],
 			tier_after=pricing["tier_after"],
-			bonus_lexpoints=0,
-			total_lexpoints=cint(legal_capacity_amount),
-			bonus_wallet_transactions="[]",
 		)
 
 		if work_intake and frappe.db.exists("Lexocrates Work Intake", work_intake):

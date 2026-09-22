@@ -1091,7 +1091,7 @@ def ensure_ceo_approval_channel():
 			"channel_type": "Private",
 			"status": "Active",
 			"system_user_only": 1,
-			"description": _("Confidential executive channel for matter pricing and LexPoint quote approvals."),
+			"description": _("Confidential executive channel for matter pricing and confirmed fixed-price approvals."),
 			"members": [
 				{
 					"user": user,
