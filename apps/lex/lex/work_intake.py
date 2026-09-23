@@ -15,7 +15,10 @@ from lex.pdf_watermark import add_secure_download_url, secure_download_url_for_f
 from lex.portal_audit import create_portal_audit_event
 
 
-ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".doc", ".docx", ".jpeg", ".jpg", ".pdf", ".png", ".txt"}
+# The fixed-price estimator bills only exact native PDF pages.  Accepting other
+# source formats here would let a client complete an upload that cannot advance
+# to an estimate, so the client/Desk Job-document contract is PDF-only.
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 INTERNAL_ROLES = {"System Manager", "LPO_Admin", "LPO_Manager", "Lexocrates Finance", "Accounts Manager"}
 DEFAULT_SLA_VERSION = "CLIENT-INTAKE-SLA-1.0"
@@ -105,6 +108,7 @@ def create_work_intake(
 		"requested_delivery_date": requested_delivery_date or None,
 		"expected_outcome": (expected_outcome or "").strip(),
 		"preliminary_details": (preliminary_details or "").strip(),
+		"detailed_instructions": (preliminary_details or "").strip(),
 		"confidentiality_level": confidentiality_level,
 		"sla_version": sla_version,
 		"sla_document_snapshot": sla_document,
@@ -119,6 +123,8 @@ def create_work_intake(
 		frappe.throw(_("Choose a supported Service Type."), frappe.ValidationError)
 	if priority not in {"Low", "Medium", "High", "Urgent"}:
 		frappe.throw(_("Choose a valid priority."), frappe.ValidationError)
+	if len(frappe.utils.strip_html(values["detailed_instructions"])) < 20:
+		frappe.throw(_("Provide at least 20 characters of preliminary details."), frappe.ValidationError)
 	parent = _resolve_intake_matter(
 		actor,
 		matter=matter,
@@ -281,7 +287,7 @@ def _upload_intake_document(doc, actor, filename: str, content: str, *, auto_est
 	filename = os.path.basename((filename or "").strip())
 	extension = os.path.splitext(filename)[1].lower()
 	if not filename or extension not in ALLOWED_UPLOAD_EXTENSIONS:
-		frappe.throw(_("This file type is not allowed."), frappe.ValidationError)
+		frappe.throw(_("Upload a PDF Job document before estimating."), frappe.ValidationError)
 	decoded = _decode_upload(content)
 	# This controlled endpoint performs the scan synchronously so quote state can
 	# be updated atomically. Suppress the generic after-commit scanner to avoid a
@@ -836,6 +842,11 @@ def create_direct_quote_order(intake: str):
 		"receipt": doc.name,
 		"notes": {"work_intake": doc.name, "client": doc.client, "funding_route": "Direct Quote"},
 	}
+	# A retry, refresh, or repeated click must reopen the same pending checkout.
+	# Creating a second Razorpay order here would invalidate the order ID held by
+	# the client and leave unnecessary pending orders in the gateway.
+	if doc.funding_status == "Payment Pending" and doc.status == "Funding Pending" and doc.razorpay_order_id:
+		return _checkout_payload(doc, actor, settings, payload)
 	with _service_writes():
 		doc.funding_route = "Direct Quote"
 		doc.funding_status = "Payment Pending"
@@ -1653,6 +1664,7 @@ def _checkout_payload(doc, actor, settings, payload):
 	from lex.lexpack import _checkout_prefill
 
 	return {
+		"is_live_order": True,
 		"intake": doc.name,
 		"key": settings.key_id,
 		"order_id": doc.razorpay_order_id,

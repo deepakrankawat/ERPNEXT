@@ -379,8 +379,7 @@ class TestAIDocumentProcessor(FrappeTestCase):
 		final_text = "# Completed Master Services Agreement Deliverable\n\nAll terms reviewed and approved."
 		frappe.db.set_value("LPO Matter", self.matter_doc.name, {
 			"status": "Active",
-			"quoted_amount": 100,
-			"quote_status": "Approved",
+			"billing_method": "Quoted Price",
 		}, update_modified=False)
 		self._advance_job_to_in_progress()
 
@@ -411,8 +410,7 @@ class TestAIDocumentProcessor(FrappeTestCase):
 		frappe.set_user("Administrator")
 		frappe.db.set_value("LPO Matter", self.matter_doc.name, {
 			"status": "Active",
-			"quoted_amount": 100,
-			"quote_status": "Approved",
+			"billing_method": "Quoted Price",
 		}, update_modified=False)
 		self._advance_job_to_in_progress()
 		final_text = """# Legal Review\n\n## Findings\n\n- Indemnity requires a cap.\n- Confidentiality survives termination.\n\n| Clause | Risk |\n|---|---|\n| Indemnity | High |"""

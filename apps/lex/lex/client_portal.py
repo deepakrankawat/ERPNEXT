@@ -201,6 +201,9 @@ def _documents(matters, jobs, intakes=None, portal_user=None):
 	"""Return client-owned uploads plus completed canonical deliverables only."""
 	rows = []
 	portal_user = portal_user or _require_portal_user()
+	matter_titles = {row.name: row.matter_title for row in matters}
+	jobs_by_name = {row.name: row for row in jobs}
+	intakes_by_name = {row.name: row for row in (intakes or [])}
 	client_users = frappe.get_all(
 		"Lexocrates Portal User",
 		filters={"client": portal_user.client},
@@ -262,6 +265,28 @@ def _documents(matters, jobs, intakes=None, portal_user=None):
 	rows = list({row.name: row for row in rows}.values())
 	rows.sort(key=lambda row: str(row.modified or ""), reverse=True)
 	for row in rows:
+		if row.attached_to_doctype == "LPO Job":
+			job = jobs_by_name.get(row.attached_to_name)
+			row.linked_record_title = (job.get("job_title") if job else None) or _("Work item")
+			row.linked_record_type = _("Job")
+			row.linked_matter_title = matter_titles.get(job.get("engagement")) if job else None
+		elif row.attached_to_doctype == "Lexocrates Work Intake":
+			intake = intakes_by_name.get(row.attached_to_name)
+			job = jobs_by_name.get(intake.get("job")) if intake else None
+			row.linked_record_title = (
+				(job.get("job_title") if job else None)
+				or (intake.get("intake_title") if intake else None)
+				or _("Work item")
+			)
+			row.linked_record_type = _("Job") if job else _("Work intake")
+			row.linked_matter_title = matter_titles.get(
+				(job.get("engagement") if job else intake.get("matter") if intake else None)
+			)
+		# Attachment IDs are used only while this server function builds the
+		# authorized document response. Do not expose Matter, Job or Intake IDs
+		# in the client portal payload.
+		row.pop("attached_to_name", None)
+		row.pop("attached_to_doctype", None)
 		add_secure_download_url(row)
 	return rows
 

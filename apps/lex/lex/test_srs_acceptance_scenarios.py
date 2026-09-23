@@ -81,17 +81,20 @@ class TestSRSAcceptanceScenarios(FrappeTestCase):
 			"territory": frappe.db.get_value("Territory", {"is_group": 0}, "name"),
 		}).insert(ignore_permissions=True).name
 
+		from lex.lexpack import _country_currency_for_client
+
+		currency = _country_currency_for_client(client)
 		# Step 1: LexPack purchase & wallet credit
-		txn = _post_transaction(client=client, transaction_type="Purchase", points=200, idempotency_key=f"topup-{suffix}")
-		self.assertEqual(txn.points, 200)
+		txn = _post_transaction(client=client, transaction_type="Purchase", legal_capacity_amount=200, currency=currency, idempotency_key=f"topup-{suffix}")
+		self.assertEqual(txn.legal_capacity_amount, 200)
 
 		# Step 3: Reserve points atomically
-		res = _post_transaction(client=client, transaction_type="Reservation", points=50, idempotency_key=f"res-{suffix}")
-		self.assertEqual(res.points, 50)
+		res = _post_transaction(client=client, transaction_type="Reservation", legal_capacity_amount=50, currency=currency, idempotency_key=f"res-{suffix}")
+		self.assertEqual(res.legal_capacity_amount, 50)
 
 		# Step 4: Approved consumption debit
-		debit = _post_transaction(client=client, transaction_type="Reserved Consumption", points=30, idempotency_key=f"cons-{suffix}")
-		self.assertEqual(debit.points, 30)
+		debit = _post_transaction(client=client, transaction_type="Reserved Consumption", legal_capacity_amount=30, currency=currency, idempotency_key=f"cons-{suffix}")
+		self.assertEqual(debit.legal_capacity_amount, 30)
 
 		# Step 5: Statement reconciles balances
 		stmt = wallet_statement.generate_wallet_statement_data(client_id=client)
