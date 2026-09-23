@@ -15,6 +15,7 @@ from werkzeug.exceptions import Forbidden
 from lex import chat_automation, client_portal, persona_workspaces, portal_management, work_intake
 from lex.audit_worm_chain import verify_audit_trail_integrity
 from lex.client_access import get_linked_client_ids, has_matter_access, require_client_administrator
+from lex.lexpack import _country_currency_for_client
 from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import (
 	_post_transaction,
 	reverse_transaction,
@@ -81,6 +82,33 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("@media (max-width: 640px)", styles)
 		self.assertIn("@media (max-width: 480px)", styles)
 		self.assertIn("100dvh", styles)
+
+	def test_client_portal_has_standard_intake_and_quick_lextimator_workflows(self):
+		app_path = Path(frappe.get_app_path("lex"))
+		script = (app_path / "public" / "js" / "client_portal.js").read_text(encoding="utf-8")
+
+		self.assertIn('"lex-new-intake"', script)
+		self.assertIn('data-intake-workflow="standard"', script)
+		self.assertIn('data-intake-workflow="quick"', script)
+		self.assertIn('data-matter-mode', script)
+		self.assertIn('data-next-intake-step', script)
+		self.assertIn('lex.work_intake.create_work_intake', script)
+		self.assertIn('"lex-instant-estimate-form"', script)
+		self.assertIn('lex.instant_estimator.calculate_instant_pdf_estimate', script)
+		self.assertIn('id="lex-pay-instant-btn"', script)
+		self.assertIn('lex.work_intake.create_direct_quote_order", { intake: response.intake }', script)
+		self.assertIn('accept=".pdf,application/pdf"', script)
+
+	def test_quick_lextimator_saves_before_payment_and_checkout_is_live(self):
+		app_path = Path(frappe.get_app_path("lex"))
+		estimator = (app_path / "instant_estimator.py").read_text(encoding="utf-8")
+		intake = (app_path / "work_intake.py").read_text(encoding="utf-8")
+
+		self.assertIn("def _find_saved_quick_estimate", estimator)
+		self.assertIn("hashlib.sha256(pdf_bytes).hexdigest()", estimator)
+		self.assertNotIn("def _prepare_razorpay_checkout", estimator)
+		self.assertIn('"is_live_order": True', intake)
+		self.assertIn('doc.funding_status == "Payment Pending"', intake)
 
 	def test_login_page_is_light_only(self):
 		app_path = Path(frappe.get_app_path("lex"))
@@ -351,6 +379,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertEqual(frappe.db.get_value("LPO Matter", intake.matter, "billing_method"), "Job Based")
 		self.assertEqual(frappe.db.get_value("LPO Matter", intake.matter, "status"), "Active")
 		self.assertEqual(frappe.db.get_value("LPO Job", intake.job, "job_status"), "Draft")
+		self.assertEqual(intake.detailed_instructions, intake.preliminary_details)
 
 	def test_matter_access_and_cross_client_isolation(self):
 		client_a = _make_client()
@@ -374,16 +403,17 @@ class TestClientPortalArchitecture(FrappeTestCase):
 
 	def test_wallet_ledger_is_idempotent_and_immutable(self):
 		client = _make_client()
+		currency = _country_currency_for_client(client)
 		key = f"purchase-{frappe.generate_hash(length=10)}"
 		purchase = _post_transaction(
-			client=client, transaction_type="Purchase", points=100, idempotency_key=key
+			client=client, transaction_type="Purchase", legal_capacity_amount=100, currency=currency, idempotency_key=key
 		)
 		duplicate = _post_transaction(
-			client=client, transaction_type="Purchase", points=100, idempotency_key=key
+			client=client, transaction_type="Purchase", legal_capacity_amount=100, currency=currency, idempotency_key=key
 		)
-		_post_transaction(client=client, transaction_type="Reservation", points=40)
-		_post_transaction(client=client, transaction_type="Reserved Consumption", points=15)
-		_post_transaction(client=client, transaction_type="Release", points=25)
+		_post_transaction(client=client, transaction_type="Reservation", legal_capacity_amount=40, currency=currency)
+		_post_transaction(client=client, transaction_type="Reserved Consumption", legal_capacity_amount=15, currency=currency)
+		_post_transaction(client=client, transaction_type="Release", legal_capacity_amount=25, currency=currency)
 		wallet = frappe.get_doc(
 			"Lexocrates Client Wallet",
 			frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "name"),
@@ -393,7 +423,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertEqual(wallet.reserved_balance, 0)
 		self.assertEqual(wallet.total_purchased, 100)
 		self.assertEqual(wallet.total_consumed, 15)
-		credit = _post_transaction(client=client, transaction_type="Adjustment Credit", points=10)
+		credit = _post_transaction(client=client, transaction_type="Adjustment Credit", legal_capacity_amount=10, currency=currency)
 		reversal = reverse_transaction(credit.name, "Correction reversed", f"reverse-{key}")
 		wallet.reload()
 		self.assertEqual(reversal["reversal_of"], credit.name)
@@ -493,7 +523,9 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			"job_title": "Completion-gated delivery",
 			"engagement": matter.name,
 			"job_type": "Contract Review",
-			"job_status": "Activated",
+			# This fixture changes status with db.set_value below; insert as Draft so
+			# it does not bypass the production funding gate for activation.
+			"job_status": "Draft",
 			"priority": "Medium",
 			"task_description": "Prepare the final reviewed agreement.",
 			"received_at": now_datetime(),
@@ -578,6 +610,10 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			if row.name == file_doc.name
 		)
 		self.assertEqual(document.portal_document_type, "Client Upload")
+		self.assertEqual(document.linked_record_title, job.job_title)
+		self.assertEqual(document.linked_matter_title, matter.matter_title)
+		self.assertNotIn("attached_to_name", document)
+		self.assertNotIn("attached_to_doctype", document)
 		self.assertTrue(document.download_url)
 		self.assertEqual(_resolve_downloadable_file(file_id=file_doc.name).name, file_doc.name)
 
@@ -609,6 +645,13 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			"delivery_document_checksum": checksum,
 			"delivery_document_version": 1,
 		}, update_modified=False)
+		notifications_before = frappe.db.count(
+			"Notification Log", {"for_user": user.name, "document_name": job.name}
+		)
+		# The Job delivery hook may notify while the fixture stores the document.
+		# Isolate this explicit two-call idempotency check from that setup event.
+		frappe.db.set_value("LPO Job", job.name, "delivery_notification_version", 0, update_modified=False)
+		mock_sendmail.reset_mock()
 		job.reload()
 
 		chat_automation._notify_client_deliverable_ready(job)
@@ -624,7 +667,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		)
 		self.assertEqual(
 			frappe.db.count("Notification Log", {"for_user": user.name, "document_name": job.name}),
-			1,
+			notifications_before + 1,
 		)
 
 	def test_commercial_approver_cannot_approve_deliverable(self):
@@ -648,7 +691,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			"job_title": "Restricted deliverable approval",
 			"engagement": matter.name,
 			"job_type": "Contract Review",
-			"job_status": "Activated",
+			"job_status": "Draft",
 			"assigned_analyst": "Administrator",
 			"qa_required": 0,
 			"priority": "Medium",
@@ -683,7 +726,6 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			},
 			update_modified=False,
 		)
-
 		frappe.set_user(user.name)
 		dashboard = client_portal.get_portal_dashboard()
 		row = next(item for item in dashboard["jobs"] if item.name == job.name)
@@ -707,7 +749,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			"job_title": "Client preview approval",
 			"engagement": matter.name,
 			"job_type": "Contract Review",
-			"job_status": "Activated",
+			"job_status": "Draft",
 			"assigned_analyst": "Administrator",
 			"qa_required": 0,
 			"priority": "Medium",
@@ -742,6 +784,9 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			},
 			update_modified=False,
 		)
+		# This test covers delivery approval, not payment. Keep its fixture out
+		# of the Job Based funding path which is exercised separately.
+		frappe.db.set_value("LPO Matter", matter.name, "billing_method", "Quoted Price", update_modified=False)
 
 		frappe.set_user(user.name)
 		row = next(item for item in client_portal.get_portal_dashboard()["jobs"] if item.name == job.name)

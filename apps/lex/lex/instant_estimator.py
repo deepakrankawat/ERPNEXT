@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import os
 from decimal import Decimal, ROUND_CEILING
@@ -250,6 +251,49 @@ class _portal_service_writes:
 		frappe.flags.lexocrates_portal_service = self.previous
 
 
+def _find_saved_quick_estimate(client: str, portal_user_name: str, checksum: str, service: str):
+	"""Return an unfunded saved Quick Lextimator estimate for the same PDF.
+
+	The checksum, selected service and portal user together make a repeat of an
+	estimate request idempotent.  In particular, a browser retry must not create
+	another Matter, Work Intake or Draft Job before the client has paid.
+	"""
+	jobs = frappe.get_all(
+		"LPO Job",
+		filters={
+			"customer": client,
+			"source_document_checksum": checksum,
+			"selected_pricing_service": service,
+			"job_status": "Draft",
+		},
+		fields=[
+			"name",
+			"engagement",
+			"work_intake",
+			"currency",
+			"quoted_amount",
+			"pricing_exchange_rate",
+			"final_rounded_price_cad",
+		],
+		order_by="modified desc",
+		limit_page_length=10,
+	)
+	for job in jobs:
+		if not job.work_intake:
+			continue
+		intake = frappe.db.get_value(
+			"Lexocrates Work Intake",
+			job.work_intake,
+			["name", "portal_user", "status", "funding_status", "quote_status"],
+			as_dict=True,
+		)
+		if not intake or intake.portal_user != portal_user_name:
+			continue
+		if intake.quote_status == "Ready" and intake.funding_status != "Funded" and intake.status != "Matter Confirmed":
+			return frappe._dict({"job": job, "intake": intake})
+	return None
+
+
 @frappe.whitelist()
 def calculate_instant_pdf_estimate(
 	filename: str | None = None,
@@ -355,11 +399,34 @@ def calculate_instant_pdf_estimate(
 	)
 
 
-	# Link or create intake & Razorpay order
+	# Save an estimate record first.  A Razorpay order is deliberately created
+	# later, only when the client explicitly selects secure payment.
 	intake_name = None
 	matter_name = None
 
 	if client:
+		saved = _find_saved_quick_estimate(
+			client, portal_user.name, hashlib.sha256(pdf_bytes).hexdigest(), detected_service
+		)
+		if saved:
+			saved_job = saved.job
+			intake_name = saved.intake.name
+			matter_name = saved_job.engagement
+			# Preserve the original saved fixed quote on retries, even if an FX rate
+			# changes after the client first received the estimate.
+			if saved_job.quoted_amount is not None:
+				saved_price = Decimal(str(saved_job.quoted_amount))
+				pricing["price_amount"] = f"{int(saved_price)} {saved_job.currency}"
+				pricing["final_price"] = saved_price
+				pricing["price_min"] = saved_price
+				pricing["price_max"] = saved_price
+				pricing["currency"] = saved_job.currency
+				pricing["exchange_rate"] = Decimal(str(saved_job.pricing_exchange_rate or pricing["exchange_rate"]))
+			pricing["intake"] = intake_name
+			pricing["matter"] = matter_name
+			pricing["payment_ready"] = True
+			return _serialize_pricing(pricing)
+
 		from lex.work_intake import _sla_hash, _sla_snapshot
 
 		intake_title = f"{detected_service} - {filename[:60]} ({pages} pp)"
@@ -482,56 +549,10 @@ def calculate_instant_pdf_estimate(
 			# Matter is intentionally only the parent legal/commercial container.
 			_store_instant_estimate_document_on_job(job, filename, pdf_bytes)
 
-	# Prepare Razorpay order payload
-	razorpay_order = _prepare_razorpay_checkout(
-		amount=final_price,
-		currency=pricing["currency"],
-		service_name=detected_service,
-		pages=pages,
-		turnaround=pricing["turnaround_text"],
-		intake_name=intake_name,
-		matter_name=matter_name,
-		portal_user=portal_user,
-	)
-
 	pricing["intake"] = intake_name
 	pricing["matter"] = matter_name
-	pricing["razorpay_order"] = razorpay_order
+	pricing["payment_ready"] = bool(intake_name)
 	return _serialize_pricing(pricing)
-
-
-def _prepare_razorpay_checkout(
-	amount: int,
-	currency: str,
-	service_name: str,
-	pages: int,
-	turnaround: str,
-	intake_name: str | None = None,
-	matter_name: str | None = None,
-	portal_user: Any = None,
-) -> dict[str, Any]:
-	"""Use the existing verified Direct Quote checkout; never trust browser pricing."""
-	if not intake_name:
-		return {
-			"is_live_order": False,
-			"currency": currency,
-			"amount": amount * 100,
-			"reason": "Sign in through the Client Portal before creating a Razorpay order.",
-		}
-	try:
-		from lex.work_intake import create_direct_quote_order
-
-		return create_direct_quote_order(intake_name)
-	except Exception as exc:
-		frappe.log_error(frappe.get_traceback(), "Instant Estimator Razorpay Order")
-		return {
-			"is_live_order": False,
-			"currency": currency,
-			"amount": amount * 100,
-			"intake": intake_name,
-			"matter": matter_name,
-			"reason": str(exc)[:300],
-		}
 
 
 @frappe.whitelist()

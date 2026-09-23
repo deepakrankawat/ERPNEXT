@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 import unittest
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from pypdf import PdfWriter
 
@@ -13,6 +15,7 @@ from lex.instant_estimator import (
 	extract_pdf_pages_and_text,
 	round_up_to_cad_five,
 )
+from lex.work_intake import _checkout_payload
 
 
 def _generate_test_pdf(num_pages: int = 3, text_content: str = "Test agreement review clause") -> bytes:
@@ -82,3 +85,17 @@ class TestInstantEstimator(unittest.TestCase):
 		pdf_bytes = _generate_test_pdf(num_pages=5)
 		pages, text = extract_pdf_pages_and_text(pdf_bytes)
 		self.assertEqual(pages, 5)
+
+	def test_direct_quote_checkout_payload_is_explicitly_live(self):
+		doc = SimpleNamespace(
+			name="WI-TEST-0001",
+			razorpay_order_id="order_test_0001",
+			currency="CAD",
+			intake_title="Quick Lextimator estimate",
+		)
+		settings = SimpleNamespace(key_id="rzp_test_example", checkout_name=None, checkout_theme_color=None)
+		with patch("lex.lexpack._checkout_prefill", return_value={"email": "client@example.com"}):
+			checkout = _checkout_payload(doc, SimpleNamespace(), settings, {"amount": 6000})
+		self.assertTrue(checkout["is_live_order"])
+		self.assertEqual(checkout["order_id"], "order_test_0001")
+		self.assertEqual(checkout["amount"], 6000)
