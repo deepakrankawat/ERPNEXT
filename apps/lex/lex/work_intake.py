@@ -1114,7 +1114,7 @@ def _intake_row(doc, actor):
 	# real Document instances; handle both without treating a missing key as a
 	# method.
 	as_dict = getattr(doc, "as_dict", None)
-	row = as_dict() if callable(as_dict) else dict(doc)
+	row = frappe._dict(as_dict() if callable(as_dict) else doc)
 	if row.get("quote_status") in {"Ready", "Accepted"}:
 		row["cost_estimate_status"] = "Ready"
 	elif row.get("status") in {"Operations Review", "Pending CEO Approval"}:
