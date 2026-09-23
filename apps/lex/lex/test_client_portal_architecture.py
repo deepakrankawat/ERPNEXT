@@ -271,6 +271,8 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		verified = portal_management.verify_email_login_token(result["test_token"])
 		self.assertEqual(verified["user"], user.name)
 		self.assertEqual(verified["redirect"], "/client-portal")
+		dashboard = client_portal.get_portal_dashboard()
+		self.assertEqual(dashboard["profile"]["email"], user.name)
 		with self.assertRaises(frappe.PermissionError):
 			portal_management.verify_email_login_token(result["test_token"])
 
@@ -293,6 +295,8 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn('attributeFilter: ["data-theme"]', template)
 		self.assertIn("Verify Email & Create Password", script)
 		self.assertIn("password: verifyForm.password.value", script)
+		self.assertIn('class="lex-registration-submit-row"', template)
+		self.assertGreater(template.index("lex-registration-submit-row"), template.index('id="billing-details"'))
 
 	def test_verified_registration_creates_login_ready_company_admin_and_wallet(self):
 		country = frappe.db.get_value("Country", {}, "name")

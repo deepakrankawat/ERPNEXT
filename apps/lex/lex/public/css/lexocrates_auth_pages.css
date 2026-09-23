@@ -258,6 +258,36 @@ html[data-theme="dark"] {
 	max-width: 52ch;
 }
 
+.lex-registration-submit-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 18px;
+	padding: 20px 24px;
+	margin-top: 18px;
+	background: var(--lex-surface);
+	border: 1px solid var(--lex-border);
+	border-radius: var(--lex-radius-md);
+	box-shadow: var(--lex-shadow-sm);
+}
+
+.lex-registration-submit-row strong {
+	display: block;
+	color: var(--lex-ink);
+	font-size: 14px;
+}
+
+.lex-registration-submit-row p {
+	margin: 4px 0 0;
+	color: var(--lex-ink-muted);
+	font-size: 12.5px;
+}
+
+@media (max-width: 640px) {
+	.lex-registration-submit-row { align-items: stretch; flex-direction: column; }
+	.lex-registration-submit-row .btn { width: 100%; }
+}
+
 /* ---------- completion tracker ---------- */
 
 .lex-completion-tracker {
