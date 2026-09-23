@@ -11,12 +11,23 @@ fail() {
 	exit 1
 }
 
+command -v git >/dev/null 2>&1 || fail "Git is not installed."
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || \
+	fail "This script must be run from a Git checkout."
+cd "$REPO_ROOT"
+
 echo "=========================================================="
 echo " Lexocrates LPO & ERPNext production deployment"
 echo "=========================================================="
 
+CURRENT_BRANCH="$(git branch --show-current)"
+[ -n "$CURRENT_BRANCH" ] || fail "The Git checkout is in detached HEAD state."
+echo "[0/6] Pulling the latest $CURRENT_BRANCH changes..."
+git pull --ff-only origin "$CURRENT_BRANCH"
+
 command -v docker >/dev/null 2>&1 || fail "Docker is not installed."
 docker compose version >/dev/null 2>&1 || fail "Docker Compose plugin is not installed."
+
 [ -f .env ] || fail "Create .env from .env.example, replace every CHANGE_ME value, then rerun."
 
 set -a
@@ -47,7 +58,10 @@ mkdir -p sites logs
 
 echo "[1/6] Validating and building the production stack..."
 docker compose -f "$COMPOSE_FILE" config --quiet
-docker compose -f "$COMPOSE_FILE" build
+# Build the shared application image once. `docker compose build` previously
+# built the same 4GB+ Dockerfile independently for every Frappe service and
+# could stall a production VPS while exporting several copies concurrently.
+docker build -t lex-prod:latest -f Dockerfile.prod .
 docker compose -f "$COMPOSE_FILE" up -d mariadb redis-cache redis-queue clamav-updater
 
 echo "[2/6] Waiting for MariaDB readiness..."
@@ -73,6 +87,8 @@ bench_exec bench set-config -g db_host mariadb
 bench_exec bench set-config -g redis_cache redis://redis-cache:6379
 bench_exec bench set-config -g redis_queue redis://redis-queue:6379
 bench_exec bench set-config -g redis_socketio redis://redis-queue:6379
+# 9000 is used by the development Compose stack on many VPSs.  The host
+# binding is configurable, while Frappe still listens on internal port 9000.
 bench_exec bench set-config -g socketio_port 9000
 bench_exec bench set-config -g webserver_port 8000
 bench_exec bench set-config -g default_site "$SITE_NAME"
@@ -116,11 +132,16 @@ for attempt in $(seq 1 30); do
 	sleep 2
 done
 
-if ! curl --fail --silent \
-	-H "Origin: https://$SITE_NAME" \
-	"http://127.0.0.1:${SOCKETIO_PORT:-9000}/socket.io/?EIO=4&transport=polling" | grep -q '^0'; then
-	fail "Socket.IO polling handshake failed on port ${SOCKETIO_PORT:-9000}."
-fi
+SOCKETIO_HOST_PORT="${SOCKETIO_PORT:-9001}"
+for attempt in $(seq 1 15); do
+	SOCKETIO_HANDSHAKE="$(curl --fail --silent --show-error \
+		-H "Origin: https://$SITE_NAME" \
+		"http://127.0.0.1:${SOCKETIO_HOST_PORT}/socket.io/?EIO=4&transport=polling")" || true
+	[[ "$SOCKETIO_HANDSHAKE" == 0* ]] && break
+	[ "$attempt" -lt 15 ] || \
+		fail "Socket.IO polling handshake failed on port ${SOCKETIO_HOST_PORT}. Check that the host port is free and Nginx points to the same port."
+	sleep 2
+done
 
 docker compose -f "$COMPOSE_FILE" ps
 

@@ -23,6 +23,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd --create-home --shell /bin/bash frappe \
 	&& pip install --no-cache-dir frappe-bench
 
+# The image build runs the bench setup as the unprivileged frappe user.
+# Ensure the WORKDIR exists and is writable before switching users.
+RUN mkdir -p /home/frappe/frappe-bench \
+	&& chown -R frappe:frappe /home/frappe/frappe-bench
+
 USER frappe
 WORKDIR /home/frappe/frappe-bench
 

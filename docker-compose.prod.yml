@@ -1,4 +1,8 @@
 x-frappe-common: &frappe-common
+  # Every Frappe-side service uses the same application image. Without a
+  # shared image name Compose builds and exports this 4GB+ image once per
+  # service, which can stall or exhaust a small VPS during deployment.
+  image: lex-prod:latest
   build:
     context: .
     dockerfile: Dockerfile.prod
@@ -62,6 +66,7 @@ services:
     logging: *logging
 
   clamav-updater:
+    image: lex-prod:latest
     build:
       context: .
       dockerfile: Dockerfile.prod
@@ -93,7 +98,9 @@ services:
       - 127.0.0.1:${HTTP_PORT:-8000}:8000
       # Socket.IO shares this service's network namespace so its authenticated
       # callback to 127.0.0.1:8000 reaches Gunicorn, as required by Frappe v15.
-      - 127.0.0.1:${SOCKETIO_PORT:-9000}:9000
+      # Keep production realtime traffic separate from the development stack,
+      # which commonly occupies host port 9000.
+      - 127.0.0.1:${SOCKETIO_PORT:-9001}:9000
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--header", "Host: ${SITE_NAME:?Set SITE_NAME in .env}", "http://127.0.0.1:8000/api/method/ping"]
       interval: 30s
