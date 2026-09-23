@@ -133,12 +133,15 @@ for attempt in $(seq 1 30); do
 done
 
 SOCKETIO_HOST_PORT="${SOCKETIO_PORT:-9001}"
-SOCKETIO_HANDSHAKE="$(curl --fail --silent --show-error \
-	-H "Origin: https://$SITE_NAME" \
-	"http://127.0.0.1:${SOCKETIO_HOST_PORT}/socket.io/?EIO=4&transport=polling")" || true
-if [[ "$SOCKETIO_HANDSHAKE" != 0* ]]; then
-	fail "Socket.IO polling handshake failed on port ${SOCKETIO_HOST_PORT}. Check that the host port is free and Nginx points to the same port."
-fi
+for attempt in $(seq 1 15); do
+	SOCKETIO_HANDSHAKE="$(curl --fail --silent --show-error \
+		-H "Origin: https://$SITE_NAME" \
+		"http://127.0.0.1:${SOCKETIO_HOST_PORT}/socket.io/?EIO=4&transport=polling")" || true
+	[[ "$SOCKETIO_HANDSHAKE" == 0* ]] && break
+	[ "$attempt" -lt 15 ] || \
+		fail "Socket.IO polling handshake failed on port ${SOCKETIO_HOST_PORT}. Check that the host port is free and Nginx points to the same port."
+	sleep 2
+done
 
 docker compose -f "$COMPOSE_FILE" ps
 
