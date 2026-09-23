@@ -56,15 +56,27 @@ FIXED_PRICING_SERVICE_BY_INTAKE_TYPE = {
 	"Drafting": "Paralegal & Virtual Legal Assistance",
 	"Summarization": "Legal Research & Writing",
 	"Other": "Legal Operations Support",
-	# Accept the current catalogue values directly as well.  This permits a
-	# gradual UI migration without changing an already-selected service.
-	"Legal Research & Writing": "Legal Research & Writing",
-	"Contract Lifecycle Management (CLM)": "Contract Lifecycle Management (CLM)",
-	"eDiscovery & Document Review": "eDiscovery & Document Review",
-	"Compliance & Regulatory Support": "Compliance & Regulatory Support",
-	"Paralegal & Virtual Legal Assistance": "Paralegal & Virtual Legal Assistance",
-	"Legal Operations Support": "Legal Operations Support",
 }
+
+# The portal prices work using these client-facing catalogue names, while the
+# existing Work Intake and LPO Job DocTypes store a shorter operational type.
+# Normalize at the API boundary *before* Frappe validates either Select field.
+INTAKE_TYPE_BY_PRICING_SERVICE = {
+	"Legal Research & Writing": "Legal Research",
+	"Litigation Support": "Litigation Support",
+	"Contract Lifecycle Management (CLM)": "Contract Review",
+	"Contract Review": "Contract Review",
+	"eDiscovery & Document Review": "Document Review",
+	"Compliance & Regulatory Support": "Compliance Review",
+	"Paralegal & Virtual Legal Assistance": "Drafting",
+	"Legal Operations Support": "Other",
+}
+
+
+def normalize_intake_service_type(service_type: str | None) -> str:
+	"""Return the permitted operational service type for portal/API input."""
+	value = (service_type or "").strip()
+	return INTAKE_TYPE_BY_PRICING_SERVICE.get(value, value)
 
 
 @frappe.whitelist()
@@ -88,6 +100,7 @@ def create_work_intake(
 ):
 	actor = _require_portal_user()
 	from lex.instant_estimator import _estimate_currency_for_client
+	service_type = normalize_intake_service_type(service_type)
 
 	if not has_portal_capability("can_create_matters"):
 		frappe.throw(_("You are not authorized to submit new work."), frappe.PermissionError)

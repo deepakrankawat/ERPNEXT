@@ -15,7 +15,7 @@ from lex.instant_estimator import (
 	extract_pdf_pages_and_text,
 	round_up_to_cad_five,
 )
-from lex.work_intake import _checkout_payload
+from lex.work_intake import _checkout_payload, normalize_intake_service_type
 
 
 def _generate_test_pdf(num_pages: int = 3, text_content: str = "Test agreement review clause") -> bytes:
@@ -29,6 +29,12 @@ def _generate_test_pdf(num_pages: int = 3, text_content: str = "Test agreement r
 
 
 class TestInstantEstimator(unittest.TestCase):
+	def test_pricing_catalogue_names_normalize_to_doctype_service_types(self):
+		self.assertEqual(normalize_intake_service_type("eDiscovery & Document Review"), "Document Review")
+		self.assertEqual(normalize_intake_service_type("Compliance & Regulatory Support"), "Compliance Review")
+		self.assertEqual(normalize_intake_service_type("Legal Operations Support"), "Other")
+		self.assertEqual(normalize_intake_service_type("Litigation Support"), "Litigation Support")
+
 	def test_fixed_rate_card_is_cad_only(self):
 		self.assertEqual(FIXED_SERVICE_RATES_CAD["Legal Research & Writing"], Decimal("24.50"))
 		self.assertEqual(FIXED_SERVICE_RATES_CAD["Legal Operations Support"], Decimal("38.51"))

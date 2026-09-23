@@ -1510,6 +1510,35 @@ body.lex-portal-sidebar-open {
 	grid-column: 1 / -1;
 }
 
+.lex-intake-details {
+	grid-column: 1 / -1;
+	border: 1px solid var(--lex-border);
+	border-radius: var(--lex-radius-sm);
+	background: #fbfcfe;
+	padding: 11px 13px;
+}
+
+.lex-intake-details summary {
+	cursor: pointer;
+	color: var(--lex-primary);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.lex-intake-details-body {
+	margin-top: 13px;
+}
+
+.lex-next-step {
+	grid-column: 1 / -1;
+	border-left: 3px solid var(--lex-primary);
+	background: #f4f8fd;
+	border-radius: 0 var(--lex-radius-sm) var(--lex-radius-sm) 0;
+	color: var(--lex-ink-muted);
+	font-size: 13px;
+	padding: 10px 12px;
+}
+
 .lex-wizard-page-head {
 	grid-column: 1 / -1;
 	padding-bottom: 8px;

@@ -98,8 +98,18 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn('id="lex-pay-instant-btn"', script)
 		self.assertIn('lex.work_intake.create_direct_quote_order", { intake: response.intake }', script)
 		self.assertIn('accept=".pdf,application/pdf"', script)
+		self.assertIn('{ value: "Document Review", label: "eDiscovery & Document Review" }', script)
+		self.assertIn('{ value: "Other", label: "Legal Operations Support" }', script)
+		self.assertNotIn('formCard("Standard Matter &amp; Work Intake"', script)
+		self.assertNotIn('card("LexPack<sup', script)
+		self.assertIn('formCard("Create a Job"', script)
+		self.assertIn('Add parties or dispute details (optional)', script)
+		self.assertIn('Add delivery preferences (optional)', script)
+		self.assertIn('Create Draft Job', script)
+		self.assertIn('>Job</span>', script)
+		self.assertIn('>Payment</span>', script)
 		template = (app_path / "www" / "client-portal.html").read_text(encoding="utf-8")
-		self.assertIn('client_portal.js?v=20260923-1', template)
+		self.assertIn('client_portal.js?v=20260923-3', template)
 
 	def test_quick_lextimator_saves_before_payment_and_checkout_is_live(self):
 		app_path = Path(frappe.get_app_path("lex"))
@@ -275,6 +285,18 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertEqual(dashboard["profile"]["email"], user.name)
 		with self.assertRaises(frappe.PermissionError):
 			portal_management.verify_email_login_token(result["test_token"])
+
+	def test_client_dashboard_stays_available_when_an_optional_section_fails(self):
+		client = _make_client()
+		user = _make_user()
+		_make_portal_user(user.name, client, "Legal User")
+		frappe.set_user(user.name)
+
+		with patch("lex.work_intake.portal_intakes", side_effect=RuntimeError("simulated optional data failure")):
+			dashboard = client_portal.get_portal_dashboard()
+
+		self.assertEqual(dashboard["profile"]["email"], user.name)
+		self.assertEqual(dashboard["intakes"], [])
 
 	def test_client_portal_guest_redirects_to_client_login(self):
 		from lex.www import client_portal as cp_www

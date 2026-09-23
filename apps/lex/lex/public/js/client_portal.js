@@ -253,7 +253,7 @@
 		return `<article class="lex-card widget border ${className}"><div class="lex-card-head widget-head"><div class="widget-label"><h3 class="widget-title">${brandedText(title)}</h3><small>${brandedText(note)}</small></div></div>${body}</article>`;
 	}
 	function formCard(title, note, formId, body) {
-		return `<article class="lex-form-shell std-form-layout"><div class="form-layout"><div class="form-page"><div class="form-section card-section visible-section"><div class="section-head">${escapeHTML(title)}</div><div class="form-section-description">${escapeHTML(note)}</div><div class="section-body"><form id="${escapeHTML(formId)}" class="lex-form">${body}</form></div></div></div></div></article>`;
+		return `<article class="lex-form-shell std-form-layout"><div class="form-layout"><div class="form-page"><div class="form-section card-section visible-section"><div class="section-head">${brandedText(title)}</div><div class="form-section-description">${brandedText(note)}</div><div class="section-body"><form id="${escapeHTML(formId)}" class="lex-form">${body}</form></div></div></div></div></article>`;
 	}
 	function metric(label, value, note, iconName) {
 		return `<article class="lex-metric widget number-widget-box"><div class="lex-metric-head"><span>${escapeHTML(label)}</span>${icon(iconName)}</div><strong>${escapeHTML(value)}</strong><small>${escapeHTML(note)}</small></article>`;
@@ -291,7 +291,7 @@
 
 	function workIntakeSection(data) {
 		if (!data.permissions.can_create_matters) return "";
-		const services = [
+		const pricingServices = [
 			"Legal Research & Writing",
 			"Litigation Support",
 			"Contract Lifecycle Management (CLM)",
@@ -301,6 +301,16 @@
 			"Paralegal & Virtual Legal Assistance",
 			"Legal Operations Support"
 		];
+		const standardServices = [
+			{ value: "Legal Research", label: "Legal Research & Writing" },
+			{ value: "Litigation Support", label: "Litigation Support" },
+			{ value: "Contract Review", label: "Contract Lifecycle Management (CLM)" },
+			{ value: "Contract Review", label: "Contract Review" },
+			{ value: "Document Review", label: "eDiscovery & Document Review" },
+			{ value: "Compliance Review", label: "Compliance & Regulatory Support" },
+			{ value: "Drafting", label: "Paralegal & Virtual Legal Assistance" },
+			{ value: "Other", label: "Legal Operations Support" }
+		];
 		const speedOptions = [
 			"Standard (3-5 Business Days)",
 			"Rush (24-48 Hours)",
@@ -309,42 +319,36 @@
 		const matterOptions = (data.matters || []).map((matter) => (
 			`<option value="${escapeHTML(matter.name)}">${escapeHTML(matter.matter_title || "Matter")}</option>`
 		)).join("");
-		const standardIntake = formCard("Standard Matter &amp; Work Intake", "Create a Matter or use an existing Matter, then add the Job details.", "lex-new-intake", `
+		const standardIntake = formCard("Create a Job", "Answer the essentials first. You can add party details only when they are useful.", "lex-new-intake", `
 			<div class="wide lex-wizard-stepper" aria-label="Work intake steps">
-				<button class="lex-wizard-step is-active" type="button" data-intake-step="1"><span class="lex-step-badge">1</span>Matter context</button>
+				<button class="lex-wizard-step is-active" type="button" data-intake-step="1"><span class="lex-step-badge">1</span>Choose a Matter</button>
 				<span class="lex-wizard-step-line" aria-hidden="true"></span>
-				<button class="lex-wizard-step" type="button" data-intake-step="2"><span class="lex-step-badge">2</span>Job specifications</button>
+				<button class="lex-wizard-step" type="button" data-intake-step="2"><span class="lex-step-badge">2</span>Describe the Job</button>
 			</div>
 			<section class="wide lex-wizard-page is-active" data-intake-page="1">
-				<label class="wide">Matter option<select name="matter_mode" data-matter-mode required><option value="new">Create a new Matter</option>${matterOptions ? '<option value="existing">Use an existing Matter</option>' : ""}</select></label>
+				<div class="wide lex-wizard-page-head"><h4>Where should this Job be filed?</h4><p>Choose an existing Matter, or create a new one with a title.</p></div>
+				<label class="wide">Matter<select name="matter_mode" data-matter-mode required><option value="new">Create a new Matter</option>${matterOptions ? '<option value="existing">Use an existing Matter</option>' : ""}</select></label>
 				<div class="wide lex-linked-matter-card" data-existing-matter hidden>
-					<label class="wide">Existing active Matter<select name="matter" data-existing-matter-select><option value="">Select a Matter</option>${matterOptions}</select></label>
+					<label class="wide">Select existing Matter<select name="matter" data-existing-matter-select><option value="">Select a Matter</option>${matterOptions}</select></label>
 				</div>
 				<div class="wide lex-wizard-page" data-new-matter-fields>
-					<label>Matter title<input name="matter_title" maxlength="140" placeholder="e.g. Northstar v. Redline"></label>
-					<label>Matter nature<select name="matter_nature"><option value="Advisory">Advisory</option><option value="Contract / Transaction">Contract / Transaction</option><option value="Litigation / Dispute">Litigation / Dispute</option><option value="Regulatory / Compliance">Regulatory / Compliance</option><option value="Due Diligence">Due Diligence</option><option value="Other">Other</option></select></label>
-					<label>Represented party<input name="represented_party_name" maxlength="140" placeholder="Client or represented party"></label>
-					<label>Our side role<input name="our_side_role" maxlength="100" placeholder="e.g. Claimant, Respondent, Advisor"></label>
-					<label>Counterparty<input name="counterparty_name" maxlength="140" placeholder="Counterparty name"></label>
-					<label>Counterparty role<input name="counterparty_role" maxlength="100" placeholder="e.g. Defendant, Vendor"></label>
-					<label class="wide">Opposing counsel<input name="opposing_counsel" maxlength="140" placeholder="Name or firm, if known"></label>
+					<label class="wide">Matter title<input name="matter_title" maxlength="140" placeholder="e.g. Northstar v. Redline"></label>
+					<details class="wide lex-intake-details"><summary>Add parties or dispute details (optional)</summary><div class="lex-wizard-page lex-intake-details-body"><label>Matter nature<select name="matter_nature"><option value="Advisory">Advisory</option><option value="Contract / Transaction">Contract / Transaction</option><option value="Litigation / Dispute">Litigation / Dispute</option><option value="Regulatory / Compliance">Regulatory / Compliance</option><option value="Due Diligence">Due Diligence</option><option value="Other">Other</option></select></label><label>Represented party<input name="represented_party_name" maxlength="140" placeholder="Client or represented party"></label><label>Our role<input name="our_side_role" maxlength="100" placeholder="e.g. Advisor or Claimant"></label><label>Counterparty<input name="counterparty_name" maxlength="140" placeholder="Counterparty name"></label><label>Counterparty role<input name="counterparty_role" maxlength="100" placeholder="e.g. Vendor or Defendant"></label><label class="wide">Opposing counsel<input name="opposing_counsel" maxlength="140" placeholder="Name or firm, if known"></label></div></details>
 				</div>
-				<div class="wide lex-button-row"><button class="lex-button btn btn-primary btn-md" type="button" data-next-intake-step>Continue to Job details</button></div>
+				<div class="wide lex-button-row"><button class="lex-button btn btn-primary btn-md" type="button" data-next-intake-step>Continue</button></div>
 			</section>
 			<section class="wide lex-wizard-page" data-intake-page="2" hidden>
-				<label>Job title<input name="intake_title" required maxlength="140" placeholder="Describe the work required"></label>
-				<label>Service<select name="service_type" required>${services.map((item) => `<option value="${escapeHTML(item)}">${escapeHTML(item)}</option>`).join("")}</select></label>
-				<label>Priority<select name="priority" required><option value="Medium">Standard</option><option value="High">High</option><option value="Urgent">Urgent</option><option value="Low">Low</option></select></label>
-				<label>Jurisdiction<input name="jurisdiction" required maxlength="100" value="Canada"></label>
-				<label>Requested delivery date<input name="requested_delivery_date" type="date"></label>
-				<label>Confidentiality<select name="confidentiality_level"><option value="Confidential">Confidential</option><option value="Highly Confidential">Highly Confidential</option><option value="Standard">Standard</option></select></label>
-				<label class="wide">Expected outcome<textarea name="expected_outcome" required placeholder="What result or deliverable do you need?"></textarea></label>
-				<label class="wide">Preliminary details<textarea name="preliminary_details" required minlength="20" placeholder="Provide the relevant background, instructions and context."></textarea></label>
-				<div class="wide lex-button-row"><button class="lex-button secondary btn btn-default btn-md" type="button" data-previous-intake-step>Back</button><button class="lex-button btn btn-primary btn-md" type="submit">Create Matter and Draft Job</button></div>
+				<div class="wide lex-wizard-page-head"><h4>What would you like us to do?</h4><p>These details create your Draft Job. Uploading its PDF is the next step.</p></div>
+				<label>Job title<input name="intake_title" required maxlength="140" placeholder="e.g. Review vendor agreement"></label>
+				<label>Service<select name="service_type" required>${standardServices.map((item) => `<option value="${escapeHTML(item.value)}">${escapeHTML(item.label)}</option>`).join("")}</select></label>
+				<label class="wide">Instructions<textarea name="preliminary_details" required minlength="20" placeholder="Tell us what you need, relevant background and any key deadline."></textarea></label>
+				<details class="wide lex-intake-details"><summary>Add delivery preferences (optional)</summary><div class="lex-wizard-page lex-intake-details-body"><label>Priority<select name="priority" required><option value="Medium">Standard</option><option value="High">High</option><option value="Urgent">Urgent</option><option value="Low">Low</option></select></label><label>Jurisdiction<input name="jurisdiction" required maxlength="100" value="Canada"></label><label>Requested delivery date<input name="requested_delivery_date" type="date"></label><label>Confidentiality<select name="confidentiality_level"><option value="Confidential">Confidential</option><option value="Highly Confidential">Highly Confidential</option><option value="Standard">Standard</option></select></label><label class="wide">Expected outcome<textarea name="expected_outcome" placeholder="Describe the result or deliverable you need."></textarea></label></div></details>
+				<div class="wide lex-next-step"><strong>Next:</strong> review the service terms, upload the Job PDF, then receive the fixed price.</div>
+				<div class="wide lex-button-row"><button class="lex-button secondary btn btn-default btn-md" type="button" data-previous-intake-step>Back</button><button class="lex-button btn btn-primary btn-md" type="submit">Create Draft Job</button></div>
 			</section>
 		`);
-		const quickEstimate = formCard("Lextimator<sup class=\"lex-tm\">TM</sup>", "AI-powered legal work estimation. Know the scope, turnaround and estimated cost before you commit.", "lex-instant-estimate-form", `
-			<label class="wide">Select Service<select name="service" required>${services.map((item) => `<option value="${escapeHTML(item)}">${escapeHTML(item)}</option>`).join("")}</select></label>
+		const quickEstimate = formCard("Lextimator", "AI-powered legal work estimation. Know the scope, turnaround and estimated cost before you commit.", "lex-instant-estimate-form", `
+			<label class="wide">Select Service<select name="service" required>${pricingServices.map((item) => `<option value="${escapeHTML(item)}">${escapeHTML(item)}</option>`).join("")}</select></label>
 			<label class="wide">Upload Document (.pdf)<input class="lex-file-input" name="file" type="file" accept=".pdf,application/pdf" required></label>
 			<label class="wide">Turnaround Speed<select name="turnaround" required>${speedOptions.map((item) => `<option value="${escapeHTML(item)}">${escapeHTML(item)}</option>`).join("")}</select></label>
 			<div class="wide lex-button-row" style="margin-top: 14px;">
@@ -354,7 +358,7 @@
 			<div id="lex-estimate-result-box" class="wide" style="margin-top: 20px; display: none;"></div>
 		`);
 		const intakeCards = (data.intakes || []).map((intake) => intakeCard(intake, data)).join("");
-		return `<section class="lex-section" data-panel="new-matter">${sectionHeader("Submit New Work", "Create a Matter and Draft Job, or upload a PDF for a quick Lextimator estimate.")}<div class="lex-button-row" role="tablist" aria-label="New work workflow"><button class="lex-button btn btn-primary btn-md" type="button" role="tab" aria-selected="true" data-intake-workflow="standard">Standard Matter &amp; Work Intake</button><button class="lex-button secondary btn btn-default btn-md" type="button" role="tab" aria-selected="false" data-intake-workflow="quick">Quick Lextimator<sup class="lex-tm">TM</sup></button></div><div data-intake-workflow-panel="standard">${standardIntake}</div><div data-intake-workflow-panel="quick" hidden>${quickEstimate}</div>${intakeCards ? `<div style="margin-top: 30px;"><h3>Recent Intakes &amp; Matters</h3>${intakeCards}</div>` : ""}</section>`;
+		return `<section class="lex-section" data-panel="new-matter">${sectionHeader("Submit New Work", "Create a Job, upload its PDF, then see the fixed price before you pay.")}<div class="lex-button-row" role="tablist" aria-label="New work workflow"><button class="lex-button btn btn-primary btn-md" type="button" role="tab" aria-selected="true" data-intake-workflow="standard">Create a Job</button><button class="lex-button secondary btn btn-default btn-md" type="button" role="tab" aria-selected="false" data-intake-workflow="quick">Quick PDF Estimate</button></div><div data-intake-workflow-panel="standard">${standardIntake}</div><div data-intake-workflow-panel="quick" hidden>${quickEstimate}</div>${intakeCards ? `<div style="margin-top: 30px;"><h3>Your Jobs</h3>${intakeCards}</div>` : ""}</section>`;
 	}
 
 	function additionalJobDocuments(intake, docs) {
@@ -365,20 +369,20 @@
 		const docs = (intake.documents || []).map((row) => `<li><span><strong>${row.download_url ? `<a href="${escapeHTML(row.download_url)}" target="_blank" rel="noopener">${escapeHTML(row.file_name)}</a>` : escapeHTML(row.file_name)}</strong><small>${formatBytes(row.file_size)}</small></span><span class="indicator-pill ${indicatorColor(row.custom_lex_scan_status)} ${statusClass(row.custom_lex_scan_status)}">${escapeHTML(row.custom_lex_scan_status || "Pending")}</span></li>`).join("");
 		let action = "";
 		if (intake.status === "SLA Pending") {
-			action = `<div class="lex-intake-action"><h4>2. Review and accept SLA Document</h4>${intake.sla_document_snapshot ? `<a class="lex-button secondary btn btn-default btn-sm" href="${escapeHTML(intake.sla_download_url || intake.sla_document_snapshot)}" target="_blank" rel="noopener">Download protected SLA PDF</a>` : ""}<div class="lex-sla-document">${escapeHTML(intake.sla_terms_snapshot).replace(/\n/g, "<br>")}</div><label class="lex-check"><input type="checkbox" data-sla-check="${escapeHTML(intake.name)}"> I reviewed SLA ${escapeHTML(intake.sla_version)} and agree to this exact snapshot (SHA-256 ${escapeHTML(intake.sla_snapshot_hash.slice(0, 12))}…).</label><button class="lex-button btn btn-primary btn-sm" type="button" data-accept-sla="${escapeHTML(intake.name)}">Accept SLA and unlock upload</button></div>`;
+			action = `<div class="lex-intake-action"><h4>Review service terms</h4>${intake.sla_document_snapshot ? `<a class="lex-button secondary btn btn-default btn-sm" href="${escapeHTML(intake.sla_download_url || intake.sla_document_snapshot)}" target="_blank" rel="noopener">Download service terms</a>` : ""}<div class="lex-sla-document">${escapeHTML(intake.sla_terms_snapshot).replace(/\n/g, "<br>")}</div><label class="lex-check"><input type="checkbox" data-sla-check="${escapeHTML(intake.name)}"> I have reviewed and accept these service terms.</label><button class="lex-button btn btn-primary btn-sm" type="button" data-accept-sla="${escapeHTML(intake.name)}">Accept and upload PDF</button></div>`;
 		} else if (["Documents Pending", "Security Review", "Analysis Pending"].includes(intake.status)) {
-			action = `<div class="lex-intake-action"><h4>3. Add Job documents and detailed instructions</h4><p class="text-muted">Every Job document remains quarantined until its security scan is clean. Once documents and instructions are ready, the governed cost estimate runs automatically.</p></div>${additionalJobDocuments(intake, docs)}<p class="text-muted">Client access is limited to cost estimation. AI chat, legal analysis, prompts, models and internal AI output are not available in this workspace.</p>`;
+			action = `<div class="lex-intake-action"><h4>Upload the Job PDF</h4><p class="text-muted">Once the security scan is clean, Lextimator calculates the fixed price automatically.</p></div>${additionalJobDocuments(intake, docs)}`;
 		} else if (intake.status === "Operations Review") {
-			action = `<div class="lex-intake-action lex-review-state"><h4>4. Cost estimate under review</h4><p>Legal Operations is validating scope, price and delivery before the estimate is released.</p></div>${additionalJobDocuments(intake, docs)}`;
+			action = `<div class="lex-intake-action lex-review-state"><h4>Preparing your fixed price</h4><p>We are validating the scope, price and delivery before payment opens.</p></div>${additionalJobDocuments(intake, docs)}`;
 		} else if (intake.status === "Pending CEO Approval") {
-			action = `<div class="lex-intake-action lex-review-state"><h4>5. Awaiting internal pricing approval</h4><div class="lex-quote-summary"><span><small>Estimated price</small><strong>${escapeHTML(fmtMoney(intake.quoted_amount, intake.currency || "CAD"))}</strong></span><span><small>Delivery</small><strong>${fmtNumber(intake.delivery_timeline_hours)} hours after confirmation</strong></span></div><p>This price is awaiting internal approval before payment opens. No action is needed from you — we'll notify you as soon as it's approved.</p></div>`;
+			action = `<div class="lex-intake-action lex-review-state"><h4>Finalising your price</h4><div class="lex-quote-summary"><span><small>Estimated price</small><strong>${escapeHTML(fmtMoney(intake.quoted_amount, intake.currency || "CAD"))}</strong></span><span><small>Delivery</small><strong>${fmtNumber(intake.delivery_timeline_hours)} hours after confirmation</strong></span></div><p>Your fixed price is being confirmed. We will notify you when payment is available.</p></div>`;
 		} else if (["Quote Ready", "Funding Pending"].includes(intake.status)) {
 			action = fundingOptions(intake, data) + (intake.status === "Quote Ready" ? additionalJobDocuments(intake, docs) : "");
 		} else if (["Funded", "Matter Confirmed"].includes(intake.status)) {
 			action = `<div class="lex-intake-action lex-funded-state"><h4>Work funded and activated</h4><div class="lex-confirm-grid"><span><small>Funding</small><strong>${escapeHTML(intake.funding_route)}</strong></span><span><small>Matter</small><strong>${escapeHTML(intake.matter_title || "Confirming...")}</strong></span><span><small>Job</small><strong>${escapeHTML(intake.job_title || "Activating...")}</strong></span><span><small>SLA started</small><strong>${escapeHTML(fmtDate(intake.sla_started_on))}</strong></span><span><small>Delivery due</small><strong>${escapeHTML(fmtDate(intake.delivery_due_on))}</strong></span></div></div>`;
 		}
 		if (intake.status === "Pending CEO Approval") action += additionalJobDocuments(intake, docs);
-		return `<article class="lex-card lex-intake-card"><div class="lex-card-head widget-head"><div><h3>${escapeHTML(intake.intake_title)}</h3><small>${escapeHTML(intake.matter_title || "Matter pending")} · ${escapeHTML(intake.job_title || "Draft Job pending")}</small></div><span class="indicator-pill ${indicatorColor(intake.status)} ${statusClass(intake.status)}">${escapeHTML(intake.status)}</span></div><div class="lex-intake-steps"><span class="${intake.matter ? "done" : ""}">Matter</span><span class="${intake.job ? "done" : ""}">Draft Job</span><span class="${intake.sla_accepted ? "done" : ""}">SLA</span><span class="${intake.document_count ? "done" : ""}">Documents</span><span class="${["Under Review", "Ready"].includes(intake.cost_estimate_status) ? "done" : ""}">Estimate</span><span class="${["Ready", "Accepted"].includes(intake.quote_status) ? "done" : ""}">Quote</span><span class="${intake.funding_status === "Funded" ? "done" : ""}">Funding</span><span class="${intake.status === "Matter Confirmed" ? "done" : ""}">Activated</span></div>${action}</article>`;
+		return `<article class="lex-card lex-intake-card"><div class="lex-card-head widget-head"><div><h3>${escapeHTML(intake.intake_title)}</h3><small>${escapeHTML(intake.matter_title || "Matter pending")} · ${escapeHTML(intake.job_title || "Draft Job pending")}</small></div><span class="indicator-pill ${indicatorColor(intake.status)} ${statusClass(intake.status)}">${escapeHTML(intake.status)}</span></div><div class="lex-intake-steps"><span class="${intake.job ? "done" : ""}">Job</span><span class="${intake.sla_accepted ? "done" : ""}">Terms</span><span class="${intake.document_count ? "done" : ""}">PDF</span><span class="${["Under Review", "Ready"].includes(intake.cost_estimate_status) || ["Ready", "Accepted"].includes(intake.quote_status) ? "done" : ""}">Price</span><span class="${intake.funding_status === "Funded" ? "done" : ""}">Payment</span></div>${action}</article>`;
 	}
 
 	function workRequestsSection(data) {
@@ -469,7 +473,7 @@
 
 	function walletSection(data) {
 		if (!data.wallet) return "";
-		if (data.wallet.requires_legal_capacity_reconciliation) return `<section class="lex-section" data-panel="wallet">${sectionHeader("LexPack<sup class=\"lex-tm\">TM</sup>", "Prepaid Legal Capacity")}${walletCard(data)}</section>`;
+		if (data.wallet.requires_legal_capacity_reconciliation) return `<section class="lex-section" data-panel="wallet">${sectionHeader("LexPack", "Prepaid Legal Capacity")}${walletCard(data)}</section>`;
 		const lexpack = data.lexpack || { plans: [], purchases: [], payment_enabled: false, purchase_access: false };
 		const planCards = lexpack.plans.map((plan) => {
 			const price = plan.enterprise_custom ? "Custom" : fmtMoney(plan.price, plan.currency);
@@ -482,7 +486,7 @@
 		}).join("");
 		const ledger = data.transactions.length ? `<div class="lex-table-wrap"><table class="lex-table table"><thead><tr><th>Transaction</th><th>Legal Capacity</th><th>Matter</th><th>Balance</th><th>Date</th></tr></thead><tbody>${data.transactions.map((row) => `<tr><td>${escapeHTML(row.transaction_type)}</td><td>${escapeHTML(capacityMoney(row.legal_capacity_amount, row.currency))}</td><td>${escapeHTML(row.matter_title || "—")}</td><td>${escapeHTML(capacityMoney(row.available_balance_after, row.currency))}</td><td>${escapeHTML(fmtDate(row.posted_on))}</td></tr>`).join("")}</tbody></table></div>` : empty("No Legal Capacity transactions yet.");
 		const purchaseHistory = lexpack.purchases.length ? `<div class="lex-table-wrap"><table class="lex-table table"><thead><tr><th>Plan</th><th>Status</th><th>Paid</th><th>Legal Capacity</th><th>Paid on</th></tr></thead><tbody>${lexpack.purchases.map((row) => `<tr><td>${escapeHTML(row.plan_name_snapshot)}</td><td><span class="indicator-pill ${indicatorColor(row.status)} ${statusClass(row.status)}">${escapeHTML(row.status)}</span></td><td>${escapeHTML(fmtMoney(row.amount, row.currency))}</td><td>${escapeHTML(capacityMoney(row.legal_capacity_amount, row.currency))}</td><td>${escapeHTML(fmtDate(row.paid_on))}</td></tr>`).join("")}</tbody></table></div>` : empty("No LexPack purchases yet.");
-		return `<section class="lex-section" data-panel="wallet">${sectionHeader("LexPack<sup class=\"lex-tm\">TM</sup>", "Prepaid legal capacity for ongoing legal work. Pay per assignment remains available.")}${walletCard(data)}<div class="lex-commercial-note"><strong>Pay only for the work you need, or choose LexPack<sup class="lex-tm">TM</sup> for greater value.</strong><span>Lextimator<sup class="lex-tm">TM</sup> confirms the scope and fixed price. You can pay that assignment directly or prepay Legal Capacity for a 7%–28% value advantage.</span><small>${escapeHTML(lexpack.fair_pricing_note || "")}</small></div>${card("LexPack<sup class=\"lex-tm\">TM</sup> plans", "Prepaid Legal Capacity with 7%, 14%, 21% or 28% value advantage", `<div class="lex-plan-grid">${planCards || empty("No active LexPack plans.")}</div>`)}${card("Purchase history", `${lexpack.purchases.length} purchases`, purchaseHistory)}${card("Legal Capacity ledger", `${data.transactions.length} transactions`, ledger)}</section>`;
+		return `<section class="lex-section" data-panel="wallet">${sectionHeader("LexPack", "Prepaid legal capacity for ongoing legal work. Pay per assignment remains available.")}${walletCard(data)}<div class="lex-commercial-note"><strong>Pay only for the work you need, or choose LexPack<sup class="lex-tm">TM</sup> for greater value.</strong><span>Lextimator<sup class="lex-tm">TM</sup> confirms the scope and fixed price. You can pay that assignment directly or prepay Legal Capacity for a 7%–28% value advantage.</span><small>${escapeHTML(lexpack.fair_pricing_note || "")}</small></div>${card("LexPack plans", "Prepaid Legal Capacity with 7%, 14%, 21% or 28% value advantage", `<div class="lex-plan-grid">${planCards || empty("No active LexPack plans.")}</div>`)}${card("Purchase history", `${lexpack.purchases.length} purchases`, purchaseHistory)}${card("Legal Capacity ledger", `${data.transactions.length} transactions`, ledger)}</section>`;
 	}
 
 	function auditCard(rows) {
@@ -654,7 +658,7 @@
 					const values = Object.fromEntries(new FormData(intakeForm));
 					delete values.matter_mode;
 					await call("lex.work_intake.create_work_intake", values);
-					notify("Matter and Draft Job created. Continue with SLA review to upload Job documents.", "green");
+			notify("Draft Job created. Next, accept the service terms and upload its PDF to receive the fixed price.", "green");
 					reloadSection("new-matter");
 				} catch (error) {
 					showError("Work intake could not be created", error);

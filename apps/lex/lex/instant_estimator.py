@@ -219,6 +219,7 @@ SERVICE_TO_INTAKE_TYPE = {
 	"Compliance & Regulatory Support": "Compliance Review",
 	"Due Diligence Support": "Due Diligence",
 	"Paralegal & Virtual Legal Assistance": "Drafting",
+	"Legal Operations Support": "Other",
 }
 
 SERVICE_TO_PRACTICE_AREA = {
@@ -230,6 +231,7 @@ SERVICE_TO_PRACTICE_AREA = {
 	"Compliance & Regulatory Support": "Regulatory & Compliance",
 	"Due Diligence Support": "Due Diligence",
 	"Paralegal & Virtual Legal Assistance": "Corporate & Commercial",
+	"Legal Operations Support": "Other",
 }
 
 

@@ -20,11 +20,17 @@ from lex.portal_audit import create_portal_audit_event
 @frappe.whitelist()
 def get_portal_dashboard():
 	portal_user = _require_portal_user()
-	client = _client_details(portal_user.client)
+	client = _client_details(portal_user.client) or frappe._dict(
+		{"name": portal_user.client, "customer_name": _("Client Workspace"), "default_currency": "CAD"}
+	)
 	from lex.work_intake import portal_intakes
 
-	intakes = portal_intakes(portal_user)
-	matters = frappe.get_list(
+	# Optional dashboard data must never make an otherwise authenticated client
+	# lose access to the Matter and Job intake workspace.  This also lets a
+	# partially migrated commercial add-on fail safely while its traceback is
+	# retained for administrators in Error Log.
+	intakes = _safe_dashboard_section("work intakes", lambda: portal_intakes(portal_user), [])
+	matters = _safe_dashboard_section("matters", lambda: frappe.get_list(
 		"LPO Matter",
 		fields=[
 			"name", "matter_title", "status", "practice_area", "billing_method", "end_date",
@@ -33,8 +39,8 @@ def get_portal_dashboard():
 		],
 		order_by="modified desc",
 		limit_page_length=100,
-	)
-	jobs = frappe.get_list(
+	), [])
+	jobs = _safe_dashboard_section("jobs", lambda: frappe.get_list(
 		"LPO Job",
 		fields=[
 			"name", "job_title", "engagement", "job_status", "priority", "due_date", "modified",
@@ -44,7 +50,7 @@ def get_portal_dashboard():
 		],
 		order_by="due_date asc",
 		limit_page_length=100,
-	)
+	), [])
 	matter_titles = {row.name: row.matter_title for row in matters}
 	for job in jobs:
 		# Keep the document names internally for access checks, but return the
@@ -73,22 +79,27 @@ def get_portal_dashboard():
 			else None
 		)
 	open_jobs = sum(row.job_status not in {"Delivered", "Completed", "Cancelled"} for row in jobs)
-	wallet, transactions = _wallet_data(portal_user)
+	wallet, transactions = _safe_dashboard_section("wallet", lambda: _wallet_data(portal_user), (None, []))
 	for transaction in transactions:
 		transaction.matter_title = matter_titles.get(transaction.matter) or ""
 	from lex.lexpack import get_lexpack_portal_data
 
-	lexpack = get_lexpack_portal_data(portal_user)
-	portal_users = _portal_users(portal_user)
-	audit_events = frappe.get_all(
+	lexpack = _safe_dashboard_section(
+		"LexPack", lambda: get_lexpack_portal_data(portal_user),
+		{"plans": [], "purchases": [], "payment_enabled": False, "purchase_access": False},
+	)
+	portal_users = _safe_dashboard_section("portal users", lambda: _portal_users(portal_user), [])
+	audit_events = _safe_dashboard_section("audit events", lambda: frappe.get_all(
 		"Lexocrates Portal Audit Event",
 		filters={"client": portal_user.client},
 		fields=["name", "event_timestamp", "action", "result", "object_type", "object_id", "user"],
 		order_by="event_timestamp desc",
 		limit_page_length=15,
-	)
-	documents = _documents(matters, jobs, intakes, portal_user) if portal_user.can_upload_documents or matters or intakes else []
-	invoices = _invoices(portal_user.client) if portal_user.billing_access else []
+	), [])
+	documents = _safe_dashboard_section(
+		"documents", lambda: _documents(matters, jobs, intakes, portal_user), []
+	) if portal_user.can_upload_documents or matters or intakes else []
+	invoices = _safe_dashboard_section("invoices", lambda: _invoices(portal_user.client), []) if portal_user.billing_access else []
 	approvals = [
 		row for row in jobs
 		if row.job_status == "Ready for Delivery"
@@ -137,6 +148,18 @@ def get_portal_dashboard():
 		"portal_users": portal_users,
 		"audit_events": audit_events,
 	}
+
+
+def _safe_dashboard_section(label: str, loader, fallback):
+	"""Keep the client workspace available when a non-auth dashboard panel fails."""
+	try:
+		return loader()
+	except Exception:
+		frappe.log_error(
+			title=f"Client Portal Dashboard: {label}",
+			message=frappe.get_traceback(),
+		)
+		return fallback
 
 
 def _client_details(client_name: str):
