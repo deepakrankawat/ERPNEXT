@@ -98,6 +98,8 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn('id="lex-pay-instant-btn"', script)
 		self.assertIn('lex.work_intake.create_direct_quote_order", { intake: response.intake }', script)
 		self.assertIn('accept=".pdf,application/pdf"', script)
+		template = (app_path / "www" / "client-portal.html").read_text(encoding="utf-8")
+		self.assertIn('client_portal.js?v=20260923-1', template)
 
 	def test_quick_lextimator_saves_before_payment_and_checkout_is_live(self):
 		app_path = Path(frappe.get_app_path("lex"))
@@ -133,6 +135,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("lex.portal_management.send_client_email_login_link", template)
 		self.assertIn("Password Sign In", template)
 		self.assertIn("Email Magic Link", template)
+		self.assertIn('href="/forgot-password"', template)
 		self.assertIn("/client-registration", template)
 		self.assertNotIn('href="/login"', template)
 		self.assertNotIn("tab-system", template)
@@ -142,6 +145,15 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("lexocrates-logo-dark.svg", template)
 		self.assertNotIn("lexocrates-mark-dark.png", template)
 		self.assertNotIn("<span>Lexocrates</span>", template)
+
+	def test_password_reset_page_uses_frappe_rate_limited_reset_service(self):
+		app_path = Path(frappe.get_app_path("lex"))
+		page = (app_path / "www" / "forgot-password.html").read_text(encoding="utf-8")
+
+		self.assertIn('method: "frappe.core.doctype.user.user.reset_password"', page)
+		self.assertIn("If an active account matches", page)
+		self.assertIn('href="/client-login"', page)
+		self.assertIn('href="/login"', page)
 
 	def test_security_email_uses_immediate_high_priority_delivery(self):
 		with patch("lex.portal_management.frappe.sendmail") as sendmail:
