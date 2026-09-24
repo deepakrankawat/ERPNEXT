@@ -54,6 +54,7 @@ web_include_css = [
 doctype_js = {
 	"LPO Matter": "public/js/lpo_job_chat.js",
 	"LPO Job": "public/js/lpo_job_chat.js",
+	"Account": "public/js/account_form_recovery.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -116,6 +117,7 @@ after_migrate = [
 	"lex.install.ensure_lexpack_catalog",
 	"lex.install.ensure_lexocrates_email_templates",
 	"lex.install.ensure_accounting_workspace_actions",
+	"lex.install.ensure_account_creation_form_fields",
 	"lex.install.ensure_default_chat_channels",
 	"lex.install.migrate_legacy_chat_records",
 	"lex.persona_workspaces.ensure_persona_roles",

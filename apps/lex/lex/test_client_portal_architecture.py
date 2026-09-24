@@ -111,6 +111,19 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		template = (app_path / "www" / "client-portal.html").read_text(encoding="utf-8")
 		self.assertIn('client_portal.js?v=20260923-3', template)
 
+	def test_account_creation_recovery_preserves_core_child_account_fields(self):
+		app_path = Path(frappe.get_app_path("lex"))
+		install = (app_path / "install.py").read_text(encoding="utf-8")
+		script = (app_path / "public" / "js" / "account_form_recovery.js").read_text(encoding="utf-8")
+		hooks = (app_path / "hooks.py").read_text(encoding="utf-8")
+
+		self.assertIn("def ensure_account_creation_form_fields", install)
+		self.assertIn('"account_name", "parent_account"', install)
+		self.assertIn('"lex.install.ensure_account_creation_form_fields"', hooks)
+		self.assertIn('"Account": "public/js/account_form_recovery.js"', hooks)
+		self.assertIn('frm.toggle_display("account_name", true)', script)
+		self.assertIn('frm.toggle_display("parent_account", true)', script)
+
 	def test_quick_lextimator_saves_before_payment_and_checkout_is_live(self):
 		app_path = Path(frappe.get_app_path("lex"))
 		estimator = (app_path / "instant_estimator.py").read_text(encoding="utf-8")

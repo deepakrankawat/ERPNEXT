@@ -336,6 +336,35 @@ def ensure_accounting_workspace_actions():
 		frappe.clear_cache()
 
 
+def ensure_account_creation_form_fields():
+	"""Restore core Account fields that a stale Desk customization can hide.
+
+	``account_name`` and ``parent_account`` are required by ERPNext's Account
+	tree.  Without them an administrator can open *New Account* but cannot create
+	a child account.  These fields have no standard visibility conditions, so a
+	hidden/depends-on Property Setter is always stale and safe to remove.
+	"""
+	if not frappe.db.exists("DocType", "Account") or not frappe.db.exists("DocType", "Property Setter"):
+		return
+
+	fieldnames = ("account_name", "parent_account")
+	stale_setters = frappe.get_all(
+		"Property Setter",
+		filters={
+			"doc_type": "Account",
+			"field_name": ["in", fieldnames],
+			"property": ["in", ("hidden", "depends_on")],
+		},
+		pluck="name",
+	)
+	if stale_setters:
+		frappe.db.delete("Property Setter", {"name": ["in", stale_setters]})
+
+	# Both fields are standard, mandatory Account fields. Clear meta cache even
+	# when no setter was found so Desk receives the current schema after migrate.
+	frappe.clear_cache(doctype="Account")
+
+
 def ensure_home_workspace_actions():
 	"""Keep the two primary LPO applications at the top of ERPNext Home."""
 	if not frappe.db.exists("DocType", "Workspace") or not frappe.db.exists("Workspace", "Home"):
