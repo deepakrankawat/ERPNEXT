@@ -52,7 +52,7 @@
   {"fieldname": "auto_approve_ai_pricing_authorized_by", "fieldtype": "Link", "label": "Auto-Approval Authorized By", "options": "User", "read_only": 1},
   {"fieldname": "auto_approve_ai_pricing_authorized_on", "fieldtype": "Datetime", "label": "Auto-Approval Authorized On", "read_only": 1},
   {"fieldname": "intake_sla_terms", "fieldtype": "Long Text", "label": "Client Intake SLA Terms"},
-  {"fieldname": "webhook_help", "fieldtype": "HTML", "options": "<p class='text-muted'>Configure Razorpay webhook events <b>payment.captured</b>, <b>payment.failed</b> and <b>order.paid</b> to <code>/api/method/lex.lexpack.handle_razorpay_webhook</code>. The same verified endpoint fulfils recommended LexPack and direct fixed-quote payments. Keep the webhook secret different from the API key secret.</p>"}
+  {"fieldname": "webhook_help", "fieldtype": "HTML", "options": "<p class='text-muted'>Configure Razorpay payment, refund, and dispute webhooks shown by Check Readiness to <code>/api/method/lex.lexpack.handle_razorpay_webhook</code>. The verified endpoint fulfils payments and reconciles full/partial refunds and chargebacks for LexPack and direct fixed-quote payments. Keep the webhook secret different from the API key secret.</p>"}
  ],
  "index_web_pages_for_search": 0,
  "is_single": 1,

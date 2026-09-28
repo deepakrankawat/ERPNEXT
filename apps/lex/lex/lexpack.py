@@ -17,7 +17,18 @@ from lex.portal_audit import create_portal_audit_event
 RAZORPAY_API_ROOT = "https://api.razorpay.com/v1"
 PURCHASE_ROLES = {"System Manager", "Accounts Manager", "Accounts User", "Lexocrates Finance", "LPO_Admin"}
 RAZORPAY_SETUP_ROLES = {"System Manager", "Accounts Manager"}
-PAID_STATES = {"Paid", "Refund Pending", "Refunded"}
+PAID_STATES = {"Paid", "Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback"}
+PAYMENT_EVENTS = {"payment.captured", "payment.failed", "order.paid"}
+REFUND_EVENTS = {"refund.created", "refund.processed", "refund.failed"}
+DISPUTE_EVENTS = {
+	"payment.dispute.created",
+	"payment.dispute.won",
+	"payment.dispute.lost",
+	"payment.dispute.closed",
+	"payment.dispute.under_review",
+	"payment.dispute.action_required",
+}
+SUPPORTED_WEBHOOK_EVENTS = PAYMENT_EVENTS | REFUND_EVENTS | DISPUTE_EVENTS
 LEXPACK_CHECKOUT_CURRENCIES = {
 	"CAD": {
 		"code": "CAD",
@@ -37,12 +48,18 @@ LEXPACK_CHECKOUT_CURRENCIES = {
 		"name": "British Pound",
 		"country": "United Kingdom",
 	},
+	"INR": {
+		"code": "INR",
+		"symbol": "₹",
+		"name": "Indian Rupee",
+		"country": "India",
+	},
 }
 LEXPACK_PUBLIC_PRICES = {
-	"STARTER": {"USD": 299, "CAD": 399, "GBP": 239},
-	"GROWTH": {"USD": 899, "CAD": 1199, "GBP": 719},
-	"PROFESSIONAL": {"USD": 1999, "CAD": 2699, "GBP": 1599},
-	"BUSINESS": {"USD": 3999, "CAD": 5399, "GBP": 3199},
+	"STARTER": {"USD": 299, "CAD": 399, "GBP": 239, "INR": 24999},
+	"GROWTH": {"USD": 899, "CAD": 1199, "GBP": 719, "INR": 74999},
+	"PROFESSIONAL": {"USD": 1999, "CAD": 2699, "GBP": 1599, "INR": 164999},
+	"BUSINESS": {"USD": 3999, "CAD": 5399, "GBP": 3199, "INR": 329999},
 }
 LEXPACK_DISCOUNT_PERCENTAGES = {
 	"STARTER": Decimal("7"),
@@ -186,7 +203,7 @@ def verify_razorpay_payment(
 ):
 	purchase_doc = frappe.get_doc("LexPack Purchase", purchase)
 	_assert_purchase_access(purchase_doc)
-	settings = _get_settings(require_enabled=True)
+	settings = _load_settings()
 	if not purchase_doc.razorpay_order_id or purchase_doc.razorpay_order_id != razorpay_order_id:
 		frappe.throw(_("Razorpay order mismatch."), frappe.PermissionError)
 	if not _checkout_signature_is_valid(
@@ -223,7 +240,9 @@ def verify_razorpay_payment(
 
 @frappe.whitelist(allow_guest=True)
 def handle_razorpay_webhook():
-	settings = _get_settings(require_enabled=True)
+	# Disabling new checkout must never disable reconciliation for payments,
+	# refunds, or disputes that already exist at Razorpay.
+	settings = _load_settings()
 	webhook_secret = settings.get_password("webhook_secret")
 	raw_body = frappe.request.get_data(cache=True) or b""
 	provided = (frappe.get_request_header("X-Razorpay-Signature") or "").strip()
@@ -239,13 +258,19 @@ def handle_razorpay_webhook():
 	event_id = (frappe.get_request_header("X-Razorpay-Event-Id") or "").strip() or None
 	if event_id and _event_already_processed(event_id):
 		return {"status": "duplicate", "event_id": event_id}
-	if event not in {"payment.captured", "payment.failed", "order.paid"}:
+	if event not in SUPPORTED_WEBHOOK_EVENTS:
 		return {"status": "ignored", "event": event}
-	payment = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
-	order = ((payload.get("payload") or {}).get("order") or {}).get("entity") or {}
+	payload_entities = payload.get("payload") or {}
+	payment = (payload_entities.get("payment") or {}).get("entity") or {}
+	order = (payload_entities.get("order") or {}).get("entity") or {}
+	refund = (payload_entities.get("refund") or {}).get("entity") or {}
+	dispute = (payload_entities.get("dispute") or {}).get("entity") or {}
 	order_id = payment.get("order_id") or order.get("id")
-	if not order_id:
+	payment_id = payment.get("id") or refund.get("payment_id") or dispute.get("payment_id")
+	if event in PAYMENT_EVENTS and not order_id:
 		return {"status": "ignored", "reason": "No Razorpay order in event"}
+	if event in (REFUND_EVENTS | DISPUTE_EVENTS) and not payment_id:
+		return {"status": "ignored", "reason": "No Razorpay payment in adjustment event"}
 	job_token = event_id or hashlib.sha256(raw_body).hexdigest()
 	frappe.enqueue(
 		"lex.lexpack.process_razorpay_webhook",
@@ -262,10 +287,12 @@ def handle_razorpay_webhook():
 
 def process_razorpay_webhook(payload: dict, event_id: str | None = None):
 	"""Process an authenticated webhook outside the request/response cycle."""
-	settings = _get_settings(require_enabled=True)
+	settings = _load_settings()
 	if event_id and _event_already_processed(event_id):
 		return {"status": "duplicate", "event_id": event_id}
 	event = payload.get("event")
+	if event in REFUND_EVENTS | DISPUTE_EVENTS:
+		return _process_payment_adjustment(payload, event_id, settings)
 	payment = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
 	order = ((payload.get("payload") or {}).get("order") or {}).get("entity") or {}
 	order_id = payment.get("order_id") or order.get("id")
@@ -279,6 +306,8 @@ def process_razorpay_webhook(payload: dict, event_id: str | None = None):
 		return direct_result or {"status": "ignored", "reason": "Order is not a Lexocrates checkout"}
 	purchase_doc = frappe.get_doc("LexPack Purchase", purchase_name)
 	if event in {"payment.captured", "order.paid"}:
+		if purchase_doc.status in {"Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback"}:
+			return {"status": "stale", "event": event, "purchase": purchase_doc.name}
 		if not payment.get("id"):
 			payments = _razorpay_request("GET", f"/orders/{order_id}/payments", settings)
 			payment = next((row for row in payments.get("items", []) if row.get("status") == "captured"), {})
@@ -301,9 +330,355 @@ def _event_already_processed(event_id: str) -> bool:
 	if not event_id:
 		return False
 	return bool(
-		frappe.db.exists("LexPack Purchase", {"gateway_event_id": event_id})
+		frappe.db.exists("Lexocrates Payment Adjustment", {"gateway_event_id": event_id})
+		or frappe.db.exists("LexPack Purchase", {"gateway_event_id": event_id})
 		or frappe.db.exists("Lexocrates Work Intake", {"gateway_event_id": event_id})
 	)
+
+
+def _process_payment_adjustment(payload: dict, event_id: str | None, settings):
+	"""Reconcile authenticated Razorpay refunds and disputes exactly once."""
+	event = payload.get("event")
+	entities = payload.get("payload") or {}
+	is_refund = event in REFUND_EVENTS
+	entity_type = "Refund" if is_refund else "Dispute"
+	entity = ((entities.get("refund" if is_refund else "dispute") or {}).get("entity") or {})
+	entity_id = str(entity.get("id") or "").strip()
+	payment_id = str(entity.get("payment_id") or "").strip()
+	if not entity_id or not payment_id:
+		frappe.throw(_("Razorpay adjustment details are incomplete."), frappe.ValidationError)
+
+	# The signed webhook starts the workflow, but the payment and refund are fetched
+	# again from Razorpay so a forged relationship/amount can never drive accounting.
+	payment = _razorpay_request("GET", f"/payments/{payment_id}", settings)
+	if payment.get("entity") != "payment" or payment.get("id") != payment_id:
+		frappe.throw(_("Razorpay returned an invalid payment for the adjustment."), frappe.PermissionError)
+	if is_refund:
+		verified_entity = _razorpay_request("GET", f"/refunds/{entity_id}", settings)
+		if verified_entity.get("entity") != "refund" or verified_entity.get("id") != entity_id:
+			frappe.throw(_("Razorpay returned an invalid refund."), frappe.PermissionError)
+		entity = verified_entity
+		refund_status_event = {"processed": "refund.processed", "failed": "refund.failed"}.get(entity.get("status"))
+		if refund_status_event:
+			event = refund_status_event
+	else:
+		verified_entity = _razorpay_request("GET", f"/disputes/{entity_id}", settings)
+		if verified_entity.get("entity") != "dispute" or verified_entity.get("id") != entity_id:
+			frappe.throw(_("Razorpay returned an invalid dispute."), frappe.PermissionError)
+		entity = verified_entity
+		dispute_status_event = {
+			"won": "payment.dispute.won",
+			"lost": "payment.dispute.lost",
+			"closed": "payment.dispute.closed",
+		}.get(entity.get("status"))
+		if dispute_status_event:
+			event = dispute_status_event
+	if entity.get("payment_id") != payment_id:
+		frappe.throw(_("The Razorpay adjustment belongs to another payment."), frappe.PermissionError)
+
+	amount_minor = cint(entity.get("amount"))
+	currency = str(entity.get("currency") or payment.get("currency") or "").upper()
+	if amount_minor <= 0 or amount_minor > cint(payment.get("amount")) or currency != payment.get("currency"):
+		frappe.throw(_("The Razorpay adjustment amount or currency is invalid."), frappe.PermissionError)
+	order_id = payment.get("order_id")
+	if not order_id:
+		frappe.throw(_("The adjusted payment has no Razorpay order."), frappe.ValidationError)
+
+	purchase_name = frappe.db.get_value(
+		"LexPack Purchase", {"razorpay_payment_id": payment_id}, "name"
+	) or frappe.db.get_value("LexPack Purchase", {"razorpay_order_id": order_id}, "name")
+	intake_name = None
+	if not purchase_name:
+		intake_name = frappe.db.get_value(
+			"Lexocrates Work Intake", {"razorpay_payment_id": payment_id}, "name"
+		) or frappe.db.get_value("Lexocrates Work Intake", {"razorpay_order_id": order_id}, "name")
+	if not purchase_name and not intake_name:
+		return {"status": "ignored", "reason": "Payment is not a Lexocrates checkout"}
+
+	if purchase_name:
+		target = frappe.get_doc("LexPack Purchase", purchase_name)
+		_validate_payment_entity(target, payment, require_captured=False)
+		client = target.client
+	else:
+		from lex.work_intake import _validate_direct_payment
+
+		target = frappe.get_doc("Lexocrates Work Intake", intake_name)
+		_validate_direct_payment(target, payment, require_captured=False)
+		client = target.client
+
+	# Razorpay may redeliver the same entity transition under a different delivery
+	# event ID. Entity + transition is the durable financial idempotency boundary.
+	gateway_key = f"razorpay:{event}:{entity_id}"
+	existing = frappe.db.get_value("Lexocrates Payment Adjustment", {"gateway_key": gateway_key}, "name")
+	if existing:
+		return {"status": "duplicate", "adjustment": existing, "event_id": event_id}
+	adjustment = _new_payment_adjustment(
+		gateway_key=gateway_key,
+		gateway_event_id=event_id,
+		event_type=event,
+		entity_type=entity_type,
+		entity_id=entity_id,
+		payment_id=payment_id,
+		order_id=order_id,
+		amount_minor=amount_minor,
+		currency=currency,
+		client=client,
+		lexpack_purchase=purchase_name,
+		work_intake=intake_name,
+	)
+	_validate_cumulative_adjustment(payment_id, amount_minor, payment, adjustment.name, event)
+
+	if purchase_name:
+		result = _handle_lexpack_adjustment(target, adjustment, settings)
+	else:
+		from lex.work_intake import handle_direct_adjustment
+
+		result = handle_direct_adjustment(target, adjustment, settings)
+	return result
+
+
+def _new_payment_adjustment(**values):
+	previous = getattr(frappe.flags, "lexocrates_payment_adjustment_service", False)
+	frappe.flags.lexocrates_payment_adjustment_service = True
+	try:
+		return frappe.get_doc(
+			{"doctype": "Lexocrates Payment Adjustment", "status": "Received", "created_on": now_datetime(), **values}
+		).insert(ignore_permissions=True)
+	finally:
+		frappe.flags.lexocrates_payment_adjustment_service = previous
+
+
+def _set_adjustment_values(adjustment, **values):
+	previous = getattr(frappe.flags, "lexocrates_payment_adjustment_service", False)
+	frappe.flags.lexocrates_payment_adjustment_service = True
+	try:
+		adjustment.update(values)
+		adjustment.save(ignore_permissions=True)
+	finally:
+		frappe.flags.lexocrates_payment_adjustment_service = previous
+
+
+def _validate_cumulative_adjustment(payment_id: str, amount_minor: int, payment: dict, current: str, event: str):
+	if event not in {"refund.processed", "payment.dispute.lost"}:
+		return
+	previous = frappe.db.sql(
+		"""
+		select coalesce(sum(amount_minor), 0)
+		from `tabLexocrates Payment Adjustment`
+		where payment_id=%s and name!=%s
+		  and event_type in ('refund.processed', 'payment.dispute.lost')
+		  and status in ('Processed', 'Manual Review')
+		""",
+		(payment_id, current),
+	)[0][0]
+	if cint(previous) + amount_minor > cint(payment.get("amount")):
+		frappe.throw(_("Cumulative refunds or chargebacks exceed the captured payment."), frappe.PermissionError)
+
+
+def _handle_lexpack_adjustment(purchase, adjustment, settings):
+	frappe.db.sql("select name from `tabLexPack Purchase` where name=%s for update", purchase.name)
+	purchase.reload()
+	event = adjustment.event_type
+	if event == "refund.created":
+		if _adjustment_event_exists(adjustment.entity_id, {"refund.processed"}, adjustment.name):
+			_finish_adjustment(adjustment, details="Stale refund.created event received after refund.processed.")
+			return {"status": "stale", "purchase": purchase.name, "adjustment": adjustment.name}
+		_set_purchase_values(
+			purchase, status="Refund Pending", gateway_event_id=adjustment.gateway_event_id,
+			failure_reason=None,
+		)
+		_sync_purchase_work_intake(purchase, "Refund Pending", None, adjustment.gateway_event_id)
+		_finish_adjustment(adjustment, details="Refund is pending at Razorpay.")
+		return {"status": "refund_pending", "purchase": purchase.name, "adjustment": adjustment.name}
+	if event == "refund.failed":
+		if _adjustment_event_exists(adjustment.entity_id, {"refund.processed"}, adjustment.name):
+			_finish_adjustment(adjustment, status="Manual Review", details="Conflicting refund.failed received after refund.processed.")
+			return {"status": "manual_review", "purchase": purchase.name, "adjustment": adjustment.name}
+		status = "Partially Refunded" if flt(purchase.get("refunded_amount")) else "Paid"
+		_set_purchase_values(
+			purchase, status=status, gateway_event_id=adjustment.gateway_event_id,
+			failure_reason="Razorpay reported that the refund failed.",
+		)
+		_sync_purchase_work_intake(
+			purchase, "Partially Refunded" if status == "Partially Refunded" else "Funded",
+			"Razorpay reported that the refund failed.", adjustment.gateway_event_id,
+		)
+		_finish_adjustment(adjustment, details="Razorpay reported that the refund failed.")
+		return {"status": "refund_failed", "purchase": purchase.name, "adjustment": adjustment.name}
+	if event in {"payment.dispute.created", "payment.dispute.under_review", "payment.dispute.action_required"}:
+		if _adjustment_event_exists(adjustment.entity_id, {"payment.dispute.won", "payment.dispute.lost"}, adjustment.name):
+			_finish_adjustment(adjustment, details="Stale dispute event received after a terminal outcome.")
+			return {"status": "stale", "purchase": purchase.name, "adjustment": adjustment.name}
+		_freeze_client_wallet(purchase.client)
+		_set_purchase_values(
+			purchase, status="Disputed", gateway_event_id=adjustment.gateway_event_id,
+			failure_reason=f"Razorpay dispute requires review ({adjustment.entity_id}).",
+		)
+		_sync_purchase_work_intake(
+			purchase, "Disputed", f"Razorpay dispute requires review ({adjustment.entity_id}).", adjustment.gateway_event_id,
+		)
+		_finish_adjustment(adjustment, status="Manual Review", details="Wallet frozen pending dispute outcome.")
+		return {"status": "disputed", "purchase": purchase.name, "adjustment": adjustment.name}
+	if event == "payment.dispute.won":
+		status = "Partially Refunded" if flt(purchase.get("refunded_amount")) else "Paid"
+		_set_purchase_values(purchase, status=status, gateway_event_id=adjustment.gateway_event_id, failure_reason=None)
+		_sync_purchase_work_intake(
+			purchase, "Partially Refunded" if status == "Partially Refunded" else "Funded", None,
+			adjustment.gateway_event_id,
+		)
+		_finish_adjustment(adjustment, details="Dispute won; no financial reversal required.")
+		_unfreeze_client_wallet_if_safe(purchase.client, adjustment.entity_id)
+		return {"status": "dispute_won", "purchase": purchase.name, "adjustment": adjustment.name}
+	if event == "payment.dispute.closed":
+		if _adjustment_event_exists(adjustment.entity_id, {"payment.dispute.won", "payment.dispute.lost"}, adjustment.name):
+			_finish_adjustment(adjustment, details="Dispute was already reconciled by a terminal outcome.")
+			return {"status": "stale", "purchase": purchase.name, "adjustment": adjustment.name}
+		_freeze_client_wallet(purchase.client)
+		_set_purchase_values(
+			purchase, status="Disputed", gateway_event_id=adjustment.gateway_event_id,
+			failure_reason=f"Closed dispute requires outcome reconciliation ({adjustment.entity_id}).",
+		)
+		_sync_purchase_work_intake(
+			purchase, "Disputed", f"Closed dispute requires outcome reconciliation ({adjustment.entity_id}).",
+			adjustment.gateway_event_id,
+		)
+		_finish_adjustment(adjustment, status="Manual Review", details="Closed dispute retained for outcome reconciliation.")
+		return {"status": "manual_review", "purchase": purchase.name, "adjustment": adjustment.name}
+	if event in {"refund.processed", "payment.dispute.lost"}:
+		if not purchase.sales_invoice or not purchase.payment_entry:
+			_freeze_client_wallet(purchase.client)
+			detail = "Original payment accounting is incomplete; wallet frozen for manual reconciliation."
+			_set_purchase_values(
+				purchase, status="Refund Pending", gateway_event_id=adjustment.gateway_event_id, failure_reason=detail,
+			)
+			_sync_purchase_work_intake(purchase, "Refund Pending", detail, adjustment.gateway_event_id)
+			_finish_adjustment(adjustment, status="Manual Review", details=detail)
+			return {"status": "manual_review", "purchase": purchase.name, "adjustment": adjustment.name}
+		return _apply_lexpack_financial_adjustment(purchase, adjustment, settings)
+	return {"status": "ignored", "event": event, "purchase": purchase.name}
+
+
+def _apply_lexpack_financial_adjustment(purchase, adjustment, settings):
+	from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import _post_transaction
+
+	original_minor = _minor_units(purchase.amount, purchase.currency)
+	amount = _major_units(adjustment.amount_minor, adjustment.currency)
+	previous_minor = _processed_adjustment_minor(adjustment.payment_id, adjustment.name)
+	full = adjustment.amount_minor + previous_minor >= original_minor
+	capacity = (
+		flt(purchase.legal_capacity_amount) - flt(purchase.get("refunded_legal_capacity"))
+		if full
+		else _proportional_value(purchase.legal_capacity_amount, adjustment.amount_minor, original_minor)
+	)
+	credit_note, refund_entry = _create_refund_accounting(
+		purchase.sales_invoice, adjustment, settings, original_minor, purchase.name
+	)
+	manual_review = False
+	wallet_entry = None
+	try:
+		wallet_entry = _post_transaction(
+			client=purchase.client,
+			transaction_type="Adjustment Debit",
+			legal_capacity_amount=capacity,
+			currency=purchase.currency,
+			idempotency_key=f"razorpay-adjustment:{adjustment.entity_id}",
+			reference_doctype="Lexocrates Payment Adjustment",
+			reference_name=adjustment.name,
+			description=f"{adjustment.event_type} for {purchase.name}",
+			allow_frozen=True,
+		)
+	except frappe.ValidationError:
+		manual_review = True
+		_freeze_client_wallet(purchase.client)
+
+	refunded = flt(purchase.get("refunded_amount")) + flt(amount)
+	reversed_capacity = flt(purchase.get("refunded_legal_capacity")) + flt(capacity)
+	status = "Chargeback" if adjustment.event_type == "payment.dispute.lost" else ("Refunded" if full else "Partially Refunded")
+	detail = "Legal Capacity is unavailable; wallet frozen for manual recovery." if manual_review else None
+	_set_purchase_values(
+		purchase,
+		status=status if not manual_review else "Refund Pending",
+		gateway_event_id=adjustment.gateway_event_id,
+		refunded_amount=refunded,
+		refunded_legal_capacity=reversed_capacity if wallet_entry else flt(purchase.get("refunded_legal_capacity")),
+		failure_reason=detail,
+	)
+	recalculate_client_pricing(purchase.client)
+	_sync_purchase_work_intake(
+		purchase,
+		"Refund Pending" if manual_review else status,
+		detail or ("Payment was charged back." if adjustment.event_type == "payment.dispute.lost" else None),
+		adjustment.gateway_event_id,
+	)
+	_set_adjustment_values(
+		adjustment,
+		status="Manual Review" if manual_review else "Processed",
+		processed_on=now_datetime(),
+		wallet_transaction=wallet_entry.name if wallet_entry else None,
+		credit_note=credit_note.name,
+		refund_payment_entry=refund_entry.name,
+		details=detail or "Wallet and accounting reversals posted.",
+	)
+	create_portal_audit_event(
+		client=purchase.client,
+		action="LexPack Refund or Chargeback Reconciled",
+		object_type="LexPack Purchase",
+		object_id=purchase.name,
+		result="Manual Review" if manual_review else "Success",
+		new_value={"event": adjustment.event_type, "amount": amount, "currency": adjustment.currency, "capacity": capacity},
+	)
+	return {
+		"status": "manual_review" if manual_review else "processed",
+		"purchase": purchase.name,
+		"adjustment": adjustment.name,
+	}
+
+
+def _finish_adjustment(adjustment, status="Processed", details=None):
+	_set_adjustment_values(adjustment, status=status, processed_on=now_datetime(), details=details)
+
+
+def _sync_purchase_work_intake(purchase, funding_status: str, reason: str | None, event_id: str | None):
+	if not purchase.get("work_intake") or not frappe.db.exists("Lexocrates Work Intake", purchase.work_intake):
+		return
+	from lex.work_intake import _set_values
+
+	intake = frappe.get_doc("Lexocrates Work Intake", purchase.work_intake)
+	_set_values(intake, funding_status=funding_status, gateway_event_id=event_id, failure_reason=reason)
+
+
+def _adjustment_event_exists(entity_id: str, event_types: set[str], excluding: str | None = None) -> bool:
+	filters = {"entity_id": entity_id, "event_type": ["in", list(event_types)], "status": ["in", ["Processed", "Manual Review"]]}
+	if excluding:
+		filters["name"] = ["!=", excluding]
+	return bool(frappe.db.exists("Lexocrates Payment Adjustment", filters))
+
+
+def _processed_adjustment_minor(payment_id: str, excluding: str | None = None) -> int:
+	filters = [payment_id]
+	exclusion = ""
+	if excluding:
+		exclusion = " and name!=%s"
+		filters.append(excluding)
+	return cint(frappe.db.sql(
+		f"""select coalesce(sum(amount_minor), 0) from `tabLexocrates Payment Adjustment`
+		where payment_id=%s{exclusion}
+		and event_type in ('refund.processed', 'payment.dispute.lost')
+		and status in ('Processed', 'Manual Review')""",
+		filters,
+	)[0][0])
+
+
+def _major_units(amount_minor: int, currency: str) -> float:
+	factor = Decimal("1") if currency in {"BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"} else Decimal("100")
+	return float((Decimal(str(amount_minor)) / factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _proportional_value(total, part_minor: int, total_minor: int) -> float:
+	if total_minor <= 0:
+		frappe.throw(_("Original payment amount is invalid."), frappe.ValidationError)
+	value = Decimal(str(total)) * Decimal(str(part_minor)) / Decimal(str(total_minor))
+	return float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def _new_purchase(client, portal_user, plan_doc, exchange_rate, work_intake=None, amount=None, currency=None):
@@ -448,6 +823,8 @@ def _country_currency_for_client(client: str | None) -> str:
 		str(customer.get(fieldname) or "").lower()
 		for fieldname in ("custom_primary_jurisdiction", "territory")
 	)
+	if any(token in text for token in ("india", "bharat", "indian")):
+		return "INR"
 	if any(token in text for token in ("canada", "canadian", "ontario", "british columbia", "alberta")):
 		return "CAD"
 	if any(token in text for token in ("united kingdom", "great britain", "england", "scotland", "wales", "uk", "gb")):
@@ -464,7 +841,7 @@ def _validate_capacity_currency(currency: str | None) -> str:
 	currency = (currency or "").strip().upper()
 	if currency not in SUPPORTED_CAPACITY_CURRENCIES:
 		frappe.throw(
-			_("Legal Capacity is currently available only in CAD, USD, or GBP."),
+			_("Legal Capacity is currently available only in CAD, USD, GBP, or INR."),
 			frappe.ValidationError,
 		)
 	return currency
@@ -479,10 +856,10 @@ def _complete_purchase(purchase_doc, payment, source: str):
 
 			complete_lexpack_funding(purchase_doc)
 		return _purchase_result(purchase_doc, duplicate=True)
-	if purchase_doc.status in {"Refund Pending", "Refunded", "Cancelled"}:
+	if purchase_doc.status in {"Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback", "Cancelled"}:
 		frappe.throw(_("This LexPack purchase cannot be fulfilled in its current state."), frappe.ValidationError)
 	_validate_payment_entity(purchase_doc, payment, require_captured=True)
-	settings = _get_settings(require_enabled=True)
+	settings = _load_settings()
 	paid_on = get_datetime(payment.get("created_at")) if isinstance(payment.get("created_at"), str) else now_datetime()
 
 	if not purchase_doc.sales_invoice:
@@ -555,8 +932,11 @@ def recalculate_client_pricing(client: str, triggering_purchase: str | None = No
 		filters.append(wallet_currency)
 	rolling_after = flt(
 		frappe.db.sql(
-			"""select coalesce(sum(amount), 0) from `tabLexPack Purchase`
-			where client=%s and status='Paid' and date(paid_on) >= %s{0}""".format(currency_condition),
+			"""select coalesce(sum(greatest(amount - coalesce(refunded_amount, 0), 0)), 0)
+			from `tabLexPack Purchase`
+			where client=%s
+			  and status in ('Paid', 'Refund Pending', 'Partially Refunded', 'Refunded', 'Disputed', 'Chargeback')
+			  and date(paid_on) >= %s{0}""".format(currency_condition),
 			filters,
 		)[0][0]
 	)
@@ -771,6 +1151,102 @@ def _create_payment_entry(purchase_doc, settings, payment):
 		frappe.flags.ignore_permissions = previous_ignore
 
 
+def _create_refund_accounting(original_invoice_name, adjustment, settings, original_minor: int, reference: str):
+	"""Post a proportional credit note and clearing-account refund entry."""
+	if not original_invoice_name:
+		frappe.throw(_("The original Sales Invoice is missing; refund accounting cannot be posted."), frappe.ValidationError)
+	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+	from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
+
+	clearing_account = (
+		settings.get("razorpay_clearing_account")
+		if isinstance(settings, dict)
+		else getattr(settings, "razorpay_clearing_account", None)
+	)
+	if not clearing_account:
+		frappe.throw(_("Configure the Razorpay Clearing Account before processing refunds."), frappe.ValidationError)
+	previous_ignore = getattr(frappe.flags, "ignore_permissions", False)
+	previous_user = frappe.session.user
+	frappe.flags.ignore_permissions = True
+	frappe.set_user("Administrator")
+	try:
+		original = frappe.get_doc("Sales Invoice", original_invoice_name)
+		credit_note = make_sales_return(original_invoice_name)
+		if not credit_note.get("items"):
+			frappe.throw(_("The original Sales Invoice has no refundable item."), frappe.ValidationError)
+		# Lexocrates checkout invoices contain one service item. A fractional return
+		# quantity supports multiple partial refunds without exceeding original qty.
+		credit_note.set("items", [credit_note.items[0]])
+		ratio = Decimal(str(adjustment.amount_minor)) / Decimal(str(original_minor))
+		credit_note.items[0].qty = -flt(Decimal(str(abs(original.items[0].qty))) * ratio, 9)
+		credit_note.items[0].rate = original.items[0].rate
+		credit_note.posting_date = nowdate()
+		credit_note.remarks = f"Razorpay {adjustment.event_type} {adjustment.entity_id}; {reference}"
+		credit_note.insert(ignore_permissions=True)
+		credit_note.flags.ignore_permissions = True
+		credit_note.submit()
+
+		refund_entry = get_payment_entry(
+			"Sales Invoice",
+			credit_note.name,
+			bank_account=clearing_account,
+			reference_date=nowdate(),
+			ignore_permissions=True,
+		)
+		mode_of_payment = settings.get("mode_of_payment") if isinstance(settings, dict) else getattr(settings, "mode_of_payment", None)
+		if mode_of_payment:
+			refund_entry.mode_of_payment = mode_of_payment
+		refund_entry.reference_no = adjustment.entity_id
+		refund_entry.reference_date = nowdate()
+		refund_entry.remarks = f"Razorpay refund/chargeback settlement for {reference}"
+		refund_entry.insert(ignore_permissions=True)
+		refund_entry.flags.ignore_permissions = True
+		refund_entry.submit()
+		return credit_note, refund_entry
+	finally:
+		frappe.set_user(previous_user)
+		frappe.flags.ignore_permissions = previous_ignore
+
+
+def _freeze_client_wallet(client: str):
+	wallet = frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "name")
+	if wallet:
+		frappe.db.set_value("Lexocrates Client Wallet", wallet, "status", "Frozen", update_modified=False)
+
+
+def _unfreeze_client_wallet_if_safe(client: str, resolved_dispute_id: str):
+	open_disputes = frappe.db.sql(
+		"""
+		select count(distinct active.entity_id)
+		from `tabLexocrates Payment Adjustment` active
+		where active.client=%s
+		  and active.event_type in (
+		    'payment.dispute.created', 'payment.dispute.under_review',
+		    'payment.dispute.action_required', 'payment.dispute.closed'
+		  )
+		  and active.entity_id!=%s
+		  and not exists (
+		    select 1 from `tabLexocrates Payment Adjustment` terminal
+		    where terminal.client=active.client and terminal.entity_id=active.entity_id
+		      and terminal.event_type in ('payment.dispute.won', 'payment.dispute.lost')
+		  )
+		""",
+		(client, resolved_dispute_id),
+	)[0][0]
+	manual_recovery = frappe.db.count(
+		"Lexocrates Payment Adjustment",
+		filters={
+			"client": client,
+			"status": "Manual Review",
+			"event_type": ["in", ["refund.processed", "payment.dispute.lost"]],
+		},
+	)
+	if not cint(open_disputes) and not cint(manual_recovery):
+		wallet = frappe.db.get_value("Lexocrates Client Wallet", {"client": client}, "name")
+		if wallet:
+			frappe.db.set_value("Lexocrates Client Wallet", wallet, "status", "Active", update_modified=False)
+
+
 def _resolve_exchange_rate(plan_currency: str, company: str) -> float:
 	company_currency = frappe.get_cached_value("Company", company, "default_currency")
 	if not company_currency:
@@ -898,7 +1374,7 @@ def get_razorpay_status():
 	status["webhook_url"] = frappe.utils.get_url(
 		"/api/method/lex.lexpack.handle_razorpay_webhook"
 	)
-	status["required_webhook_events"] = ["payment.captured", "payment.failed", "order.paid"]
+	status["required_webhook_events"] = sorted(SUPPORTED_WEBHOOK_EVENTS)
 	return status
 
 

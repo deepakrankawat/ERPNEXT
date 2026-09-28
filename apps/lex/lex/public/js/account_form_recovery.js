@@ -6,6 +6,8 @@ frappe.ui.form.on("Account", {
 		if (!frm.is_new()) return;
 		frm.toggle_display("account_name", true);
 		frm.toggle_display("parent_account", true);
+		frm.toggle_enable("account_name", true);
+		frm.toggle_enable("parent_account", true);
 		frm.set_df_property("account_name", "reqd", 1);
 		frm.set_df_property("parent_account", "reqd", 1);
 	},

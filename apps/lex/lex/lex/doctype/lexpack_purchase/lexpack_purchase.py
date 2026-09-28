@@ -9,7 +9,7 @@ from lex.client_access import get_portal_user
 
 
 MANAGEMENT_ROLES = {"System Manager", "Accounts Manager", "Accounts User", "Lexocrates Finance", "LPO_Admin"}
-SUPPORTED_PURCHASE_CURRENCIES = {"CAD", "USD", "GBP"}
+SUPPORTED_PURCHASE_CURRENCIES = {"CAD", "USD", "GBP", "INR"}
 
 
 class LexPackPurchase(Document):
@@ -17,7 +17,7 @@ class LexPackPurchase(Document):
 		self.currency = (self.currency or "").strip().upper()
 		if self.currency not in SUPPORTED_PURCHASE_CURRENCIES:
 			frappe.throw(
-				_("LexPack Legal Capacity purchases are currently available only in CAD, USD, or GBP."),
+				_("LexPack Legal Capacity purchases are currently available only in CAD, USD, GBP, or INR."),
 				frappe.ValidationError,
 			)
 		if flt(self.amount) <= 0:
@@ -43,7 +43,7 @@ class LexPackPurchase(Document):
 			frappe.throw(_("Commercial and payment fields are maintained by the LexPack payment service."), frappe.PermissionError)
 
 	def on_trash(self):
-		if self.status in {"Paid", "Refund Pending", "Refunded"}:
+		if self.status in {"Paid", "Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback"}:
 			frappe.throw(_("Paid LexPack purchases cannot be deleted."), frappe.PermissionError)
 
 

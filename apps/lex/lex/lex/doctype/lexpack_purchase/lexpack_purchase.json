@@ -12,7 +12,7 @@
   "created_on", "paid_on", "value_section", "currency", "amount", "legal_capacity_amount", "exchange_rate", "value_column",
   "fair_pricing_section", "rolling_spend_before", "rolling_spend_after",
   "tier_before", "tier_after", "gateway_section", "razorpay_order_id", "razorpay_payment_id", "signature_verified",
-  "gateway_event_id", "failure_reason", "accounting_section", "sales_invoice", "payment_entry", "accounting_column",
+  "gateway_event_id", "failure_reason", "refunded_amount", "refunded_legal_capacity", "accounting_section", "sales_invoice", "payment_entry", "accounting_column",
   "wallet_transaction"
  ],
  "fields": [
@@ -23,7 +23,7 @@
   {"fieldname": "work_intake", "fieldtype": "Link", "label": "Funded Work Intake", "options": "Lexocrates Work Intake", "read_only": 1},
   {"fieldname": "plan_name_snapshot", "fieldtype": "Data", "label": "Plan Name at Purchase", "read_only": 1, "reqd": 1},
   {"fieldname": "purchase_column", "fieldtype": "Column Break"},
-  {"default": "Created", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Created\nPayment Pending\nPaid\nFailed\nCancelled\nRefund Pending\nRefunded", "read_only": 1, "reqd": 1},
+  {"default": "Created", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Created\nPayment Pending\nPaid\nFailed\nCancelled\nRefund Pending\nPartially Refunded\nRefunded\nDisputed\nChargeback", "read_only": 1, "reqd": 1},
   {"default": "Razorpay", "fieldname": "gateway", "fieldtype": "Data", "label": "Payment Gateway", "read_only": 1},
   {"default": "0", "fieldname": "is_manual_approval", "fieldtype": "Check", "label": "Manual Executive Approval", "read_only": 1},
   {"fieldname": "approval_reason", "fieldtype": "Small Text", "label": "Approval Reason / Remarks", "read_only": 1},
@@ -46,6 +46,8 @@
   {"default": "0", "fieldname": "signature_verified", "fieldtype": "Check", "label": "Checkout Signature Verified", "read_only": 1},
   {"fieldname": "gateway_event_id", "fieldtype": "Data", "label": "Last Razorpay Event ID", "read_only": 1},
   {"fieldname": "failure_reason", "fieldtype": "Small Text", "label": "Failure Reason", "read_only": 1},
+  {"default": "0", "fieldname": "refunded_amount", "fieldtype": "Currency", "label": "Refunded / Charged Back", "options": "currency", "precision": "2", "read_only": 1},
+  {"default": "0", "fieldname": "refunded_legal_capacity", "fieldtype": "Currency", "label": "Legal Capacity Reversed", "options": "currency", "precision": "2", "read_only": 1},
   {"fieldname": "accounting_section", "fieldtype": "Section Break", "label": "ERPNext Accounting and Wallet"},
   {"fieldname": "sales_invoice", "fieldtype": "Link", "label": "Sales Invoice", "options": "Sales Invoice", "read_only": 1},
   {"fieldname": "payment_entry", "fieldtype": "Link", "label": "Payment Entry", "options": "Payment Entry", "read_only": 1},

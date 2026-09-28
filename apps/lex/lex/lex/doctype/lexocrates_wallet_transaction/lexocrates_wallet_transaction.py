@@ -16,7 +16,7 @@ TRANSACTION_TYPES = {
 	"Purchase", "Top-Up", "Reservation", "Release", "Reserved Consumption",
 	"Direct Consumption", "Adjustment Credit", "Adjustment Debit", "Reversal",
 }
-SUPPORTED_CAPACITY_CURRENCIES = {"CAD", "USD", "GBP"}
+SUPPORTED_CAPACITY_CURRENCIES = {"CAD", "USD", "GBP", "INR"}
 CAPACITY_QUANTUM = Decimal("0.01")
 
 
@@ -137,7 +137,7 @@ def _post_transaction(**values):
 		wallet_name = wallet.name
 	frappe.db.sql("select name from `tabLexocrates Client Wallet` where name=%s for update", wallet_name)
 	wallet = frappe.get_doc("Lexocrates Client Wallet", wallet_name)
-	if wallet.status != "Active":
+	if wallet.status != "Active" and not values.get("allow_frozen"):
 		frappe.throw(_("The Client Wallet is frozen."), frappe.ValidationError)
 	currency = _capacity_currency(values.get("currency") or wallet.get("capacity_currency") or "CAD")
 	wallet_currency = (wallet.get("capacity_currency") or "").strip().upper()
@@ -320,7 +320,7 @@ def _capacity_currency(value) -> str:
 	currency = str(value or "").strip().upper()
 	if currency not in SUPPORTED_CAPACITY_CURRENCIES:
 		frappe.throw(
-			_("Legal Capacity is currently available only in CAD, USD, or GBP."),
+			_("Legal Capacity is currently available only in CAD, USD, GBP, or INR."),
 			frappe.ValidationError,
 		)
 	return currency

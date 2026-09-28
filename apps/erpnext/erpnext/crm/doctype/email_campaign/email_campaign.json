@@ -12,8 +12,11 @@
   "sender",
   "column_break_4",
   "start_date",
+  "start_time",
+  "time_zone",
   "end_date",
-  "status"
+  "status",
+  "time_scheduling_enabled"
  ],
  "fields": [
   {
@@ -69,6 +72,31 @@
    "fieldtype": "Link",
    "label": "Sender",
    "options": "User"
+  },
+  {
+   "default": "09:00:00",
+   "description": "Local time used when a Campaign Schedule row does not specify its own Send At Time.",
+   "fieldname": "start_time",
+   "fieldtype": "Time",
+   "label": "Start Time",
+   "reqd": 1
+  },
+  {
+   "default": "Asia/Kolkata",
+   "description": "Times are calculated in this timezone, including daylight-saving changes.",
+   "fieldname": "time_zone",
+   "fieldtype": "Select",
+   "label": "Timezone",
+   "options": "Asia/Kolkata\nEurope/London\nAmerica/Toronto\nAmerica/Vancouver\nAmerica/Edmonton\nAmerica/Winnipeg\nAmerica/New_York\nAmerica/Chicago\nAmerica/Denver\nAmerica/Los_Angeles\nUTC",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "time_scheduling_enabled",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Time Scheduling Enabled",
+   "read_only": 1
   }
  ],
  "links": [],

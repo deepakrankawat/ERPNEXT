@@ -25,6 +25,7 @@ def get_portal_dashboard():
 	)
 	from lex.work_intake import portal_intakes
 
+	hidden_intakes, hidden_jobs, hidden_matters = _hidden_client_records(portal_user.client)
 	# Optional dashboard data must never make an otherwise authenticated client
 	# lose access to the Matter and Job intake workspace.  This also lets a
 	# partially migrated commercial add-on fail safely while its traceback is
@@ -35,11 +36,16 @@ def get_portal_dashboard():
 		fields=[
 			"name", "matter_title", "status", "practice_area", "billing_method", "end_date",
 			"modified", "confidentiality_level", "matter_nature", "represented_party_name",
-			"our_side_role", "counterparty_name", "counterparty_role", "opposing_counsel",
+			"our_side_role", "counterparty_name", "counterparty_role", "opposing_counsel", "client_deleted",
 		],
 		order_by="modified desc",
 		limit_page_length=100,
 	), [])
+	matters = [row for row in matters if row.name not in hidden_matters and not row.client_deleted]
+	for matter in matters:
+		matter.can_client_delete = bool(
+			portal_user.can_create_matters and _matter_can_client_delete(matter.name)
+		)
 	jobs = _safe_dashboard_section("jobs", lambda: frappe.get_list(
 		"LPO Job",
 		fields=[
@@ -51,16 +57,22 @@ def get_portal_dashboard():
 		order_by="due_date asc",
 		limit_page_length=100,
 	), [])
+	jobs = [row for row in jobs if row.name not in hidden_jobs and row.job_status != "Cancelled"]
 	matter_titles = {row.name: row.matter_title for row in matters}
 	for job in jobs:
 		# Keep the document names internally for access checks, but return the
 		# readable Matter title for all client-facing labels.
 		job.matter_title = matter_titles.get(job.engagement) or _("Matter")
 	job_titles = {row.name: row.job_title for row in jobs}
+	client_deleted_jobs = {
+		row.get("job") for row in intakes
+		if row.get("client_deleted") and row.get("job")
+	}
 	for intake in intakes:
 		intake.matter_title = matter_titles.get(intake.get("matter")) or _("Matter pending")
 		intake.job_title = job_titles.get(intake.get("job")) or _("Draft Job pending")
 	for job in jobs:
+		job.client_deleted = job.name in client_deleted_jobs
 		# The canonical final deliverable is intentionally unavailable until the
 		# operational Job reaches Completed.  Ready-for-Delivery and Delivered are
 		# still internal/acknowledgement states, not the client's download gate.
@@ -94,8 +106,10 @@ def get_portal_dashboard():
 		filters={"client": portal_user.client},
 		fields=["name", "event_timestamp", "action", "result", "object_type", "object_id", "user"],
 		order_by="event_timestamp desc",
-		limit_page_length=15,
+		limit_page_length=100,
 	), [])
+	hidden_audit_objects = hidden_intakes | hidden_jobs | hidden_matters
+	audit_events = [row for row in audit_events if row.object_id not in hidden_audit_objects][:15]
 	documents = _safe_dashboard_section(
 		"documents", lambda: _documents(matters, jobs, intakes, portal_user), []
 	) if portal_user.can_upload_documents or matters or intakes else []
@@ -403,6 +417,56 @@ def create_work_request(
 
 
 @frappe.whitelist()
+def delete_matter(matter: str):
+	"""Soft-delete an empty client Matter after all of its Jobs are cancelled."""
+	portal_user = _require_portal_user()
+	if not portal_user.can_create_matters:
+		frappe.throw(_("You are not authorized to delete Matters."), frappe.PermissionError)
+	doc = frappe.get_doc("LPO Matter", matter)
+	if doc.customer != portal_user.client or not has_matter_access(doc.name, "view"):
+		frappe.throw(_("You cannot access this Matter."), frappe.PermissionError)
+	frappe.db.sql("select name from `tabLPO Matter` where name=%s for update", doc.name)
+	doc.reload()
+	if doc.client_deleted:
+		return {"name": doc.name, "deleted": True, "duplicate": True}
+	if not _matter_can_client_delete(doc.name):
+		frappe.throw(
+			_("Delete or cancel every unpaid Job in this Matter before deleting the Matter. Paid, funded, active or completed Jobs cannot be removed from the Client Portal."),
+			frappe.PermissionError,
+		)
+	previous = {"status": doc.status, "client_deleted": False}
+	doc.status = "Closed"
+	doc.client_deleted = 1
+	doc.client_deleted_on = now_datetime()
+	doc.client_deleted_by = frappe.session.user
+	previous_flag = getattr(frappe.flags, "lexocrates_portal_service", False)
+	frappe.flags.lexocrates_portal_service = True
+	try:
+		doc.save(ignore_permissions=True)
+	finally:
+		frappe.flags.lexocrates_portal_service = previous_flag
+	create_portal_audit_event(
+		client=portal_user.client,
+		portal_user=portal_user.name,
+		matter=doc.name,
+		action="Client Matter Soft Deleted",
+		object_type="LPO Matter",
+		object_id=doc.name,
+		previous_value=previous,
+		new_value={"status": "Closed", "client_deleted": True, "record_retained": True},
+		details="Client removed an empty Matter from the Client Portal; the internal record was retained.",
+	)
+	return {"name": doc.name, "deleted": True, "duplicate": False}
+
+
+def _matter_can_client_delete(matter: str) -> bool:
+	return not (
+		frappe.db.exists("LPO Job", {"engagement": matter, "job_status": ["!=", "Cancelled"]})
+		or frappe.db.exists("Lexocrates Work Intake", {"matter": matter, "status": ["!=", "Cancelled"]})
+	)
+
+
+@frappe.whitelist()
 def upload_matter_document(matter: str, filename: str, content: str):
 	_require_portal_user()
 	frappe.throw(
@@ -459,20 +523,29 @@ def generate_portal_report(report_name: str):
 	if report_name not in allowed:
 		frappe.throw(_("This report is not enabled for your account."), frappe.PermissionError)
 	if report_name == "Matter Status Report":
+		_hidden_intakes, _hidden_jobs, hidden_matters = _hidden_client_records(portal_user.client)
 		rows = frappe.get_list(
-			"LPO Matter", fields=["matter_title", "practice_area", "status", "end_date"],
+			"LPO Matter", fields=["name", "matter_title", "practice_area", "status", "end_date"],
 			order_by="modified desc", limit_page_length=500,
 		)
+		rows = [row for row in rows if row.name not in hidden_matters]
+		for row in rows:
+			row.pop("name", None)
 		columns = ["matter_title", "practice_area", "status", "end_date"]
 	elif report_name == "Financial Summary":
 		rows = _invoices(portal_user.client)
 		columns = ["posting_date", "due_date", "status", "currency", "grand_total", "outstanding_amount"]
 	else:
+		hidden_intakes, hidden_jobs, hidden_matters = _hidden_client_records(portal_user.client)
+		hidden_audit_objects = hidden_intakes | hidden_jobs | hidden_matters
 		rows = frappe.get_all(
 			"Lexocrates Portal Audit Event", filters={"client": portal_user.client},
-			fields=["event_timestamp", "action", "result", "object_type", "user"],
-			order_by="event_timestamp desc", limit_page_length=500,
+			fields=["event_timestamp", "action", "result", "object_type", "object_id", "user"],
+			order_by="event_timestamp desc", limit_page_length=1000,
 		)
+		rows = [row for row in rows if row.object_id not in hidden_audit_objects][:500]
+		for row in rows:
+			row.pop("object_id", None)
 		columns = ["event_timestamp", "action", "result", "object_type", "user"]
 	record_report_download(report_name)
 	return {"name": report_name, "columns": columns, "rows": rows}
@@ -488,6 +561,20 @@ def _report_catalog(portal_user):
 	if scope in {"Compliance Reports", "All Client Reports"}:
 		rows.append({"name": "Portal Audit Report", "description": "Audited organization activity"})
 	return rows
+
+
+def _hidden_client_records(client: str):
+	"""Return retained cancellations that must not surface in the Client Portal."""
+	rows = frappe.get_all(
+		"Lexocrates Work Intake",
+		filters={"client": client, "status": "Cancelled"},
+		fields=["name", "job"],
+		limit_page_length=1000,
+	)
+	matters = set(frappe.get_all(
+		"LPO Matter", filters={"customer": client, "client_deleted": 1}, pluck="name", limit_page_length=1000,
+	))
+	return {row.name for row in rows}, {row.job for row in rows if row.job}, matters
 
 
 @frappe.whitelist()

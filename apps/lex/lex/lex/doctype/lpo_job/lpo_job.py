@@ -55,6 +55,11 @@ class LPOJob(Document):
 		self._load_engagement_context()
 		self._protect_client_submission()
 		self._validate_status_transition()
+		# A client "delete" is an auditable pre-funding cancellation.  The Job
+		# remains in the database, and a Draft Job may not yet have the funded
+		# execution snapshots or clean-document gates required by active work.
+		if self._is_prefunding_cancellation():
+			return
 		self._validate_currency_pricing()
 		self._validate_matter_activation()
 		self._validate_execution_snapshots()
@@ -83,6 +88,33 @@ class LPOJob(Document):
 				),
 				frappe.ValidationError,
 			)
+
+	def _is_prefunding_cancellation(self):
+		if self.is_new() or self.job_status != "Cancelled":
+			return False
+		previous = self.get_doc_before_save()
+		if not previous or previous.job_status != "Draft":
+			return False
+		verified_pending_cancellation = getattr(
+			frappe.flags, "lexocrates_client_prefunding_cancellation", False
+		)
+		if (
+			previous.funding_status == "Funded"
+			or (previous.funding_status == "Payment Pending" and not verified_pending_cancellation)
+			or any(
+			(previous.wallet_reservation, previous.sales_invoice, previous.payment_entry)
+			)
+		):
+			frappe.throw(
+				_("A Job cannot be cancelled after payment or funding starts."),
+				frappe.PermissionError,
+			)
+		if self.funding_status != "Cancelled":
+			frappe.throw(
+				_("A cancelled pre-payment Job must be marked as unfunded and cancelled."),
+				frappe.ValidationError,
+			)
+		return True
 
 	def _load_engagement_context(self):
 		if not self.engagement:
@@ -133,8 +165,8 @@ class LPOJob(Document):
 		"""Keep a Job's quote and Legal Capacity in one real currency."""
 		if self.estimate_status not in {"Ready", "Accepted"}:
 			return
-		if self.currency not in {"CAD", "USD", "GBP"}:
-			frappe.throw(_("A Job estimate must use CAD, USD or GBP."), frappe.ValidationError)
+		if self.currency not in {"CAD", "USD", "GBP", "INR"}:
+			frappe.throw(_("A Job estimate must use CAD, USD, GBP or INR."), frappe.ValidationError)
 		if flt(self.quoted_amount) <= 0 or flt(self.required_legal_capacity) <= 0:
 			frappe.throw(_("A ready Job estimate needs a positive fixed quote and Legal Capacity."), frappe.ValidationError)
 		if abs(flt(self.quoted_amount) - flt(self.required_legal_capacity)) > 0.001:
@@ -156,7 +188,13 @@ class LPOJob(Document):
 			frappe.throw(_("The parent Matter must be Active before operational work begins."), frappe.ValidationError)
 		if matter.billing_method == "Job Based":
 			if self.funding_status != "Funded":
-				frappe.throw(_("This Job must be funded before operational work begins."), frappe.ValidationError)
+				payment_hold = (
+					getattr(frappe.flags, "lexocrates_payment_adjustment_service", False)
+					and self.funding_status in {"Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback"}
+					and self.job_status in {"On Hold", "Delivered", "Completed", "Cancelled"}
+				)
+				if not payment_hold:
+					frappe.throw(_("This Job must be funded before operational work begins."), frappe.ValidationError)
 			if not self.work_intake or self.estimate_status != "Accepted" or flt(self.quote_version) <= 0:
 				frappe.throw(_("A current accepted Job estimate is required before activation."), frappe.ValidationError)
 			if self.job_billing_method == "LexPack" and (
@@ -261,6 +299,8 @@ class LPOJob(Document):
 		self.delivery_notes = None
 
 	def _validate_assignment(self):
+		if getattr(frappe.flags, "lexocrates_payment_adjustment_service", False) and self.job_status == "On Hold":
+			return
 		if self.job_status in ASSIGNMENT_REQUIRED_STATUSES and not self.assigned_analyst:
 			frappe.throw(
 				_("Assigned Analyst is required when the job status is {0}.").format(
@@ -283,6 +323,8 @@ class LPOJob(Document):
 			)
 
 	def _validate_execution_controls(self):
+		if getattr(frappe.flags, "lexocrates_payment_adjustment_service", False) and self.job_status == "On Hold":
+			return
 		if self.job_status not in ASSIGNMENT_REQUIRED_STATUSES:
 			return
 		from lex.sop_execution_engine import sync_job_sop_evidence, validate_job_sop_gate

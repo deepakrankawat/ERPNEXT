@@ -1,0 +1,86 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Contact Us | Lexocrates{% endblock %}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block head_include %}
+	{{ super() }}
+	<meta name="description" content="Verified business and customer-support contact details for Lexocrates Legal Services Private Limited.">
+	<link rel="stylesheet" href="/assets/lex/css/legal_compliance.css?v=20260925-1">
+{% endblock %}
+
+{% block page_container %}
+{% include "templates/includes/compliance_header.html" %}
+<main>
+	<section class="compliance-hero"><div class="compliance-shell">
+		<p class="compliance-eyebrow">Customer support</p><h1>Contact Us</h1>
+		<p class="compliance-summary">Contact our Jaipur operations team about services, billing, payments, refunds, privacy or an existing engagement.</p>
+		<div class="compliance-meta"><span>Response within 24 business hours</span><span>Monday–Friday</span><span>9:30 AM–6:30 PM IST</span></div>
+	</div></section>
+
+	<div class="compliance-shell" style="padding-block:56px 84px">
+		<section class="contact-grid" aria-label="Business contact details">
+			<div class="contact-card"><h2>Legal entity</h2><p><strong>Lexocrates Legal Services Private Limited</strong><br>Technology-enabled legal process outsourcing and legal operations support.</p></div>
+			<div class="contact-card"><h2>Operating currencies</h2><p>CAD, USD and INR, together with any other currency expressly stated in an accepted order or SOW.</p></div>
+			<div class="contact-card"><h2>Office address</h2><address>Floor 1, E-103, Ganpati Enclave,<br>Sirsi Road, Jaipur,<br>Rajasthan 302041, India</address></div>
+			<div class="contact-card"><h2>Customer support</h2><p><a href="mailto:support@lexocrates.com">support@lexocrates.com</a><br>Monday to Friday, 9:30 AM–6:30 PM IST<br>Response within 24 business hours.</p><p style="margin-top:8px">A public telephone-support number is not currently available. Please use email or the secure form below.</p></div>
+		</section>
+
+		<section aria-labelledby="contact-form-title">
+			<div class="compliance-content"><h2 id="contact-form-title">Send a message</h2><p>Do not submit card numbers, CVV, OTPs, passwords or highly sensitive Client Materials through this form.</p></div>
+			<form id="compliance-contact-form" class="compliance-form" novalidate>
+				<div class="compliance-form-grid">
+					<div class="compliance-field"><label for="contact-name">Name</label><input id="contact-name" name="name" type="text" autocomplete="name" maxlength="140" required></div>
+					<div class="compliance-field"><label for="contact-email">Business email</label><input id="contact-email" name="email" type="email" autocomplete="email" maxlength="140" required></div>
+					<div class="compliance-field full"><label for="contact-subject">Subject</label><input id="contact-subject" name="subject" type="text" maxlength="180" required></div>
+					<div class="compliance-field full"><label for="contact-message">Message</label><textarea id="contact-message" name="message" maxlength="4000" required></textarea></div>
+					<div class="compliance-field compliance-honeypot" aria-hidden="true"><label for="contact-website">Website</label><input id="contact-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+				</div>
+				<button class="compliance-submit" type="submit">Send message</button>
+				<p id="compliance-form-status" class="compliance-form-status" role="status" aria-live="polite"></p>
+			</form>
+		</section>
+	</div>
+</main>
+{% include "templates/includes/compliance_footer.html" %}
+
+<script>
+(() => {
+	const form = document.getElementById("compliance-contact-form");
+	const status = document.getElementById("compliance-form-status");
+	if (!form) return;
+	form.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		if (!form.reportValidity()) return;
+		const button = form.querySelector("button[type='submit']");
+		button.disabled = true;
+		status.className = "compliance-form-status";
+		status.textContent = "Sending your message…";
+		try {
+			const values = Object.fromEntries(new FormData(form));
+			const response = await fetch("/api/method/lex.compliance_pages.submit_contact_request", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-Frappe-CSRF-Token": window.frappe?.csrf_token || "",
+				},
+				credentials: "same-origin",
+				body: JSON.stringify(values),
+			});
+			const payload = await response.json();
+			if (!response.ok || payload.exc || payload.exception) {
+				throw new Error(payload.message || "Unable to send the message.");
+			}
+			form.reset();
+			status.className = "compliance-form-status success";
+			status.textContent = payload.message?.message || "Thank you. We will respond within 24 business hours.";
+		} catch (error) {
+			status.className = "compliance-form-status error";
+			status.textContent = error.message || "Unable to send the message. Please email support@lexocrates.com.";
+		} finally {
+			button.disabled = false;
+		}
+	});
+})();
+</script>
+{% endblock %}

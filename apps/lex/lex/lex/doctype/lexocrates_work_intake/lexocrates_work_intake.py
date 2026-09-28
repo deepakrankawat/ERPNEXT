@@ -11,7 +11,8 @@ from lex.client_access import get_portal_user
 MANAGEMENT_ROLES = {"System Manager", "LPO_Admin", "LPO_Manager", "Lexocrates Finance", "Accounts Manager"}
 LOCKED_AFTER_FUNDING = {
 	"client", "portal_user", "submitted_by", "service_type", "jurisdiction", "priority",
-	"preliminary_details", "detailed_instructions", "expected_outcome", "sla_terms_snapshot", "sla_snapshot_hash",
+	"preliminary_details", "detailed_instructions", "expected_outcome", "requested_delivery_date",
+	"sla_terms_snapshot", "sla_snapshot_hash",
 	"quoted_amount", "currency", "required_legal_capacity", "scope_summary", "delivery_timeline_hours",
 	"selected_pricing_service", "exact_pdf_page_count", "calculated_hours", "fixed_service_rate_cad",
 	"raw_price_cad", "final_rounded_price_cad", "pricing_exchange_rate", "pricing_exchange_rate_date",
@@ -43,8 +44,8 @@ class LexocratesWorkIntake(Document):
 				)
 			if abs(flt(self.quoted_amount) - flt(self.required_legal_capacity)) > 0.001:
 				frappe.throw(_("Legal Capacity must equal the fixed quote in the selected currency."), frappe.ValidationError)
-			if self.currency not in {"CAD", "USD", "GBP"}:
-				frappe.throw(_("A fixed quote must use CAD, USD or GBP."), frappe.ValidationError)
+			if self.currency not in {"CAD", "USD", "GBP", "INR"}:
+				frappe.throw(_("A fixed quote must use CAD, USD, GBP or INR."), frappe.ValidationError)
 		if self.funding_status == "Funded" and self.funding_route == "Not Selected":
 			frappe.throw(_("A funded intake must record its funding route."), frappe.ValidationError)
 		previous = self.get_doc_before_save()

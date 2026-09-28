@@ -48,6 +48,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 			"Lexocrates Client Registration",
 			"Lexocrates Client Wallet",
 			"Lexocrates Wallet Transaction",
+			"Lexocrates Payment Adjustment",
 			"Lexocrates Portal Audit Event",
 			"LPO Matter",
 			"LPO Job",
@@ -82,47 +83,72 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("@media (max-width: 640px)", styles)
 		self.assertIn("@media (max-width: 480px)", styles)
 		self.assertIn("100dvh", styles)
+		self.assertIn(".lex-wizard-step.is-active", styles)
+		self.assertIn("background: var(--lex-primary-soft)", styles)
+		self.assertIn("client_portal.css?v=20260924-2", template)
 
-	def test_client_portal_has_standard_intake_and_quick_lextimator_workflows(self):
+	def test_client_portal_has_standard_intake_without_quick_estimate_button(self):
 		app_path = Path(frappe.get_app_path("lex"))
 		script = (app_path / "public" / "js" / "client_portal.js").read_text(encoding="utf-8")
 
 		self.assertIn('"lex-new-intake"', script)
-		self.assertIn('data-intake-workflow="standard"', script)
-		self.assertIn('data-intake-workflow="quick"', script)
+		self.assertNotIn('sectionHeader("Submit New Work"', script)
+		self.assertNotIn('id="lex-navbar-page-title"', script)
+		self.assertNotIn('<div><h2>${brandedText(title)}</h2>', script)
+		self.assertNotIn('data-intake-workflow="quick"', script)
+		self.assertNotIn('>Quick PDF Estimate</button>', script)
 		self.assertIn('data-matter-mode', script)
 		self.assertIn('data-next-intake-step', script)
 		self.assertIn('lex.work_intake.create_work_intake', script)
-		self.assertIn('"lex-instant-estimate-form"', script)
-		self.assertIn('lex.instant_estimator.calculate_instant_pdf_estimate', script)
-		self.assertIn('id="lex-pay-instant-btn"', script)
-		self.assertIn('lex.work_intake.create_direct_quote_order", { intake: response.intake }', script)
 		self.assertIn('accept=".pdf,application/pdf"', script)
 		self.assertIn('{ value: "Document Review", label: "eDiscovery & Document Review" }', script)
 		self.assertIn('{ value: "Other", label: "Legal Operations Support" }', script)
 		self.assertNotIn('formCard("Standard Matter &amp; Work Intake"', script)
 		self.assertNotIn('card("LexPack<sup', script)
 		self.assertIn('formCard("Create a Job"', script)
-		self.assertIn('Add parties or dispute details (optional)', script)
-		self.assertIn('Add delivery preferences (optional)', script)
+		self.assertIn('<h4>Parties and dispute details</h4>', script)
+		self.assertNotIn('<summary>Add parties or dispute details', script)
+		self.assertIn('<h4>Delivery preferences</h4>', script)
+		self.assertIn('name="requested_delivery_date" type="datetime-local" required', script)
+		self.assertIn('<small>Delivery deadline</small>', script)
+		self.assertNotIn('hours after confirmation', script)
+		self.assertNotIn('<summary>Add delivery preferences', script)
 		self.assertIn('Create Draft Job', script)
 		self.assertIn('>Job</span>', script)
 		self.assertIn('>Payment</span>', script)
 		template = (app_path / "www" / "client-portal.html").read_text(encoding="utf-8")
-		self.assertIn('client_portal.js?v=20260923-3', template)
+		self.assertIn('client_portal.js?v=20260928-4', template)
+		self.assertNotIn("An internal compliance record is retained.", script)
+
+	def test_requested_delivery_date_is_the_operational_deadline(self):
+		requested = add_days(now_datetime(), 3).replace(microsecond=0)
+		doc = frappe._dict({
+			"requested_delivery_date": requested,
+			"delivery_timeline_hours": 1,
+			"service_type": "Legal Research",
+		})
+		self.assertEqual(work_intake._delivery_deadline(doc, start=now_datetime()), requested)
 
 	def test_account_creation_recovery_preserves_core_child_account_fields(self):
 		app_path = Path(frappe.get_app_path("lex"))
 		install = (app_path / "install.py").read_text(encoding="utf-8")
 		script = (app_path / "public" / "js" / "account_form_recovery.js").read_text(encoding="utf-8")
+		tree_script = (app_path / "public" / "js" / "account_tree_recovery.js").read_text(encoding="utf-8")
 		hooks = (app_path / "hooks.py").read_text(encoding="utf-8")
 
 		self.assertIn("def ensure_account_creation_form_fields", install)
 		self.assertIn('"account_name", "parent_account"', install)
+		self.assertIn('("hidden", "depends_on", "read_only")', install)
+		self.assertIn("ensure_account_creation_form_fields()", install)
 		self.assertIn('"lex.install.ensure_account_creation_form_fields"', hooks)
 		self.assertIn('"Account": "public/js/account_form_recovery.js"', hooks)
+		self.assertIn('"Account": "public/js/account_tree_recovery.js"', hooks)
 		self.assertIn('frm.toggle_display("account_name", true)', script)
 		self.assertIn('frm.toggle_display("parent_account", true)', script)
+		self.assertIn('frm.toggle_enable("account_name", true)', script)
+		self.assertIn('field.fieldname === "account_name"', tree_script)
+		self.assertIn("accountName.hidden = 0", tree_script)
+		self.assertIn("accountName.reqd = 1", tree_script)
 
 	def test_quick_lextimator_saves_before_payment_and_checkout_is_live(self):
 		app_path = Path(frappe.get_app_path("lex"))
@@ -134,6 +160,10 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertNotIn("def _prepare_razorpay_checkout", estimator)
 		self.assertIn('"is_live_order": True', intake)
 		self.assertIn('doc.funding_status == "Payment Pending"', intake)
+		self.assertIn("_pending_razorpay_order_is_reusable", intake)
+		self.assertIn('"id provided does not exist"', intake)
+		self.assertIn("class _accounting_service_writes", intake)
+		self.assertGreaterEqual(intake.count("with _accounting_service_writes():"), 2)
 
 	def test_login_page_is_light_only(self):
 		app_path = Path(frappe.get_app_path("lex"))
@@ -431,6 +461,127 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertEqual(frappe.db.get_value("LPO Matter", intake.matter, "status"), "Active")
 		self.assertEqual(frappe.db.get_value("LPO Job", intake.job, "job_status"), "Draft")
 		self.assertEqual(intake.detailed_instructions, intake.preliminary_details)
+
+	def test_client_soft_deletes_unpaid_job_without_removing_records(self):
+		client = _make_client()
+		user = _make_user()
+		portal_user = _make_portal_user(user.name, client, "Client Administrator")
+		frappe.set_user(user.name)
+		created = work_intake.create_work_intake(
+			intake_title="Client cancellable Job",
+			service_type="Legal Research",
+			jurisdiction="Canada",
+			priority="Medium",
+			expected_outcome="Prepare a retained cancellation test record.",
+			preliminary_details="Research this issue before any payment is initiated.",
+		)
+
+		result = work_intake.cancel_work_intake(created["name"])
+		self.assertTrue(result["deleted"])
+		self.assertFalse(result["duplicate"])
+		self.assertTrue(frappe.db.exists("Lexocrates Work Intake", created["name"]))
+		self.assertTrue(frappe.db.exists("LPO Job", created["job"]))
+		self.assertEqual(frappe.db.get_value("Lexocrates Work Intake", created["name"], "status"), "Cancelled")
+		self.assertEqual(frappe.db.get_value("Lexocrates Work Intake", created["name"], "funding_status"), "Cancelled")
+		self.assertEqual(frappe.db.get_value("LPO Job", created["job"], "job_status"), "Cancelled")
+		self.assertEqual(frappe.db.get_value("LPO Job", created["job"], "funding_status"), "Cancelled")
+		self.assertTrue(frappe.db.exists("Lexocrates Portal Audit Event", {
+			"portal_user": portal_user.name,
+			"action": "Client Job Soft Deleted",
+			"object_type": "LPO Job",
+			"object_id": created["job"],
+		}))
+		self.assertNotIn(created["name"], {item.name for item in work_intake.portal_intakes()})
+		dashboard = client_portal.get_portal_dashboard()
+		self.assertNotIn(created["job"], {item.name for item in dashboard["jobs"]})
+		self.assertNotIn(created["name"], {item.object_id for item in dashboard["audit_events"]})
+		self.assertNotIn(created["job"], {item.object_id for item in dashboard["audit_events"]})
+		frappe.db.set_value("Lexocrates Portal User", portal_user.name, "report_access", "All Client Reports")
+		report = client_portal.generate_portal_report("Portal Audit Report")
+		self.assertNotIn("Client Work Intake Soft Deleted", {item.action for item in report["rows"]})
+		self.assertNotIn("Client Job Soft Deleted", {item.action for item in report["rows"]})
+
+		duplicate = work_intake.cancel_work_intake(created["name"])
+		self.assertTrue(duplicate["duplicate"])
+
+		matter_title = frappe.db.get_value("LPO Matter", created["matter"], "matter_title")
+		matter_result = client_portal.delete_matter(created["matter"])
+		self.assertTrue(matter_result["deleted"])
+		self.assertTrue(frappe.db.exists("LPO Matter", created["matter"]))
+		self.assertEqual(frappe.db.get_value("LPO Matter", created["matter"], "status"), "Closed")
+		self.assertEqual(frappe.db.get_value("LPO Matter", created["matter"], "client_deleted"), 1)
+		dashboard = client_portal.get_portal_dashboard()
+		self.assertNotIn(created["matter"], {item.name for item in dashboard["matters"]})
+		self.assertNotIn(created["matter"], {item.object_id for item in dashboard["audit_events"]})
+		matter_report = client_portal.generate_portal_report("Matter Status Report")
+		self.assertNotIn(matter_title, {item.matter_title for item in matter_report["rows"]})
+
+		matter_duplicate = client_portal.delete_matter(created["matter"])
+		self.assertTrue(matter_duplicate["duplicate"])
+
+	def test_client_cannot_delete_matter_with_non_cancelled_job(self):
+		client = _make_client()
+		user = _make_user()
+		_make_portal_user(user.name, client, "Client Administrator")
+		frappe.set_user(user.name)
+		created = work_intake.create_work_intake(
+			intake_title="Matter deletion guard",
+			service_type="Legal Research",
+			jurisdiction="India",
+			priority="Medium",
+			expected_outcome="Keep a Matter visible while it contains an open Job.",
+			preliminary_details="This open Draft Job must prevent Matter deletion.",
+		)
+
+		with self.assertRaises(frappe.PermissionError):
+			client_portal.delete_matter(created["matter"])
+		self.assertFalse(frappe.db.get_value("LPO Matter", created["matter"], "client_deleted"))
+
+	def test_client_can_soft_delete_funding_pending_job_before_payment(self):
+		client = _make_client()
+		user = _make_user()
+		_make_portal_user(user.name, client, "Client Administrator")
+		frappe.set_user(user.name)
+		created = work_intake.create_work_intake(
+			intake_title="Payment-started Job",
+			service_type="Legal Research",
+			jurisdiction="Canada",
+			priority="Medium",
+			expected_outcome="Confirm cancellation is blocked.",
+			preliminary_details="This Draft Job simulates a payment already being prepared.",
+		)
+		frappe.db.set_value("Lexocrates Work Intake", created["name"], {
+			"status": "Funding Pending",
+			"funding_status": "Payment Pending",
+			"razorpay_order_id": "order_unpaid_delete_test",
+		})
+		frappe.db.set_value("LPO Job", created["job"], "funding_status", "Payment Pending")
+		with patch("lex.work_intake._pending_gateway_order_has_payment", return_value=False):
+			result = work_intake.cancel_work_intake(created["name"])
+		self.assertTrue(result["deleted"])
+		self.assertEqual(frappe.db.get_value("LPO Job", created["job"], "job_status"), "Cancelled")
+
+	def test_client_cannot_soft_delete_after_payment_is_received(self):
+		client = _make_client()
+		user = _make_user()
+		_make_portal_user(user.name, client, "Client Administrator")
+		frappe.set_user(user.name)
+		created = work_intake.create_work_intake(
+			intake_title="Payment-received Job",
+			service_type="Legal Research",
+			jurisdiction="Canada",
+			priority="Medium",
+			expected_outcome="Confirm cancellation is blocked after payment.",
+			preliminary_details="This Draft Job simulates a received payment.",
+		)
+		frappe.db.set_value("Lexocrates Work Intake", created["name"], {
+			"status": "Funding Pending",
+			"funding_status": "Payment Pending",
+			"razorpay_order_id": "order_paid_delete_test",
+			"razorpay_payment_id": "pay_delete_test",
+		})
+		with self.assertRaises(frappe.PermissionError):
+			work_intake.cancel_work_intake(created["name"])
 
 	def test_matter_access_and_cross_client_isolation(self):
 		client_a = _make_client()

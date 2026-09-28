@@ -14,9 +14,11 @@ from frappe.utils import cint, now_datetime, nowdate
 from lex.client_access import get_portal_user
 
 PAGES_PER_HOUR = 30
-PRICING_VERSION = "COUNTRY-CURRENCY-FIXED-30PPH-1.1"
-SUPPORTED_ESTIMATE_CURRENCIES = {"CAD", "USD", "GBP"}
+PRICING_VERSION = "COUNTRY-CURRENCY-FIXED-30PPH-1.2"
+SUPPORTED_ESTIMATE_CURRENCIES = {"CAD", "USD", "GBP", "INR"}
 COUNTRY_CURRENCY = {
+	"india": "INR",
+	"bharat": "INR",
 	"canada": "CAD",
 	"united states": "USD",
 	"usa": "USD",
@@ -101,7 +103,7 @@ def extract_pdf_pages_and_text(pdf_bytes: bytes) -> tuple[int, str]:
 def round_up_to_cad_five(amount: Decimal) -> Decimal:
 	"""Round a non-negative amount upward to the next whole multiple of five."""
 	if amount < 0:
-		raise ValueError("CAD amount cannot be negative.")
+		raise ValueError("Amount cannot be negative.")
 	return (amount / Decimal("5")).to_integral_value(rounding=ROUND_CEILING) * Decimal("5")
 
 
@@ -161,7 +163,7 @@ def calculate_page_based_pricing(
 	raw_price_cad = (Decimal(pages) * rate) / Decimal(PAGES_PER_HOUR)
 	currency = str(currency or "CAD").upper()
 	if currency not in SUPPORTED_ESTIMATE_CURRENCIES:
-		raise ValueError("Only CAD, USD and GBP are supported for country-based pricing.")
+		raise ValueError("Only CAD, USD, GBP and INR are supported for country-based pricing.")
 	fx_rate = Decimal(str(exchange_rate)) if exchange_rate is not None else _cad_exchange_rate(currency)
 	if fx_rate <= 0:
 		raise ValueError("A positive exchange rate is required.")

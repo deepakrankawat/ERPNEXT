@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime
 
-from lex import install, lexpack
+from lex import install, lexpack, work_intake
 from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import _post_transaction
 
 
@@ -67,11 +68,24 @@ class TestLexPackCommerce(FrappeTestCase):
 		self.assertTrue(lexpack._checkout_signature_is_valid(order_id, payment_id, signature, secret))
 		self.assertFalse(lexpack._checkout_signature_is_valid(order_id, payment_id, "tampered", secret))
 		self.assertEqual(lexpack._minor_units(299, "USD"), 29900)
+		self.assertEqual(lexpack._minor_units(Decimal("24999.50"), "INR"), 2499950)
 		raw_body = b'{"event":"payment.captured"}'
 		webhook_secret = "separate-webhook-secret"
 		webhook_signature = hmac.new(webhook_secret.encode(), raw_body, hashlib.sha256).hexdigest()
 		self.assertTrue(lexpack._webhook_signature_is_valid(raw_body, webhook_signature, webhook_secret))
 		self.assertFalse(lexpack._webhook_signature_is_valid(raw_body, "tampered", webhook_secret))
+
+	def test_refund_and_dispute_events_are_supported_with_proportional_reversals(self):
+		self.assertTrue(
+			{
+				"refund.created", "refund.processed", "refund.failed",
+				"payment.dispute.created", "payment.dispute.won", "payment.dispute.lost",
+				"payment.dispute.closed", "payment.dispute.under_review",
+				"payment.dispute.action_required",
+			}.issubset(lexpack.SUPPORTED_WEBHOOK_EVENTS)
+		)
+		self.assertEqual(lexpack._major_units(14950, "USD"), 149.50)
+		self.assertEqual(lexpack._proportional_value(321.51, 14950, 29900), 160.76)
 
 	def test_gateway_readiness_requires_explicit_enable_and_matching_key_mode(self):
 		settings = _configure_test_gateway(enabled=0)
@@ -114,6 +128,25 @@ class TestLexPackCommerce(FrappeTestCase):
 		self.assertEqual(kwargs["params"], {"count": 1})
 		self.assertIsNone(kwargs["json"])
 
+	def test_pending_direct_order_is_replaced_after_gateway_account_rotation(self):
+		doc = frappe._dict(
+			{"razorpay_order_id": "order_from_old_account", "razorpay_payment_id": None}
+		)
+		with patch(
+			"lex.lexpack._razorpay_request",
+			side_effect=frappe.ValidationError("The id provided does not exist"),
+		):
+			self.assertFalse(
+				work_intake._pending_razorpay_order_is_reusable(doc, Mock(), {"amount": 1000, "currency": "CAD"})
+			)
+
+	def test_pending_direct_order_is_reused_when_gateway_still_has_it(self):
+		doc = frappe._dict({"razorpay_order_id": "order_current", "razorpay_payment_id": None})
+		payload = {"amount": 1000, "currency": "CAD", "receipt": "INTAKE-TEST"}
+		gateway_order = {"entity": "order", "id": "order_current", "status": "created", **payload}
+		with patch("lex.lexpack._razorpay_request", return_value=gateway_order):
+			self.assertTrue(work_intake._pending_razorpay_order_is_reusable(doc, Mock(), payload))
+
 	def test_portal_catalog_uses_client_country_currency(self):
 		client = _make_client(default_currency="CAD")
 		if frappe.get_meta("Customer").has_field("custom_primary_jurisdiction"):
@@ -141,6 +174,24 @@ class TestLexPackCommerce(FrappeTestCase):
 
 		with self.assertRaises(frappe.ValidationError):
 			lexpack.create_razorpay_order("STARTER", currency="USD")
+
+	def test_india_client_gets_inr_lexpack_catalog(self):
+		client = _make_client(default_currency="INR")
+		if frappe.get_meta("Customer").has_field("custom_primary_jurisdiction"):
+			frappe.db.set_value("Customer", client, "custom_primary_jurisdiction", "India", update_modified=False)
+		else:
+			frappe.db.set_value("Customer", client, "territory", "India", update_modified=False)
+		user = _make_user()
+		_make_portal_user(user.name, client, "Client Administrator")
+		frappe.set_user(user.name)
+
+		data = lexpack.get_lexpack_portal_data()
+		starter = next(row for row in data["plans"] if row.plan_code == "STARTER")
+
+		self.assertEqual(data["selected_currency"], "INR")
+		self.assertEqual(data["currency_options"][0]["symbol"], "₹")
+		self.assertEqual(starter.currency, "INR")
+		self.assertEqual(starter.price, 24999)
 
 	def test_direct_dashboard_razorpay_order_credits_wallet_after_capture(self):
 		_configure_test_gateway(enabled=1)

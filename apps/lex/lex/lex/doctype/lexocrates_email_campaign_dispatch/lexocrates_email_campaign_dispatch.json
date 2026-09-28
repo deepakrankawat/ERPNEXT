@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "autoname": "field:dispatch_key",
+ "creation": "2026-09-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "dispatch_key",
+  "email_campaign",
+  "campaign",
+  "schedule_index",
+  "email_template",
+  "scheduled_for_utc",
+  "time_zone",
+  "status",
+  "communication",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "dispatch_key",
+   "fieldtype": "Data",
+   "label": "Dispatch Key",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "email_campaign",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Email Campaign",
+   "options": "Email Campaign",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "label": "Campaign",
+   "options": "Campaign",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "schedule_index",
+   "fieldtype": "Int",
+   "label": "Schedule Index",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "email_template",
+   "fieldtype": "Link",
+   "label": "Email Template",
+   "options": "Email Template",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "scheduled_for_utc",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Scheduled For (UTC)",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "time_zone",
+   "fieldtype": "Data",
+   "label": "Timezone",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Processing\nQueued\nSent\nError",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "communication",
+   "fieldtype": "Link",
+   "label": "Communication",
+   "options": "Communication",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Code",
+   "label": "Error",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Lexocrates Email Campaign Dispatch",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "scheduled_for_utc",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

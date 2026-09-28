@@ -137,7 +137,7 @@ def handle_payment_topup_webhook():
 	currency = str(data.get("currency") or "").upper()
 	event_timestamp = data.get("timestamp")
 
-	if not idempotency_key or not client_id or legal_capacity_amount <= 0 or currency not in {"CAD", "USD", "GBP"} or not event_timestamp:
+	if not idempotency_key or not client_id or legal_capacity_amount <= 0 or currency not in {"CAD", "USD", "GBP", "INR"} or not event_timestamp:
 		frappe.throw(_("Invalid webhook payload."), frappe.ValidationError)
 	try:
 		age_seconds = abs((now_datetime() - get_datetime(event_timestamp)).total_seconds())

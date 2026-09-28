@@ -13,6 +13,9 @@
   "customer_name",
   "overview_column_break",
   "status",
+  "client_deleted",
+  "client_deleted_on",
+  "client_deleted_by",
   "matter_model",
   "matter_manager",
   "party_section",
@@ -105,6 +108,28 @@
    "label": "Status",
    "options": "Draft\nActive\nOn Hold\nCompleted\nClosed",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "client_deleted",
+   "fieldtype": "Check",
+   "label": "Deleted by Client",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.client_deleted",
+   "fieldname": "client_deleted_on",
+   "fieldtype": "Datetime",
+   "label": "Client Deleted On",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.client_deleted",
+   "fieldname": "client_deleted_by",
+   "fieldtype": "Link",
+   "label": "Client Deleted By",
+   "options": "User",
+   "read_only": 1
   },
   {
    "default": "Project",

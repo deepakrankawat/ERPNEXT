@@ -7,6 +7,7 @@ from frappe import _
 from frappe.core.doctype.communication.email import make
 from frappe.model.document import Document
 from frappe.utils import add_days, getdate, today
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 class EmailCampaign(Document):
@@ -27,7 +28,18 @@ class EmailCampaign(Document):
 		status: DF.Literal["", "Scheduled", "In Progress", "Completed", "Unsubscribed"]
 	# end: auto-generated types
 
+	def before_insert(self):
+		# Existing campaigns retain legacy daily behavior. Every newly-created
+		# campaign opts into exact local-time scheduling and catch-up delivery.
+		self.time_scheduling_enabled = 1
+
 	def validate(self):
+		self.start_time = self.start_time or "09:00:00"
+		self.time_zone = self.time_zone or "Asia/Kolkata"
+		try:
+			ZoneInfo(self.time_zone)
+		except ZoneInfoNotFoundError:
+			frappe.throw(_("Select a valid IANA timezone for this Email Campaign."))
 		self.set_date()
 		# checking if email is set for lead. Not checking for contact as email is a mandatory field for contact.
 		if self.email_campaign_for == "Lead":
@@ -78,7 +90,13 @@ class EmailCampaign(Document):
 		end_date = getdate(self.end_date)
 		today_date = getdate(today())
 
-		if start_date > today_date:
+		if self.time_scheduling_enabled:
+			# Completion is recorded only after every timed schedule has been
+			# idempotently queued. A missed clock time must remain recoverable.
+			if self.status == "Completed":
+				return
+			new_status = "Scheduled" if start_date > today_date else "In Progress"
+		elif start_date > today_date:
 			new_status = "Scheduled"
 		elif end_date >= today_date:
 			new_status = "In Progress"
@@ -91,12 +109,17 @@ class EmailCampaign(Document):
 
 # called through hooks to send campaign mails to leads
 def send_email_to_leads_or_contacts():
+	# Exact date/time campaigns are handled every five minutes by Lexocrates.
+	# Calling this here also provides a safe daily catch-up path.
+	from lex.email_campaign_scheduler import process_due_email_campaigns
+
+	process_due_email_campaigns()
 	today_date = getdate(today())
 
 	# Get all active email campaigns in a single query
 	email_campaigns = frappe.get_all(
 		"Email Campaign",
-		filters={"status": "In Progress"},
+		filters={"status": "In Progress", "time_scheduling_enabled": 0},
 		fields=["name", "campaign_name", "email_campaign_for", "recipient", "start_date", "sender"],
 	)
 

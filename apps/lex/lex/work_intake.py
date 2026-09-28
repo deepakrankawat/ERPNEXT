@@ -25,10 +25,10 @@ DEFAULT_SLA_VERSION = "CLIENT-INTAKE-SLA-1.0"
 DEFAULT_SLA_TERMS = """Client Intake Service Level Agreement
 
 1. Documents remain encrypted/private and are scanned before processing.
-2. The preliminary timeline is not the operational SLA. The operational SLA starts only after clean documents, confirmed scope and successful funding.
+2. The requested delivery date becomes the operational deadline after clean documents, confirmed scope and successful funding.
 3. AI-assisted extraction may be used only within the approved Lexocrates processing environment; low-confidence output is reviewed by Legal Operations.
-4. A generated quote records an internal effort estimate, confirmed fixed price, required Legal Capacity and delivery timeline. The client may use existing Legal Capacity, a LexPack, or pay the fixed quote directly.
-5. Material scope changes require a revised quote and delivery timeline.
+4. A generated quote records an internal effort estimate, confirmed fixed price, required Legal Capacity and requested delivery deadline. The client may use existing Legal Capacity, a LexPack, or pay the fixed quote directly.
+5. Material scope changes require a revised quote and delivery deadline.
 6. Lexocrates retains an immutable audit trail of SLA acceptance, documents, quote, funding, execution, QA, approval and delivery.
 """
 BASE_HOURS = {
@@ -156,11 +156,7 @@ def create_work_intake(
 	values["matter"] = parent.name
 	with _service_writes(), _portal_service_writes():
 		doc = frappe.get_doc(values).insert(ignore_permissions=True)
-		draft_due = (
-			get_datetime(requested_delivery_date)
-			if requested_delivery_date
-		else now_datetime() + timedelta(hours=BASE_HOURS.get(service_type, 72))
-		)
+		draft_due = _delivery_deadline(doc)
 		job = frappe.get_doc({
 			"doctype": "LPO Job",
 			"job_title": (intake_title or "").strip(),
@@ -272,6 +268,118 @@ def accept_sla(intake: str, accepted: int = 0):
 
 
 @frappe.whitelist()
+def cancel_work_intake(intake: str):
+	"""Soft-delete an unfunded client Job while retaining its audit history."""
+	doc, actor = _require_intake_access(intake)
+	if _is_internal():
+		frappe.throw(_("Use the internal Job cancellation workflow."), frappe.PermissionError)
+	if not has_portal_capability("can_create_matters"):
+		frappe.throw(_("You are not authorized to delete Draft Jobs."), frappe.PermissionError)
+
+	# Serialize cancellation against funding/payment callbacks.  Re-read after
+	# acquiring the lock so an already-started payment can never be cancelled.
+	frappe.db.sql("select name from `tabLexocrates Work Intake` where name=%s for update", doc.name)
+	doc.reload()
+	if doc.status == "Cancelled" and doc.funding_status == "Cancelled":
+		return {
+			"name": doc.name,
+			"job": doc.job,
+			"status": doc.status,
+			"funding_status": doc.funding_status,
+			"deleted": True,
+			"duplicate": True,
+		}
+	if not _can_cancel_before_payment(doc):
+		frappe.throw(
+			_("This Job cannot be deleted after payment has been received or funding has completed."),
+			frappe.PermissionError,
+		)
+	if _pending_gateway_order_has_payment(doc):
+		frappe.throw(
+			_("This Job cannot be deleted because its payment is already authorized or captured."),
+			frappe.PermissionError,
+		)
+	if not doc.job or not frappe.db.exists("LPO Job", doc.job):
+		frappe.throw(_("The linked Draft Job could not be found."), frappe.ValidationError)
+	job = frappe.get_doc("LPO Job", doc.job)
+	if (
+		job.job_status != "Draft"
+		or job.funding_status in {
+			"Funded", "Refund Pending", "Partially Refunded",
+			"Refunded", "Disputed", "Chargeback",
+		}
+		or any((job.wallet_reservation, job.sales_invoice, job.payment_entry))
+	):
+		frappe.throw(
+			_("Only an unpaid Draft Job can be deleted from the Client Portal."),
+			frappe.PermissionError,
+		)
+
+	previous = {
+		"work_intake_status": doc.status,
+		"work_intake_funding_status": doc.funding_status,
+		"job_status": job.job_status,
+		"job_funding_status": job.funding_status,
+	}
+	with _service_writes():
+		doc.status = "Cancelled"
+		doc.funding_status = "Cancelled"
+		doc.failure_reason = None
+		doc.save(ignore_permissions=True)
+	previous_cancellation_flag = getattr(frappe.flags, "lexocrates_client_prefunding_cancellation", False)
+	frappe.flags.lexocrates_client_prefunding_cancellation = True
+	try:
+		with _portal_service_writes():
+			job.funding_status = "Cancelled"
+			job.job_status = "Cancelled"
+			job.save(ignore_permissions=True)
+	finally:
+		frappe.flags.lexocrates_client_prefunding_cancellation = previous_cancellation_flag
+	job.add_comment(
+		"Info",
+		_("Deleted by Client before payment. The Job record was retained for audit history."),
+	)
+
+	new_value = {
+		"work_intake_status": "Cancelled",
+		"work_intake_funding_status": "Cancelled",
+		"job_status": "Cancelled",
+		"job_funding_status": "Cancelled",
+		"record_retained": True,
+	}
+	create_portal_audit_event(
+		client=doc.client,
+		portal_user=actor.name,
+		matter=doc.matter,
+		action="Client Work Intake Soft Deleted",
+		object_type=doc.doctype,
+		object_id=doc.name,
+		previous_value=previous,
+		new_value=new_value,
+		details="Client deleted an unpaid Draft Job; Work Intake and Job records were retained.",
+	)
+	create_portal_audit_event(
+		client=doc.client,
+		portal_user=actor.name,
+		matter=doc.matter,
+		action="Client Job Soft Deleted",
+		object_type="LPO Job",
+		object_id=job.name,
+		previous_value=previous,
+		new_value=new_value,
+		details=f"Cancelled from Work Intake {doc.name}; the Job record was retained.",
+	)
+	return {
+		"name": doc.name,
+		"job": job.name,
+		"status": doc.status,
+		"funding_status": doc.funding_status,
+		"deleted": True,
+		"duplicate": False,
+	}
+
+
+@frappe.whitelist()
 def upload_document(intake: str, filename: str, content: str):
 	doc, actor = _require_intake_access(intake)
 	if not _is_internal() and (not actor or not actor.can_upload_documents):
@@ -285,6 +393,7 @@ def _upload_intake_document(doc, actor, filename: str, content: str, *, auto_est
 	The public portal action and the internal Desk estimation action share this
 	implementation so both retain the same security scan, lineage and audit trail.
 	"""
+	_require_not_cancelled(doc)
 	if not doc.sla_accepted:
 		frappe.throw(_("Review and accept the SLA Document before uploading files."), frappe.PermissionError)
 	if doc.funding_status in {"Payment Pending", "Funded"} or doc.status in {"Funding Pending", "Funded", "Matter Confirmed"}:
@@ -366,6 +475,7 @@ def _upload_intake_document(doc, actor, filename: str, content: str, *, auto_est
 @frappe.whitelist()
 def save_detailed_instructions(intake: str, detailed_instructions: str):
 	doc, actor = _require_intake_access(intake)
+	_require_not_cancelled(doc)
 	if not doc.sla_accepted:
 		frappe.throw(_("Accept the SLA before adding detailed instructions."), frappe.PermissionError)
 	if doc.funding_status in {"Payment Pending", "Funded"} or doc.status in {"Funding Pending", "Funded", "Matter Confirmed"}:
@@ -491,6 +601,7 @@ def estimate_system_job(
 		"quoted_amount": flt(doc.quoted_amount, 2),
 		"currency": doc.currency,
 		"delivery_timeline_hours": cint(doc.delivery_timeline_hours),
+		"requested_delivery_date": doc.requested_delivery_date,
 		"scope_summary": doc.scope_summary,
 		"analysis_confidence": flt(doc.analysis_confidence, 2),
 		"low_confidence": bool(doc.low_confidence),
@@ -520,6 +631,7 @@ def _process_documents(
 	priority or a browser-supplied amount.  The selected service and exact native
 	PDF page total are the only billable inputs.
 	"""
+	_require_not_cancelled(doc)
 	if not doc.sla_accepted:
 		frappe.throw(_("SLA acceptance is required before cost estimation."), frappe.PermissionError)
 	files = _intake_files(doc.name)
@@ -705,6 +817,7 @@ def get_chat_pricing_context(intake: str) -> dict:
 		"quoted_amount": flt(doc.quoted_amount, 2),
 		"currency": doc.currency,
 		"delivery_timeline_hours": cint(doc.delivery_timeline_hours),
+		"requested_delivery_date": doc.requested_delivery_date,
 		"scope_summary": doc.scope_summary or _native_pdf_scope_summary(
 			doc, _selected_pricing_service(doc), cint(doc.get("exact_pdf_page_count"))
 		),
@@ -855,11 +968,16 @@ def create_direct_quote_order(intake: str):
 		"receipt": doc.name,
 		"notes": {"work_intake": doc.name, "client": doc.client, "funding_route": "Direct Quote"},
 	}
-	# A retry, refresh, or repeated click must reopen the same pending checkout.
-	# Creating a second Razorpay order here would invalidate the order ID held by
-	# the client and leave unnecessary pending orders in the gateway.
+	# A retry, refresh, or repeated click should reopen the same pending checkout,
+	# but only while the order still belongs to the currently configured Razorpay
+	# account. API-key/account rotation otherwise leaves an unusable order ID in
+	# our database and Checkout reports that the order does not exist.
 	if doc.funding_status == "Payment Pending" and doc.status == "Funding Pending" and doc.razorpay_order_id:
-		return _checkout_payload(doc, actor, settings, payload)
+		if _pending_razorpay_order_is_reusable(doc, settings, payload):
+			return _checkout_payload(doc, actor, settings, payload)
+		stale_order_id = doc.razorpay_order_id
+		_set_values(doc, razorpay_order_id=None, failure_reason=None)
+		_audit(doc, "Stale Razorpay Order Detected", {"razorpay_order_id": stale_order_id})
 	with _service_writes():
 		doc.funding_route = "Direct Quote"
 		doc.funding_status = "Payment Pending"
@@ -879,6 +997,34 @@ def create_direct_quote_order(intake: str):
 	return _checkout_payload(doc, actor, settings, payload)
 
 
+def _pending_razorpay_order_is_reusable(doc, settings, payload) -> bool:
+	"""Return False only when replacing the pending order is safe and necessary."""
+	from lex import lexpack
+
+	# An authorized payment may be awaiting capture/webhook reconciliation. Never
+	# create a second order that could charge the client twice.
+	if doc.razorpay_payment_id:
+		return True
+	try:
+		order = lexpack._razorpay_request("GET", f"/orders/{doc.razorpay_order_id}", settings)
+	except frappe.ValidationError as exc:
+		# Razorpay uses this response when the ID was created under another account
+		# (most commonly after live credentials are rotated).
+		if "id provided does not exist" in str(exc).lower():
+			return False
+		raise
+	try:
+		lexpack._validate_order_response(order, payload)
+	except frappe.ValidationError:
+		return False
+	if order.get("status") == "paid":
+		frappe.throw(
+			_("Razorpay has already received this payment. Confirmation is being reconciled; please refresh shortly."),
+			frappe.ValidationError,
+		)
+	return order.get("status") in {"created", "attempted"}
+
+
 @frappe.whitelist()
 def verify_direct_quote_payment(
 	intake: str,
@@ -887,10 +1033,11 @@ def verify_direct_quote_payment(
 	razorpay_signature: str,
 ):
 	doc, actor = _require_intake_access(intake)
+	_require_not_cancelled(doc)
 	_require_funding_authority(actor, "Direct Quote")
 	from lex import lexpack
 
-	settings = lexpack._get_settings(require_enabled=True)
+	settings = lexpack._load_settings()
 	if not doc.razorpay_order_id or doc.razorpay_order_id != razorpay_order_id:
 		frappe.throw(_("Razorpay order mismatch."), frappe.PermissionError)
 	if not lexpack._checkout_signature_is_valid(
@@ -921,12 +1068,25 @@ def handle_direct_webhook(event: str, event_id: str | None, payment: dict, order
 	doc = frappe.get_doc("Lexocrates Work Intake", name)
 	from lex import lexpack
 
-	settings = lexpack._get_settings(require_enabled=True)
+	settings = lexpack._load_settings()
 	if event in {"payment.captured", "order.paid"}:
+		if doc.funding_status in {"Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback"}:
+			return {"status": "stale", "event": event, "intake": doc.name}
 		if not payment.get("id"):
 			payments = lexpack._razorpay_request("GET", f"/orders/{order_id}/payments", settings)
 			payment = next((row for row in payments.get("items", []) if row.get("status") == "captured"), {})
 		_validate_direct_payment(doc, payment, require_captured=True)
+		if doc.status == "Cancelled" or doc.funding_status == "Cancelled":
+			_set_values(
+				doc,
+				razorpay_payment_id=payment["id"],
+				gateway_event_id=event_id,
+				funding_status="Refund Pending",
+				failure_reason=_("Payment arrived after client deletion and requires refund review."),
+			)
+			_sync_job_payment_adjustment(doc)
+			_audit(doc, "Payment Received After Client Deletion", {"payment": payment["id"], "event": event})
+			return {"status": "refund_pending", "event": event, "intake": doc.name}
 		_set_values(doc, razorpay_payment_id=payment["id"], gateway_event_id=event_id, failure_reason=None)
 		return complete_direct_payment(doc, payment, source="webhook")
 	if event == "payment.failed" and doc.funding_status != "Funded":
@@ -936,15 +1096,121 @@ def handle_direct_webhook(event: str, event_id: str | None, payment: dict, order
 	return {"status": "ignored", "event": event, "intake": doc.name}
 
 
+def handle_direct_adjustment(doc, adjustment, settings):
+	"""Put funded work on payment hold and reconcile direct-quote refunds."""
+	from lex import lexpack
+
+	frappe.db.sql("select name from `tabLexocrates Work Intake` where name=%s for update", doc.name)
+	doc.reload()
+	event = adjustment.event_type
+	if event == "refund.created":
+		if lexpack._adjustment_event_exists(adjustment.entity_id, {"refund.processed"}, adjustment.name):
+			lexpack._finish_adjustment(adjustment, details="Stale refund.created event received after refund.processed.")
+			return {"status": "stale", "intake": doc.name, "adjustment": adjustment.name}
+		_set_values(
+			doc,
+			funding_status="Refund Pending",
+			gateway_event_id=adjustment.gateway_event_id,
+			failure_reason="A Razorpay refund is pending.",
+		)
+		lexpack._finish_adjustment(adjustment, details="Direct-quote refund is pending at Razorpay.")
+		return {"status": "refund_pending", "intake": doc.name, "adjustment": adjustment.name}
+	if event == "refund.failed":
+		if lexpack._adjustment_event_exists(adjustment.entity_id, {"refund.processed"}, adjustment.name):
+			lexpack._finish_adjustment(adjustment, status="Manual Review", details="Conflicting refund.failed received after refund.processed.")
+			return {"status": "manual_review", "intake": doc.name, "adjustment": adjustment.name}
+		status = "Partially Refunded" if flt(doc.get("refunded_amount")) else "Funded"
+		_set_values(
+			doc,
+			funding_status=status,
+			gateway_event_id=adjustment.gateway_event_id,
+			failure_reason="Razorpay reported that the refund failed.",
+		)
+		lexpack._finish_adjustment(adjustment, details="Razorpay reported that the refund failed.")
+		return {"status": "refund_failed", "intake": doc.name, "adjustment": adjustment.name}
+	if event in {"payment.dispute.created", "payment.dispute.under_review", "payment.dispute.action_required"}:
+		if lexpack._adjustment_event_exists(adjustment.entity_id, {"payment.dispute.won", "payment.dispute.lost"}, adjustment.name):
+			lexpack._finish_adjustment(adjustment, details="Stale dispute event received after a terminal outcome.")
+			return {"status": "stale", "intake": doc.name, "adjustment": adjustment.name}
+		_set_values(
+			doc,
+			funding_status="Disputed",
+			gateway_event_id=adjustment.gateway_event_id,
+			failure_reason=f"Razorpay dispute requires review ({adjustment.entity_id}).",
+		)
+		lexpack._finish_adjustment(adjustment, status="Manual Review", details="Job placed on payment hold pending dispute outcome.")
+		_audit(doc, "Direct Quote Disputed", {"dispute": adjustment.entity_id, "event": event})
+		return {"status": "disputed", "intake": doc.name, "adjustment": adjustment.name}
+	if event == "payment.dispute.won":
+		status = "Partially Refunded" if flt(doc.get("refunded_amount")) else "Funded"
+		_set_values(doc, funding_status=status, gateway_event_id=adjustment.gateway_event_id, failure_reason=None)
+		lexpack._finish_adjustment(adjustment, details="Dispute won; no financial reversal required.")
+		_audit(doc, "Direct Quote Dispute Won", {"dispute": adjustment.entity_id})
+		return {"status": "dispute_won", "intake": doc.name, "adjustment": adjustment.name}
+	if event == "payment.dispute.closed":
+		if lexpack._adjustment_event_exists(adjustment.entity_id, {"payment.dispute.won", "payment.dispute.lost"}, adjustment.name):
+			lexpack._finish_adjustment(adjustment, details="Dispute was already reconciled by a terminal outcome.")
+			return {"status": "stale", "intake": doc.name, "adjustment": adjustment.name}
+		_set_values(
+			doc,
+			funding_status="Disputed",
+			gateway_event_id=adjustment.gateway_event_id,
+			failure_reason=f"Closed dispute requires outcome reconciliation ({adjustment.entity_id}).",
+		)
+		lexpack._finish_adjustment(adjustment, status="Manual Review", details="Closed dispute retained for outcome reconciliation.")
+		return {"status": "manual_review", "intake": doc.name, "adjustment": adjustment.name}
+	if event not in {"refund.processed", "payment.dispute.lost"}:
+		return {"status": "ignored", "event": event, "intake": doc.name}
+	if not doc.sales_invoice or not doc.payment_entry:
+		detail = "Original payment accounting is incomplete; Job placed on hold for manual reconciliation."
+		_set_values(
+			doc, funding_status="Refund Pending", gateway_event_id=adjustment.gateway_event_id, failure_reason=detail,
+		)
+		lexpack._finish_adjustment(adjustment, status="Manual Review", details=detail)
+		return {"status": "manual_review", "intake": doc.name, "adjustment": adjustment.name}
+
+	original_minor = lexpack._minor_units(doc.quoted_amount, doc.currency)
+	amount = lexpack._major_units(adjustment.amount_minor, adjustment.currency)
+	credit_note, refund_entry = lexpack._create_refund_accounting(
+		doc.sales_invoice, adjustment, settings, original_minor, doc.name
+	)
+	refunded = flt(doc.get("refunded_amount")) + flt(amount)
+	full = adjustment.amount_minor + lexpack._processed_adjustment_minor(adjustment.payment_id, adjustment.name) >= original_minor
+	status = "Chargeback" if event == "payment.dispute.lost" else ("Refunded" if full else "Partially Refunded")
+	_set_values(
+		doc,
+		funding_status=status,
+		gateway_event_id=adjustment.gateway_event_id,
+		refunded_amount=refunded,
+		failure_reason="Payment was charged back." if event == "payment.dispute.lost" else None,
+	)
+	lexpack._set_adjustment_values(
+		adjustment,
+		status="Processed",
+		processed_on=now_datetime(),
+		credit_note=credit_note.name,
+		refund_payment_entry=refund_entry.name,
+		details="Direct-quote accounting reversal posted; Job placed on payment hold.",
+	)
+	_audit(
+		doc,
+		"Direct Quote Refund or Chargeback Reconciled",
+		{"event": event, "amount": amount, "currency": adjustment.currency, "adjustment": adjustment.name},
+	)
+	return {"status": "processed", "intake": doc.name, "adjustment": adjustment.name}
+
+
 def complete_direct_payment(doc, payment: dict, source: str):
 	frappe.db.sql("select name from `tabLexocrates Work Intake` where name=%s for update", doc.name)
 	doc.reload()
 	if doc.funding_status == "Funded" and doc.matter and doc.job:
 		return _funding_result(doc, duplicate=True)
+	if doc.funding_status in {"Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback"}:
+		frappe.throw(_("This payment is under refund or dispute review and cannot reactivate the Job."), frappe.ValidationError)
 	_validate_direct_payment(doc, payment, require_captured=True)
 	from lex import lexpack
 
-	settings = lexpack._get_settings(require_enabled=True)
+	settings = lexpack._load_settings()
 	if not doc.sales_invoice:
 		invoice = _create_direct_invoice(doc, settings)
 		_set_values(doc, sales_invoice=invoice.name)
@@ -969,7 +1235,7 @@ def complete_direct_payment(doc, payment: dict, source: str):
 
 def portal_intakes(actor=None):
 	actor = actor or _require_portal_user()
-	filters = {"client": actor.client}
+	filters = {"client": actor.client, "status": ["!=", "Cancelled"]}
 	if actor.matter_access_scope != "All Client Matters":
 		filters["portal_user"] = actor.name
 	rows = frappe.get_all(
@@ -1040,7 +1306,7 @@ def _confirm_funded_intake(doc):
 				"priority": doc.priority,
 				"task_description": doc.preliminary_details,
 				"received_at": now_datetime(),
-				"due_date": now_datetime() + timedelta(hours=max(1, cint(doc.delivery_timeline_hours))),
+				"due_date": _delivery_deadline(doc),
 				"qa_required": 1,
 			}).insert(ignore_permissions=True)
 		with _service_writes():
@@ -1054,7 +1320,10 @@ def _confirm_funded_intake(doc):
 		frappe.throw(_("Only a Draft Job can be activated by funding."), frappe.ValidationError)
 
 	start = now_datetime()
-	due = start + timedelta(hours=cint(doc.delivery_timeline_hours))
+	# The client's Work Intake date is the authoritative execution deadline.
+	# Calculated hours remain an internal effort estimate and are used only as a
+	# legacy fallback for older intakes that did not capture a requested date.
+	due = _delivery_deadline(doc, start=start)
 	reservation = None
 	if doc.funding_route != "Direct Quote":
 		from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import _post_transaction
@@ -1103,9 +1372,22 @@ def _confirm_funded_intake(doc):
 	_audit(
 		doc,
 		"Funded Work Activated",
-		{"funding_route": doc.funding_route, "matter": matter.name, "job": job.name, "sla_started_on": start},
+		{
+			"funding_route": doc.funding_route,
+			"matter": matter.name,
+			"job": job.name,
+			"sla_started_on": start,
+			"delivery_due_on": due,
+		},
 	)
 	return _funding_result(doc)
+
+
+def _delivery_deadline(doc, *, start=None):
+	if doc.get("requested_delivery_date"):
+		return get_datetime(doc.requested_delivery_date)
+	start = start or now_datetime()
+	return start + timedelta(hours=max(1, cint(doc.get("delivery_timeline_hours") or BASE_HOURS.get(doc.service_type, 72))))
 
 
 def _intake_row(doc, actor):
@@ -1155,7 +1437,52 @@ def _intake_row(doc, actor):
 	row["available_legal_capacity"] = _available_legal_capacity(doc.client)
 	row["can_fund_legal_capacity"] = bool(actor and actor.lexpack_purchase_access)
 	row["can_pay_direct"] = bool(actor and actor.billing_access)
+	row["client_deleted"] = row.get("status") == "Cancelled" and row.get("funding_status") == "Cancelled"
+	row["can_client_delete"] = bool(actor and not _is_internal() and _can_cancel_before_payment(row))
 	return row
+
+
+def _can_cancel_before_payment(doc) -> bool:
+	"""Return whether the intake can safely enter the retained cancellation state."""
+	if doc.get("status") in {"Cancelled", "Funded", "Matter Confirmed"}:
+		return False
+	if doc.get("funding_status") in {
+		"Funded", "Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback",
+	}:
+		return False
+	return not any(
+		doc.get(fieldname)
+		for fieldname in (
+			"razorpay_payment_id", "lexpack_purchase",
+			"wallet_reservation", "sales_invoice", "payment_entry",
+		)
+	)
+
+
+def _pending_gateway_order_has_payment(doc) -> bool:
+	"""Protect cancellation when a pending Razorpay order already has live money."""
+	if not doc.get("razorpay_order_id"):
+		return False
+	from lex import lexpack
+
+	settings = lexpack._load_settings()
+	try:
+		order = lexpack._razorpay_request("GET", f"/orders/{doc.razorpay_order_id}", settings)
+	except frappe.ValidationError as exc:
+		if "id provided does not exist" in str(exc).lower():
+			return False
+		raise
+	if order.get("status") == "paid" or cint(order.get("amount_paid")) > 0:
+		return True
+	if order.get("status") != "attempted":
+		return False
+	payments = lexpack._razorpay_request("GET", f"/orders/{doc.razorpay_order_id}/payments", settings)
+	return any(row.get("status") in {"authorized", "captured"} for row in payments.get("items", []))
+
+
+def _require_not_cancelled(doc):
+	if doc.status == "Cancelled" or doc.funding_status == "Cancelled":
+		frappe.throw(_("This Job was deleted by the client and cannot be changed."), frappe.PermissionError)
 
 
 def _refresh_document_state(doc, files=None):
@@ -1267,6 +1594,25 @@ def _sync_job_commercial(doc, *, estimate_status=None):
 		job.save(ignore_permissions=True)
 
 
+def _sync_job_payment_adjustment(doc):
+	"""Synchronize a post-funding payment hold even after the Job left Draft."""
+	if not doc.get("job") or not frappe.db.exists("LPO Job", doc.job):
+		return
+	job = frappe.get_doc("LPO Job", doc.job)
+	job.funding_status = doc.funding_status
+	if doc.funding_status in {"Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback"} and job.job_status not in {
+		"Delivered", "Completed", "Cancelled"
+	}:
+		job.job_status = "On Hold"
+	previous_transition_override = getattr(frappe.flags, "lex_job_transition_override", False)
+	frappe.flags.lex_job_transition_override = True
+	try:
+		with _portal_service_writes():
+			job.save(ignore_permissions=True)
+	finally:
+		frappe.flags.lex_job_transition_override = previous_transition_override
+
+
 def _intake_files(intake):
 	fields = ["name", "file_name", "file_url", "file_size", "modified", "custom_lex_scan_status"]
 	job = frappe.db.get_value("Lexocrates Work Intake", intake, "job")
@@ -1366,11 +1712,11 @@ def _notify_ceo_of_pending_pricing(doc):
 		"<p>A new quote is ready for your approval before the client can pay.</p>"
 		"<p><b>Matter:</b> {0}<br><b>Client:</b> {1}<br><b>Service type:</b> {2}<br>"
 		"<b>Estimated price:</b> {3} {4}<br><b>Legal Capacity required:</b> {5} {4}<br>"
-		"<b>Delivery timeline:</b> {6} hours<br><b>Estimate method:</b> {7}</p>"
+		"<b>Requested delivery deadline:</b> {6}<br><b>Estimate method:</b> {7}</p>"
 		"<p><a href=\"{8}\">Open in Lexocrates Desk to approve or reject</a></p>"
 	).format(
 		frappe.utils.escape_html(doc.intake_title), doc.client, doc.service_type,
-		doc.quoted_amount, doc.currency, _required_legal_capacity(doc), doc.delivery_timeline_hours,
+		doc.quoted_amount, doc.currency, _required_legal_capacity(doc), doc.requested_delivery_date or _("To be confirmed"),
 		doc.estimate_method or "Native PDF Fixed Rate", link,
 	)
 	for user in ceo_users:
@@ -1435,7 +1781,7 @@ def _post_ceo_approval_card(doc):
 			f"- **Service Type:** {doc.service_type} | **Jurisdiction:** {doc.jurisdiction or 'N/A'}\n"
 			f"- **Estimated Price:** **{flt(doc.quoted_amount):,.2f} {doc.currency}**\n"
 			f"- **Legal Capacity Required:** **{flt(_required_legal_capacity(doc)):,.2f} {doc.currency}**\n"
-			f"- **Delivery Timeline:** **{cint(doc.delivery_timeline_hours)} hours**\n"
+			f"- **Requested Delivery Deadline:** **{doc.requested_delivery_date or 'To be confirmed'}**\n"
 			f"- **Estimate Method:** {doc.estimate_method or 'Formula'}\n"
 			f"{instructions_snippet}\n\n"
 			f"**Source Documents:**\n{docs_text}\n\n"
@@ -1473,7 +1819,7 @@ def _post_ceo_approval_decision(doc, decision: str, notes: str | None = None):
 			msg = (
 				f"✅ **Matter Pricing Approved** for [{doc.intake_title}]({desk_url}) by **{frappe.session.user}**!\n"
 				f"- **Approved Amount:** **{flt(doc.quoted_amount):,.2f} {doc.currency}**\n"
-				f"- **Delivery Timeline:** **{cint(doc.delivery_timeline_hours)} hours**\n"
+				f"- **Requested Delivery Deadline:** **{doc.requested_delivery_date or 'To be confirmed'}**\n"
 				f"Client payment gateway (Razorpay / LexPack) is now **unlocked** on Client Portal."
 			)
 		else:
@@ -1633,44 +1979,46 @@ def _validate_direct_payment(doc, payment, require_captured=True):
 
 
 def _create_direct_invoice(doc, settings):
-	item_code = settings.get("direct_quote_item") or settings.selling_item
-	if not item_code:
-		frappe.throw(_("Configure the Fixed Quote Selling Item in LexPack Settings."), frappe.ValidationError)
-	invoice = frappe.new_doc("Sales Invoice")
-	invoice.customer = doc.client
-	invoice.company = settings.company
-	invoice.posting_date = nowdate()
-	invoice.due_date = nowdate()
-	invoice.currency = doc.currency
-	invoice.conversion_rate = flt(doc.exchange_rate) or 1
-	invoice.remarks = f"Fixed Quote Work Intake {doc.name}; Razorpay Order {doc.razorpay_order_id}"
-	item = {"item_code": item_code, "qty": 1, "rate": doc.quoted_amount, "description": doc.scope_summary[:1000]}
-	if settings.get("income_account"):
-		item["income_account"] = settings.income_account
-	if settings.get("cost_center"):
-		item["cost_center"] = settings.cost_center
-	invoice.append("items", item)
-	invoice.insert(ignore_permissions=True)
-	invoice.flags.ignore_permissions = True
-	invoice.submit()
-	return invoice
+	with _accounting_service_writes():
+		item_code = settings.get("direct_quote_item") or settings.selling_item
+		if not item_code:
+			frappe.throw(_("Configure the Fixed Quote Selling Item in LexPack Settings."), frappe.ValidationError)
+		invoice = frappe.new_doc("Sales Invoice")
+		invoice.customer = doc.client
+		invoice.company = settings.company
+		invoice.posting_date = nowdate()
+		invoice.due_date = nowdate()
+		invoice.currency = doc.currency
+		invoice.conversion_rate = flt(doc.exchange_rate) or 1
+		invoice.remarks = f"Fixed Quote Work Intake {doc.name}; Razorpay Order {doc.razorpay_order_id}"
+		item = {"item_code": item_code, "qty": 1, "rate": doc.quoted_amount, "description": doc.scope_summary[:1000]}
+		if settings.get("income_account"):
+			item["income_account"] = settings.income_account
+		if settings.get("cost_center"):
+			item["cost_center"] = settings.cost_center
+		invoice.append("items", item)
+		invoice.insert(ignore_permissions=True)
+		invoice.flags.ignore_permissions = True
+		invoice.submit()
+		return invoice
 
 
 def _create_direct_payment_entry(doc, settings, payment):
 	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 
-	entry = get_payment_entry(
-		"Sales Invoice", doc.sales_invoice, bank_account=settings.razorpay_clearing_account,
-		reference_date=nowdate(), ignore_permissions=True,
-	)
-	entry.mode_of_payment = settings.mode_of_payment
-	entry.reference_no = payment["id"]
-	entry.reference_date = nowdate()
-	entry.remarks = f"Razorpay direct quote settlement for Work Intake {doc.name}"
-	entry.insert(ignore_permissions=True)
-	entry.flags.ignore_permissions = True
-	entry.submit()
-	return entry
+	with _accounting_service_writes():
+		entry = get_payment_entry(
+			"Sales Invoice", doc.sales_invoice, bank_account=settings.razorpay_clearing_account,
+			reference_date=nowdate(), ignore_permissions=True,
+		)
+		entry.mode_of_payment = settings.mode_of_payment
+		entry.reference_no = payment["id"]
+		entry.reference_date = nowdate()
+		entry.remarks = f"Razorpay direct quote settlement for Work Intake {doc.name}"
+		entry.insert(ignore_permissions=True)
+		entry.flags.ignore_permissions = True
+		entry.submit()
+		return entry
 
 
 def _checkout_payload(doc, actor, settings, payload):
@@ -1854,11 +2202,41 @@ class _portal_service_writes:
 		frappe.flags.lexocrates_portal_service = self.previous
 
 
+class _accounting_service_writes:
+	"""Run trusted post-payment accounting without exposing Account data to portal users."""
+
+	def __enter__(self):
+		self.previous_user = frappe.session.user
+		self.previous_ignore_permissions = getattr(frappe.flags, "ignore_permissions", False)
+		frappe.flags.ignore_permissions = True
+		frappe.set_user("Administrator")
+
+	def __exit__(self, exc_type, exc_value, traceback):
+		try:
+			frappe.set_user(self.previous_user)
+		finally:
+			frappe.flags.ignore_permissions = self.previous_ignore_permissions
+
+
 def _set_values(doc, **values):
-	with _service_writes():
-		doc.update(values)
-		doc.save(ignore_permissions=True)
-	_sync_job_commercial(doc)
+	payment_hold_states = {"Refund Pending", "Partially Refunded", "Refunded", "Disputed", "Chargeback"}
+	previous_funding_status = doc.get("funding_status")
+	is_payment_adjustment = "funding_status" in values and (
+		values.get("funding_status") in payment_hold_states or previous_funding_status in payment_hold_states
+	)
+	previous_adjustment_flag = getattr(frappe.flags, "lexocrates_payment_adjustment_service", False)
+	if is_payment_adjustment:
+		frappe.flags.lexocrates_payment_adjustment_service = True
+	try:
+		with _service_writes():
+			doc.update(values)
+			doc.save(ignore_permissions=True)
+		if is_payment_adjustment:
+			_sync_job_payment_adjustment(doc)
+		else:
+			_sync_job_commercial(doc)
+	finally:
+		frappe.flags.lexocrates_payment_adjustment_service = previous_adjustment_flag
 
 
 def _audit(doc, action, value):
@@ -1888,4 +2266,3 @@ def _funding_result(doc, duplicate=False):
 		"delivery_due_on": doc.delivery_due_on,
 		"duplicate": duplicate,
 	}
-

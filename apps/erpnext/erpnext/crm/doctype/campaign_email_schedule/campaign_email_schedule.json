@@ -5,7 +5,8 @@
  "engine": "InnoDB",
  "field_order": [
   "email_template",
-  "send_after_days"
+  "send_after_days",
+  "send_at_time"
  ],
  "fields": [
   {
@@ -22,6 +23,13 @@
    "label": "Email Template",
    "options": "Email Template",
    "reqd": 1
+  },
+  {
+   "description": "Optional local send time for this step. If blank, the Email Campaign Start Time is used.",
+   "fieldname": "send_at_time",
+   "fieldtype": "Time",
+   "in_list_view": 1,
+   "label": "Send At Time"
   }
  ],
  "istable": 1,

@@ -6,7 +6,7 @@ from frappe.model.document import Document
 from frappe.utils import flt
 
 
-SUPPORTED_LEXPACK_CURRENCIES = {"CAD", "USD", "GBP"}
+SUPPORTED_LEXPACK_CURRENCIES = {"CAD", "USD", "GBP", "INR"}
 
 
 class LexPackPlan(Document):
@@ -18,7 +18,7 @@ class LexPackPlan(Document):
 			frappe.throw(_("Plan Code and Plan Name are required."), frappe.MandatoryError)
 		if self.currency not in SUPPORTED_LEXPACK_CURRENCIES:
 			frappe.throw(
-				_("LexPack Legal Capacity is currently available only in CAD, USD, or GBP."),
+				_("LexPack Legal Capacity is currently available only in CAD, USD, GBP, or INR."),
 				frappe.ValidationError,
 			)
 		if not self.enterprise_custom:

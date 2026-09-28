@@ -124,6 +124,7 @@ def after_install():
 	ensure_lexpack_master_data()
 	ensure_lexpack_catalog()
 	ensure_accounting_workspace_actions()
+	ensure_account_creation_form_fields()
 	ensure_default_chat_channels()
 	from lex.client_schema import ensure_client_schema
 
@@ -342,7 +343,8 @@ def ensure_account_creation_form_fields():
 	``account_name`` and ``parent_account`` are required by ERPNext's Account
 	tree.  Without them an administrator can open *New Account* but cannot create
 	a child account.  These fields have no standard visibility conditions, so a
-	hidden/depends-on Property Setter is always stale and safe to remove.
+	hidden, conditional, or read-only Property Setter is always stale and safe
+	to remove.
 	"""
 	if not frappe.db.exists("DocType", "Account") or not frappe.db.exists("DocType", "Property Setter"):
 		return
@@ -353,7 +355,7 @@ def ensure_account_creation_form_fields():
 		filters={
 			"doc_type": "Account",
 			"field_name": ["in", fieldnames],
-			"property": ["in", ("hidden", "depends_on")],
+			"property": ["in", ("hidden", "depends_on", "read_only")],
 		},
 		pluck="name",
 	)
@@ -791,6 +793,25 @@ def ensure_lexocrates_email_templates():
 	</div>
 	<p>Your Legal Capacity does not expire and can be used for eligible legal assignments in the same currency.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates LexPack Services</strong></p>
+</div>"""
+		},
+		{
+			"name": "Lexocrates Website Contact - Sales Notification",
+			"subject": "New website enquiry: {{ request_subject }}",
+			"use_html": 1,
+			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
+	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">New Website Enquiry</h2>
+	<p>A new enquiry has been submitted through the Lexocrates compliance contact page.</p>
+	<table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #e2e8f0;">
+		<tr><th style="width: 150px; padding: 9px 12px; text-align: left; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">CRM Lead</th><td style="padding: 9px 12px; border-bottom: 1px solid #e2e8f0;"><a href="{{ lead_url }}" style="color: #0284c7;">{{ lead_name }}</a></td></tr>
+		<tr><th style="padding: 9px 12px; text-align: left; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">Contact</th><td style="padding: 9px 12px; border-bottom: 1px solid #e2e8f0;">{{ request_name }}</td></tr>
+		<tr><th style="padding: 9px 12px; text-align: left; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">Email</th><td style="padding: 9px 12px; border-bottom: 1px solid #e2e8f0;"><a href="mailto:{{ request_email }}" style="color: #0284c7;">{{ request_email }}</a></td></tr>
+		<tr><th style="padding: 9px 12px; text-align: left; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">Subject</th><td style="padding: 9px 12px; border-bottom: 1px solid #e2e8f0;">{{ request_subject }}</td></tr>
+		<tr><th style="padding: 9px 12px; text-align: left; background: #f8fafc;">Submitted</th><td style="padding: 9px 12px;">{{ submitted_on }}</td></tr>
+	</table>
+	<div style="margin: 18px 0; padding: 16px; white-space: pre-wrap; background: #f8fafc; border-left: 4px solid #0284c7; border-radius: 4px;">{{ request_message }}</div>
+	<p style="margin: 24px 0;"><a href="{{ lead_url }}" style="display: inline-block; background: #0284c7; color: #fff; padding: 11px 22px; border-radius: 6px; font-weight: 700; text-decoration: none;">Open CRM Lead →</a></p>
+	<p style="color: #64748b; font-size: 13px;">Service level: acknowledge the sender within 24 business hours. Replying to this notification will address the enquiry sender.</p>
 </div>"""
 		},
 		{

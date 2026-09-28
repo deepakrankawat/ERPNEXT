@@ -10,7 +10,7 @@ from lex.client_access import get_portal_user
 
 MANAGEMENT_ROLES = {"LPO_Admin", "LPO_Manager", "System Manager", "Lexocrates Finance"}
 BALANCE_FIELDS = {"current_balance", "reserved_balance", "total_purchased", "total_topped_up", "total_consumed", "last_transaction_on"}
-SUPPORTED_CAPACITY_CURRENCIES = {"CAD", "USD", "GBP"}
+SUPPORTED_CAPACITY_CURRENCIES = {"CAD", "USD", "GBP", "INR"}
 LEDGER_FIELDS = BALANCE_FIELDS | {"capacity_currency"}
 
 
@@ -19,7 +19,7 @@ class LexocratesClientWallet(Document):
 		self.capacity_currency = (self.capacity_currency or "").strip().upper() or None
 		if self.capacity_currency and self.capacity_currency not in SUPPORTED_CAPACITY_CURRENCIES:
 			frappe.throw(
-				_("Legal Capacity is currently available only in CAD, USD, or GBP."),
+				_("Legal Capacity is currently available only in CAD, USD, GBP, or INR."),
 				frappe.ValidationError,
 			)
 		if self.is_new() and not getattr(frappe.flags, "lexocrates_wallet_posting", False):

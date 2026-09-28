@@ -72,6 +72,18 @@ class TestInstantEstimator(unittest.TestCase):
 		self.assertEqual(pricing["raw_price_cad"], Decimal("70.00"))
 		self.assertEqual(pricing["final_price_cad"], Decimal("70"))
 
+	def test_indian_rupee_quote_uses_server_exchange_rate(self):
+		pricing = calculate_page_based_pricing(
+			30,
+			"Contract Review",
+			currency="INR",
+			exchange_rate=Decimal("61.25"),
+		)
+		self.assertEqual(pricing["currency"], "INR")
+		self.assertEqual(pricing["raw_price"], Decimal("1800.7500"))
+		self.assertEqual(pricing["final_price"], Decimal("1805"))
+		self.assertEqual(pricing["price_amount"], "1805 INR")
+
 	def test_same_pdf_service_and_turnaround_are_deterministic(self):
 		first = calculate_page_based_pricing(100, "Contract Review", "Rush (24-48 Hours)")
 		second = calculate_page_based_pricing(100, "Contract Review", "Rush (24-48 Hours)")

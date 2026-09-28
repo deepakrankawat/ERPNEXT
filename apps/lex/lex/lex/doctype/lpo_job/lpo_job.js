@@ -129,7 +129,7 @@ async function open_system_job_estimator(frm) {
 					message: `
 						<p><strong>${__("Legal Capacity required")}:</strong> ${frappe.utils.escape_html(result.currency || "")} ${Number(result.required_legal_capacity || result.quoted_amount || 0).toFixed(2)}</p>
 						<p><strong>${__("Fixed quote")}:</strong> ${frappe.utils.escape_html(result.currency || "")} ${Number(result.quoted_amount || 0).toFixed(2)}</p>
-						<p><strong>${__("Delivery timeline")}:</strong> ${Number(result.delivery_timeline_hours || 0)} ${__("hours")}</p>
+						<p><strong>${__("Delivery deadline")}:</strong> ${result.requested_delivery_date ? frappe.datetime.str_to_user(result.requested_delivery_date) : __("To be confirmed")}</p>
 						<p><strong>${__("Method")}:</strong> ${frappe.utils.escape_html(result.estimate_method || "")}</p>
 						<p><strong>${__("Next status")}:</strong> ${frappe.utils.escape_html(result.pricing_approval_status || result.quote_status || "")}</p>`,
 				});

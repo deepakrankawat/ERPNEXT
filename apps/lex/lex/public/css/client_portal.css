@@ -6,19 +6,19 @@
    ========================================================================== */
 
 :root {
-	--lex-bg: #f4f6f8;
+	--lex-bg: #eef2f6;
 	--lex-surface: #ffffff;
-	--lex-surface-2: #eef1f4;
-	--lex-surface-3: #e4e9ee;
-	--lex-border: #e1e6ea;
-	--lex-border-strong: #ccd4db;
-	--lex-ink: #101828;
-	--lex-ink-muted: #5c6b7a;
-	--lex-ink-faint: #8a97a3;
+	--lex-surface-2: #f1f5f9;
+	--lex-surface-3: #dbe3ea;
+	--lex-border: #cfd8e3;
+	--lex-border-strong: #aebbc8;
+	--lex-ink: #0f172a;
+	--lex-ink-muted: #475569;
+	--lex-ink-faint: #64748b;
 	--lex-on-primary: #ffffff;
 	--lex-primary: #1e293b;
 	--lex-primary-hover: #0f172a;
-	--lex-primary-soft: #e8ecf1;
+	--lex-primary-soft: #e2e8f0;
 	--lex-accent: #0d9488;
 	--lex-accent-soft: #e1f5f2;
 	--lex-green: #157347;
@@ -29,8 +29,8 @@
 	--lex-orange-bg: #fef1d6;
 	--lex-blue: #1d4ed8;
 	--lex-blue-bg: #e1eaff;
-	--lex-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-	--lex-shadow-md: 0 4px 10px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+	--lex-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.10);
+	--lex-shadow-md: 0 5px 14px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.10);
 	--lex-shadow-lg: 0 16px 32px rgba(16, 24, 40, 0.12);
 	--lex-radius-sm: 7px;
 	--lex-radius-md: 12px;
@@ -712,6 +712,44 @@ body.lex-client-workspace-page {
 	color: var(--lex-ink-faint);
 }
 
+.lex-portal-legal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 16px 28px;
+	color: #64748b;
+	background: #fff;
+	border-top: 1px solid #e2e8f0;
+	font-size: 12px;
+}
+
+.lex-portal-legal-footer nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 14px;
+}
+
+.lex-portal-legal-footer a {
+	color: #475569;
+	font-weight: 650;
+	text-decoration: none;
+}
+
+.lex-portal-legal-footer a:hover,
+.lex-portal-legal-footer a:focus-visible {
+	color: #0b65a5;
+	text-decoration: underline;
+}
+
+@media (max-width: 700px) {
+	.lex-portal-legal-footer {
+		align-items: flex-start;
+		flex-direction: column;
+		padding: 16px;
+	}
+}
+
 #lex-app.sidebar-open .lex-sidebar {
 	transform: translateX(0);
 	box-shadow: var(--lex-shadow-lg);
@@ -737,8 +775,8 @@ body.lex-portal-sidebar-open {
 	position: sticky;
 	top: var(--lex-navbar-height);
 	z-index: 30;
-	background: color-mix(in srgb, var(--lex-bg) 88%, transparent);
-	backdrop-filter: blur(6px);
+	background: var(--lex-surface);
+	box-shadow: var(--lex-shadow-sm);
 	border-bottom: 1px solid var(--lex-border);
 }
 
@@ -999,7 +1037,7 @@ body.lex-portal-sidebar-open {
 
 .lex-metric {
 	background: var(--lex-surface);
-	border: 1px solid var(--lex-border);
+	border: 1px solid var(--lex-border-strong);
 	border-radius: var(--lex-radius-md);
 	padding: 14px;
 	box-shadow: var(--lex-shadow-sm);
@@ -1073,6 +1111,7 @@ body.lex-portal-sidebar-open {
 	gap: 10px;
 	padding: 14px 16px;
 	border-bottom: 1px solid var(--lex-border);
+	background: var(--lex-surface-2);
 }
 
 .widget-title,
@@ -1293,9 +1332,9 @@ body.lex-portal-sidebar-open {
 
 .lex-form-shell {
 	background: var(--lex-surface);
-	border: 1px solid var(--lex-border);
+	border: 1px solid var(--lex-border-strong);
 	border-radius: var(--lex-radius-md);
-	box-shadow: var(--lex-shadow-sm);
+	box-shadow: var(--lex-shadow-md);
 	overflow: hidden;
 }
 
@@ -1417,41 +1456,61 @@ body.lex-portal-sidebar-open {
 	grid-column: 1 / -1;
 	display: flex;
 	align-items: center;
-	justify-content: flex-start;
-	gap: 12px;
-	padding: 12px 16px;
-	background: var(--lex-surface-2);
+	gap: 8px;
+	padding: 6px;
+	background: var(--lex-surface);
 	border: 1px solid var(--lex-border);
-	border-radius: var(--lex-radius-sm);
-	margin-bottom: 4px;
+	border-radius: var(--lex-radius-md);
+	box-shadow: var(--lex-shadow-sm);
+	margin-bottom: 6px;
 }
 
 .lex-wizard-step {
+	-webkit-appearance: none;
+	appearance: none;
 	display: inline-flex;
+	flex: 1 1 0;
 	align-items: center;
 	gap: 8px;
+	min-width: 0;
+	min-height: 44px;
+	padding: 8px 10px;
+	border: 1px solid transparent;
+	border-radius: var(--lex-radius-sm);
+	background: transparent;
 	font-size: 13px;
 	font-weight: 600;
+	line-height: 1.25;
+	text-align: left;
 	color: var(--lex-ink-muted);
-	cursor: default;
-	transition: all 0.2s ease;
+	cursor: pointer;
+	transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.lex-wizard-step:hover {
+	background: var(--lex-surface-2);
+	border-color: var(--lex-border);
 }
 
 .lex-wizard-step.is-active {
 	color: var(--lex-primary);
+	background: var(--lex-primary-soft);
+	border-color: var(--lex-border-strong);
 }
 
 .lex-wizard-step.is-complete {
 	color: var(--lex-green);
-	cursor: pointer;
+	background: var(--lex-green-bg);
+	border-color: #b9dfc8;
 }
 
 .lex-step-badge {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 24px;
-	height: 24px;
+	width: 26px;
+	height: 26px;
+	flex: 0 0 26px;
 	border-radius: 999px;
 	font-size: 12px;
 	font-weight: 700;
@@ -1471,8 +1530,7 @@ body.lex-portal-sidebar-open {
 }
 
 .lex-wizard-step-line {
-	flex: 1 1 24px;
-	max-width: 60px;
+	flex: 0 0 28px;
 	height: 2px;
 	background: var(--lex-border);
 	transition: background 0.2s ease;
@@ -1480,6 +1538,17 @@ body.lex-portal-sidebar-open {
 
 .lex-wizard-step.is-complete + .lex-wizard-step-line {
 	background: var(--lex-green);
+}
+
+@media (max-width: 519px) {
+	.lex-wizard-stepper {
+		display: grid;
+		grid-template-columns: 1fr;
+	}
+
+	.lex-wizard-step-line {
+		display: none;
+	}
 }
 
 .lex-wizard-page {

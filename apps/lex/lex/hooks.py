@@ -57,7 +57,9 @@ doctype_js = {
 	"Account": "public/js/account_form_recovery.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
-# doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
+doctype_tree_js = {
+	"Account": "public/js/account_tree_recovery.js",
+}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
 # Svg Icons
@@ -261,6 +263,7 @@ scheduler_events = {
 	],
 	"cron": {
 		"* * * * *": [
+			"lex.email_campaign_scheduler.process_due_email_campaigns",
 			"lex.lex.doctype.lexocrates_chat_presence.lexocrates_chat_presence.mark_stale_presences_offline",
 		],
 	},

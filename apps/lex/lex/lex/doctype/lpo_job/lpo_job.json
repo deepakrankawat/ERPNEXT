@@ -476,7 +476,7 @@
    "fieldname": "funding_status",
    "fieldtype": "Select",
    "label": "Funding Status",
-   "options": "Not Started\nPayment Pending\nFunded\nFailed\nCancelled",
+   "options": "Not Started\nPayment Pending\nFunded\nFailed\nCancelled\nRefund Pending\nPartially Refunded\nRefunded\nDisputed\nChargeback",
    "read_only": 1
   },
   {
