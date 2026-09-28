@@ -1,0 +1,24 @@
+{
+ "actions": [],
+ "creation": "2026-09-28 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["escalation_level", "assigned_role", "assigned_user"],
+ "fields": [
+  {"fieldname": "escalation_level", "fieldtype": "Select", "in_list_view": 1, "label": "Level", "options": "1\n2\n3", "reqd": 1},
+  {"fieldname": "assigned_role", "fieldtype": "Link", "in_list_view": 1, "label": "Default Role", "options": "Role"},
+  {"fieldname": "assigned_user", "fieldtype": "Link", "in_list_view": 1, "label": "Default User", "options": "User"}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-09-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Lexocrates SLA Escalation Default",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

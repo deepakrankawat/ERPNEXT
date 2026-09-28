@@ -92,6 +92,13 @@ class LPOQAReview(Document):
 			self.completed_on = now_datetime()
 		if self.review_status == "Approved" and not self._lex_job_context.delivery_document:
 			frappe.throw(_("A delivery document is required before QA approval."), frappe.ValidationError)
+		if self.review_status == "Approved" and self.qa_checklist:
+			failed = [row.check_name for row in self.qa_checklist if row.result == "Fail"]
+			if failed:
+				frappe.throw(
+					_("QA cannot be approved while checklist items are marked Fail: {0}").format(", ".join(failed)),
+					frappe.ValidationError,
+				)
 
 	def _synchronize_job_quality_state(self):
 		if self.review_status not in {"Approved", "Changes Required", "Rejected"}:

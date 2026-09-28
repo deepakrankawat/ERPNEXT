@@ -1,0 +1,24 @@
+{
+ "actions": [],
+ "creation": "2026-09-28 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["check_name", "result", "notes"],
+ "fields": [
+  {"fieldname": "check_name", "fieldtype": "Select", "in_list_view": 1, "label": "Check", "options": "Instruction Compliance Review\nLegal Research Verification\nCitation Checking\nFactual Consistency\nDocument Completeness\nProofreading\nFormatting Review\nSenior Legal Review\nAI-Assisted Output Verification", "reqd": 1},
+  {"default": "N/A", "fieldname": "result", "fieldtype": "Select", "in_list_view": 1, "label": "Result", "options": "Pass\nFail\nN/A", "reqd": 1},
+  {"fieldname": "notes", "fieldtype": "Small Text", "in_list_view": 1, "label": "Notes"}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-09-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO QA Checklist Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

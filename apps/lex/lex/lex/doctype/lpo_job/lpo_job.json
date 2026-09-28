@@ -14,6 +14,7 @@
   "job_type",
   "overview_column_break",
   "job_status",
+  "job_status_before_pause",
   "priority",
   "assigned_analyst",
   "client_context_section",
@@ -34,6 +35,18 @@
   "execution_policy_section",
   "workflow_version_snapshot",
   "sop_version_snapshot",
+  "sla_clock_section",
+  "service_level",
+  "assignment_confirmation",
+  "confirmed_delivery_date",
+  "indicative_turnaround_snapshot",
+  "sla_clock_column",
+  "work_commencement_on",
+  "sla_start_on",
+  "sla_paused",
+  "total_paused_minutes",
+  "delivery_date_revision_reason",
+  "sla_pause_log",
   "documents_section",
   "job_documents",
   "source_document",
@@ -150,8 +163,15 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Job Status",
-   "options": "Draft\nActivated\nAssigned\nIn Progress\nOn Hold\nQA Review\nReady for Delivery\nDelivered\nCompleted\nCancelled",
+   "options": "Draft\nSubmitted\nConflict Check\nUnder Review\nLextimator Assessment\nAwaiting Internal Scope Review\nAwaiting Client Approval\nConfirmed\nActivated\nWork Commenced\nAssigned\nIn Progress\nOn Hold\nSLA Paused\nQA Review\nReady for Delivery\nDelivered\nCorrection Requested\nCompleted\nDeclined\nCancelled\nSuspended",
    "reqd": 1
+  },
+  {
+   "fieldname": "job_status_before_pause",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Job Status Before Pause",
+   "read_only": 1
   },
   {
    "default": "Medium",
@@ -282,6 +302,83 @@
    "fieldtype": "Link",
    "label": "SOP Version",
    "options": "LPO SOP Version"
+  },
+  {
+   "fieldname": "sla_clock_section",
+   "fieldtype": "Section Break",
+   "label": "Assignment Confirmation and SLA Clock"
+  },
+  {
+   "fieldname": "service_level",
+   "fieldtype": "Select",
+   "label": "Service Level",
+   "options": "\nStandard\nPriority\nComplex / High-Volume"
+  },
+  {
+   "fieldname": "assignment_confirmation",
+   "fieldtype": "Link",
+   "label": "Assignment Confirmation",
+   "options": "LPO Assignment Confirmation",
+   "read_only": 1
+  },
+  {
+   "description": "The controlling delivery commitment once the client has approved the Assignment Confirmation. Locked; revise only via the Assignment Confirmation workflow with a recorded reason.",
+   "fieldname": "confirmed_delivery_date",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Confirmed Delivery Date",
+   "read_only": 1
+  },
+  {
+   "description": "Retained for audit after the Confirmed Delivery Date is locked; no longer the controlling deadline.",
+   "fieldname": "indicative_turnaround_snapshot",
+   "fieldtype": "Data",
+   "label": "Indicative Turnaround (Historical)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sla_clock_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "work_commencement_on",
+   "fieldtype": "Datetime",
+   "label": "Work Commencement Timestamp",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sla_start_on",
+   "fieldtype": "Datetime",
+   "label": "SLA Start Timestamp",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "sla_paused",
+   "fieldtype": "Check",
+   "label": "SLA Paused",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "total_paused_minutes",
+   "fieldtype": "Int",
+   "label": "Total Paused Minutes",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.confirmed_delivery_date",
+   "fieldname": "delivery_date_revision_reason",
+   "fieldtype": "Small Text",
+   "label": "Delivery Date Revision Reason"
+  },
+  {
+   "fieldname": "sla_pause_log",
+   "fieldtype": "Table",
+   "label": "SLA Pause Log",
+   "options": "LPO SLA Pause Log",
+   "read_only": 1
   },
   {
    "fieldname": "documents_section",

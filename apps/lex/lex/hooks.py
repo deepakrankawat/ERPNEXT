@@ -183,6 +183,11 @@ permission_query_conditions = {
 	"LexPack Purchase": "lex.lex.doctype.lexpack_purchase.lexpack_purchase.get_permission_query_conditions",
 	"Lexocrates Work Intake": "lex.lex.doctype.lexocrates_work_intake.lexocrates_work_intake.get_permission_query_conditions",
 	"LPO AI Document Export": "lex.lex.doctype.lpo_ai_document_export.lpo_ai_document_export.get_permission_query_conditions",
+	"Master Service Level Agreement": "lex.lex.doctype.master_service_level_agreement.master_service_level_agreement.get_permission_query_conditions",
+	"LPO Assignment Confirmation": "lex.lex.doctype.lpo_assignment_confirmation.lpo_assignment_confirmation.get_permission_query_conditions",
+	"LPO Assignment Scope Change": "lex.lex.doctype.lpo_assignment_scope_change.lpo_assignment_scope_change.get_permission_query_conditions",
+	"LPO Correction Request": "lex.lex.doctype.lpo_correction_request.lpo_correction_request.get_permission_query_conditions",
+	"LPO Service Escalation": "lex.lex.doctype.lpo_service_escalation.lpo_service_escalation.get_permission_query_conditions",
 }
 
 has_permission = {
@@ -203,6 +208,11 @@ has_permission = {
 	"LexPack Purchase": "lex.lex.doctype.lexpack_purchase.lexpack_purchase.has_permission",
 	"Lexocrates Work Intake": "lex.lex.doctype.lexocrates_work_intake.lexocrates_work_intake.has_permission",
 	"LPO AI Document Export": "lex.lex.doctype.lpo_ai_document_export.lpo_ai_document_export.has_permission",
+	"Master Service Level Agreement": "lex.lex.doctype.master_service_level_agreement.master_service_level_agreement.has_permission",
+	"LPO Assignment Confirmation": "lex.lex.doctype.lpo_assignment_confirmation.lpo_assignment_confirmation.has_permission",
+	"LPO Assignment Scope Change": "lex.lex.doctype.lpo_assignment_scope_change.lpo_assignment_scope_change.has_permission",
+	"LPO Correction Request": "lex.lex.doctype.lpo_correction_request.lpo_correction_request.has_permission",
+	"LPO Service Escalation": "lex.lex.doctype.lpo_service_escalation.lpo_service_escalation.has_permission",
 }
 
 # DocType Class
@@ -236,6 +246,20 @@ doc_events = {
 		"after_insert": "lex.chat_automation.notify_qa_failure",
 		"on_update": "lex.chat_automation.notify_qa_failure",
 	},
+	"LPO Assignment Confirmation": {
+		"after_insert": "lex.sla_notifications.notify_confirmation_ready",
+		"on_update": "lex.sla_notifications.notify_confirmation_decision",
+	},
+	"LPO Assignment Scope Change": {
+		"after_insert": "lex.sla_notifications.notify_scope_change_proposed",
+		"on_update": "lex.sla_notifications.notify_scope_change_decision",
+	},
+	"LPO Correction Request": {
+		"after_insert": "lex.sla_notifications.notify_correction_received",
+	},
+	"LPO Service Escalation": {
+		"after_insert": "lex.sla_notifications.notify_escalation_created",
+	},
 	"LPO Compliance Log": {
 		"after_insert": "lex.chat_automation.notify_compliance_action",
 	},
@@ -260,6 +284,9 @@ scheduler_events = {
 		"lex.tasks.expire_portal_security_states",
 		"lex.work_intake.reconcile_funded_intakes",
 		"lex.file_quarantine.rescan_unavailable_files",
+		"lex.sla_engine.publish_assignment_sla_warnings",
+		"lex.sla_engine.auto_escalate_overdue_assignments",
+		"lex.sla_engine.retry_pending_sla_starts",
 	],
 	"cron": {
 		"* * * * *": [

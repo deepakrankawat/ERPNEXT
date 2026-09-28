@@ -27,17 +27,44 @@ ASSIGNMENT_REQUIRED_STATUSES = {
 	"Completed",
 }
 ALLOWED_STATUS_TRANSITIONS = {
-	"Draft": {"Activated", "Cancelled"},
-	"Activated": {"Assigned", "Cancelled"},
+	# Client-facing intake and pre-confirmation review (spec: "Legal Assignment" lifecycle).
+	"Draft": {"Activated", "Submitted", "Cancelled", "Declined"},
+	"Submitted": {"Conflict Check", "Cancelled", "Declined"},
+	"Conflict Check": {"Under Review", "Cancelled", "Declined"},
+	"Under Review": {"Lextimator Assessment", "Awaiting Internal Scope Review", "Cancelled", "Declined"},
+	"Lextimator Assessment": {"Awaiting Internal Scope Review", "Cancelled", "Declined"},
+	"Awaiting Internal Scope Review": {"Awaiting Client Approval", "Cancelled", "Declined"},
+	"Awaiting Client Approval": {"Confirmed", "Awaiting Internal Scope Review", "Cancelled", "Declined"},
+	"Confirmed": {"Work Commenced", "Activated", "Cancelled"},
+	# Legacy pre-SLA-engine path, kept so in-flight Jobs created before this feature
+	# continue to work unchanged.
+	"Activated": {"Assigned", "Work Commenced", "Cancelled"},
+	"Work Commenced": {"In Progress", "Assigned", "Cancelled"},
 	"Assigned": {"In Progress", "On Hold", "Cancelled"},
-	"In Progress": {"On Hold", "QA Review", "Cancelled"},
+	"In Progress": {"On Hold", "SLA Paused", "QA Review", "Cancelled"},
 	"On Hold": {"In Progress", "Cancelled"},
-	"QA Review": {"In Progress", "Ready for Delivery", "Cancelled"},
+	"SLA Paused": {"In Progress", "QA Review", "Cancelled"},
+	"QA Review": {"In Progress", "SLA Paused", "Ready for Delivery", "Cancelled"},
 	"Ready for Delivery": {"In Progress", "Delivered", "Completed", "Cancelled"},
-	"Delivered": {"Completed"},
+	"Delivered": {"Correction Requested", "Completed"},
+	"Correction Requested": {"In Progress", "QA Review", "Completed"},
 	"Completed": set(),
 	"Cancelled": set(),
+	"Declined": set(),
+	"Suspended": set(),
 }
+PRE_CONFIRMATION_REVIEW_STATES = {
+	"Submitted",
+	"Conflict Check",
+	"Under Review",
+	"Lextimator Assessment",
+	"Awaiting Internal Scope Review",
+	"Awaiting Client Approval",
+}
+# "Confirmed" is scope/date approval only; funding and execution-policy snapshots
+# remain gated at true operational start ("Work Commenced"), authoritatively via
+# sla_engine.try_start_sla()'s 8-point checklist rather than this method.
+PRE_WORK_COMMENCEMENT_STATES = PRE_CONFIRMATION_REVIEW_STATES | {"Confirmed"}
 LOCKED_FOR_ANALYSTS = {
 	"engagement",
 	"customer",
@@ -47,6 +74,9 @@ LOCKED_FOR_ANALYSTS = {
 	"received_at",
 	"due_date",
 	"ai_processing_allowed",
+	"confirmed_delivery_date",
+	"quoted_amount",
+	"assignment_confirmation",
 }
 
 
@@ -55,6 +85,8 @@ class LPOJob(Document):
 		self._load_engagement_context()
 		self._protect_client_submission()
 		self._validate_status_transition()
+		self._validate_lifecycle_gates()
+		self._validate_confirmed_delivery_date()
 		# A client "delete" is an auditable pre-funding cancellation.  The Job
 		# remains in the database, and a Draft Job may not yet have the funded
 		# execution snapshots or clean-document gates required by active work.
@@ -80,6 +112,10 @@ class LPOJob(Document):
 		previous = self.get_doc_before_save()
 		if not previous or previous.job_status == self.job_status:
 			return
+		if self.job_status == "Suspended":
+			if not _has_management_access(frappe.session.user):
+				frappe.throw(_("Only Legal Operations may suspend an Assignment."), frappe.PermissionError)
+			return
 		allowed = ALLOWED_STATUS_TRANSITIONS.get(previous.job_status, set())
 		if self.job_status not in allowed:
 			frappe.throw(
@@ -88,6 +124,65 @@ class LPOJob(Document):
 				),
 				frappe.ValidationError,
 			)
+
+	def _validate_lifecycle_gates(self):
+		"""Enforce the spec's stage gates directly in validate(), independent of
+		which caller (Desk, API, portal action) drove the status change."""
+		if self.is_new() or getattr(frappe.flags, "lex_job_transition_override", False):
+			return
+		previous = self.get_doc_before_save()
+		if not previous or previous.job_status == self.job_status:
+			return
+		if self.job_status == "Under Review" and previous.job_status == "Conflict Check":
+			status = frappe.db.get_value("LPO Matter", self.engagement, "conflict_check_status")
+			if status not in {"Cleared", "No Match Found"}:
+				frappe.throw(
+					_("The Matter's conflict check must be Cleared before this Assignment moves to Under Review."),
+					frappe.ValidationError,
+				)
+		if self.job_status == "Confirmed" and previous.job_status == "Awaiting Client Approval":
+			approved = bool(
+				self.assignment_confirmation
+				and frappe.db.get_value(
+					"LPO Assignment Confirmation", self.assignment_confirmation, "client_decision"
+				)
+				== "Approved"
+			)
+			if not approved:
+				frappe.throw(
+					_("The Client must approve the current Assignment Confirmation before this Assignment is Confirmed."),
+					frappe.ValidationError,
+				)
+		if self.job_status == "Correction Requested" and previous.job_status == "Delivered":
+			from lex.sla_engine import add_business_days, _settings
+
+			window = cint(_settings().get("correction_request_window_business_days") or 5)
+			deadline = add_business_days(self.completed_on or now_datetime(), window)
+			if now_datetime() > get_datetime(deadline):
+				frappe.throw(
+					_("The correction request window for this delivery has closed."),
+					frappe.ValidationError,
+				)
+
+	def _validate_confirmed_delivery_date(self):
+		previous = self.get_doc_before_save()
+		if not previous or self.is_new():
+			return
+		if previous.confirmed_delivery_date and self.has_value_changed("confirmed_delivery_date"):
+			# A server-mediated write (e.g. an approved Assignment Scope Change acted on
+			# by the client) is already authorized by its own whitelisted function; only
+			# a direct Desk/API edit needs the management-role check here.
+			trusted_service_write = getattr(frappe.flags, "lexocrates_portal_service", False)
+			if not trusted_service_write and not _has_management_access(frappe.session.user):
+				frappe.throw(
+					_("Only Legal Operations may revise a locked Confirmed Delivery Date."),
+					frappe.PermissionError,
+				)
+			if not (self.delivery_date_revision_reason or "").strip():
+				frappe.throw(
+					_("Provide a reason for revising the Confirmed Delivery Date."),
+					frappe.MandatoryError,
+				)
 
 	def _is_prefunding_cancellation(self):
 		if self.is_new() or self.job_status != "Cancelled":
@@ -163,6 +258,7 @@ class LPOJob(Document):
 
 	def _validate_currency_pricing(self):
 		"""Keep a Job's quote and Legal Capacity in one real currency."""
+		self._validate_fixed_quote_protection()
 		if self.estimate_status not in {"Ready", "Accepted"}:
 			return
 		if self.currency not in {"CAD", "USD", "GBP", "INR"}:
@@ -180,12 +276,42 @@ class LPOJob(Document):
 				frappe.ValidationError,
 			)
 
+	def _validate_fixed_quote_protection(self):
+		"""Spec section 14: once a quote is Accepted, it may rise only through an
+		Approved Assignment Scope Change — never merely because internal effort was
+		underestimated."""
+		if self.is_new():
+			return
+		previous = self.get_doc_before_save()
+		if not previous or previous.estimate_status != "Accepted":
+			return
+		if not self.has_value_changed("quoted_amount") or flt(self.quoted_amount) <= flt(previous.quoted_amount):
+			return
+		delta = flt(self.quoted_amount) - flt(previous.quoted_amount)
+		covered = frappe.db.exists(
+			"LPO Assignment Scope Change",
+			{"job": self.name, "status": "Approved", "additional_price": delta},
+		)
+		if not covered:
+			frappe.throw(
+				_(
+					"The Fixed Quote cannot be increased without a matching Approved "
+					"Assignment Scope Change. Request a Scope Change first."
+				),
+				frappe.ValidationError,
+			)
+
 	def _validate_matter_activation(self):
 		if self.job_status == "Draft":
 			return
 		matter = self._lex_matter_context
 		if matter.status != "Active":
 			frappe.throw(_("The parent Matter must be Active before operational work begins."), frappe.ValidationError)
+		if self.job_status in PRE_WORK_COMMENCEMENT_STATES:
+			# Conflict check, internal review, Lextimator assessment and Confirmed
+			# (scope/date approval) are pre-operational stages; funding is required only
+			# once work is about to commence, enforced by sla_engine.try_start_sla().
+			return
 		if matter.billing_method == "Job Based":
 			if self.funding_status != "Funded":
 				payment_hold = (
@@ -223,8 +349,9 @@ class LPOJob(Document):
 
 	def _validate_execution_snapshots(self):
 		# Funding activates the job and starts its SLA before an analyst is assigned.
-		# Governance snapshots become mandatory at assignment, not at funding.
-		if self.job_status in {"Draft", "Activated"}:
+		# Governance snapshots become mandatory at assignment, not at funding, and are
+		# not required merely to move through pre-confirmation internal review stages.
+		if self.job_status in {"Draft", "Activated"} | PRE_WORK_COMMENCEMENT_STATES:
 			return
 		matter = self._lex_matter_context
 		self.workflow_version_snapshot = self.workflow_version_snapshot or matter.workflow_version_snapshot

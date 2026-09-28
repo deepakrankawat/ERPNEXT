@@ -22,6 +22,8 @@
   "reviewed_document_checksum",
   "reviewed_document_version",
   "reviewer_independent",
+  "checklist_section",
+  "qa_checklist",
   "findings",
   "corrective_actions"
  ],
@@ -131,6 +133,17 @@
    "fieldtype": "Check",
    "label": "Independent Reviewer",
    "read_only": 1
+  },
+  {
+   "fieldname": "checklist_section",
+   "fieldtype": "Section Break",
+   "label": "Quality Checklist"
+  },
+  {
+   "fieldname": "qa_checklist",
+   "fieldtype": "Table",
+   "label": "Checklist",
+   "options": "LPO QA Checklist Item"
   },
   {
    "fieldname": "findings",

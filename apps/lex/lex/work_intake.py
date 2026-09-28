@@ -106,7 +106,7 @@ def create_work_intake(
 		frappe.throw(_("You are not authorized to submit new work."), frappe.PermissionError)
 	if requested_delivery_date and get_datetime(requested_delivery_date) <= now_datetime():
 		frappe.throw(_("Requested Delivery Date must be in the future."), frappe.ValidationError)
-	sla_version, sla_terms, sla_document = _sla_snapshot()
+	master_sla, sla_version, sla_terms, sla_document = _sla_snapshot(actor.client)
 	values = {
 		"doctype": "Lexocrates Work Intake",
 		"intake_title": (intake_title or "").strip(),
@@ -123,6 +123,7 @@ def create_work_intake(
 		"preliminary_details": (preliminary_details or "").strip(),
 		"detailed_instructions": (preliminary_details or "").strip(),
 		"confidentiality_level": confidentiality_level,
+		"master_sla": master_sla,
 		"sla_version": sla_version,
 		"sla_document_snapshot": sla_document,
 		"sla_terms_snapshot": sla_terms,
@@ -1316,8 +1317,11 @@ def _confirm_funded_intake(doc):
 		job = frappe.get_doc("LPO Job", doc.job)
 	if job.engagement != matter.name or job.work_intake != doc.name:
 		frappe.throw(_("The Draft Job does not belong to this Matter and Work Intake."), frappe.ValidationError)
-	if job.job_status != "Draft":
-		frappe.throw(_("Only a Draft Job can be activated by funding."), frappe.ValidationError)
+	if job.job_status not in {"Draft", "Confirmed"}:
+		# "Confirmed" covers the newer Assignment Confirmation lifecycle, where the
+		# client may approve scope/delivery-date before funding completes; the legacy
+		# Draft-only path is unchanged for Jobs that never entered that flow.
+		frappe.throw(_("Only a Draft or Confirmed Job can be activated by funding."), frappe.ValidationError)
 
 	start = now_datetime()
 	# The client's Work Intake date is the authoritative execution deadline.
@@ -1366,7 +1370,10 @@ def _confirm_funded_intake(doc):
 	job.payment_entry = doc.payment_entry
 	job.sla_started_on = start
 	job.delivery_due_on = due
-	job.job_status = "Activated"
+	# A Job that already went through Assignment Confirmation stays Confirmed (its
+	# scope/delivery-date approval already happened); funding alone should not
+	# silently downgrade it back to the legacy "Activated" state.
+	job.job_status = "Confirmed" if job.assignment_confirmation else "Activated"
 	with _portal_service_writes():
 		job.save(ignore_permissions=True)
 	_audit(
@@ -1380,6 +1387,13 @@ def _confirm_funded_intake(doc):
 			"delivery_due_on": due,
 		},
 	)
+	if job.assignment_confirmation:
+		try:
+			from lex.sla_engine import try_start_sla
+
+			try_start_sla(job)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"SLA auto-start after funding {job.name}")
 	return _funding_result(doc)
 
 
@@ -2074,8 +2088,22 @@ def _practice_area(service_type):
 	}.get(service_type, "Other")
 
 
-def _sla_snapshot():
+def _sla_snapshot(client: str | None = None):
+	"""Prefer the client's Accepted Master SLA; fall back to the legacy static terms.
+
+	Existing clients without a formal Master Service Level Agreement record keep
+	working exactly as before this feature was introduced.
+	"""
+	if client:
+		from lex.lex.doctype.master_service_level_agreement.master_service_level_agreement import (
+			get_latest_accepted,
+		)
+
+		master = get_latest_accepted(client)
+		if master:
+			return (master.name, master.version, master.terms_html, master.sla_document)
 	return (
+		None,
 		str(_setting("intake_sla_version", DEFAULT_SLA_VERSION)),
 		str(_setting("intake_sla_terms", DEFAULT_SLA_TERMS)),
 		_setting("intake_sla_document", None),

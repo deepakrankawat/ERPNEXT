@@ -11,7 +11,9 @@ PORTAL_USER_DOCTYPE = "Lexocrates Portal User"
 MATTER_AUTHORIZATION_DOCTYPE = "Lexocrates Matter Authorization"
 DELIVERABLE_APPROVAL_AUTHORITIES = {"Deliverable Approval", "All Client Approvals"}
 
-MatterAction = Literal["view", "upload", "comment", "approve", "billing"]
+MatterAction = Literal[
+	"view", "upload", "comment", "approve", "billing", "scope_change", "lexpack_deduction"
+]
 
 
 def is_client_user(user: str | None = None) -> bool:
@@ -55,6 +57,8 @@ def get_portal_user(user: str | None = None, *, require_active: bool = True):
 			"can_create_matters",
 			"can_upload_documents",
 			"can_comment",
+			"can_provide_instructions",
+			"can_provide_binding_instructions",
 			"billing_access",
 			"lexpack_view_access",
 			"lexpack_purchase_access",
@@ -144,6 +148,8 @@ def has_matter_access(
 		"comment": "can_comment",
 		"approve": "can_approve",
 		"billing": "can_view_billing",
+		"scope_change": "can_approve_scope_change",
+		"lexpack_deduction": "can_approve_lexpack_deduction",
 	}[action]
 	return bool(
 		frappe.db.get_value(

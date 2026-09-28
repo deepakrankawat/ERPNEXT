@@ -9,7 +9,7 @@
  "field_order": [
   "identity_section", "intake_title", "client", "portal_user", "submitted_by", "identity_column", "status", "created_on", "funded_on",
   "preliminary_section", "service_type", "jurisdiction", "priority", "requested_delivery_date", "preliminary_column", "expected_outcome", "preliminary_details", "confidentiality_level",
-  "sla_section", "sla_version", "sla_document_snapshot", "sla_terms_snapshot", "sla_snapshot_hash", "sla_accepted", "sla_accepted_by", "sla_accepted_on",
+  "sla_section", "master_sla", "sla_version", "sla_document_snapshot", "sla_terms_snapshot", "sla_snapshot_hash", "sla_accepted", "sla_accepted_by", "sla_accepted_on",
   "document_section", "detailed_instructions", "document_count", "clean_document_count", "security_status", "extraction_status", "extracted_text", "analysis_section", "analysis_status", "analysis_confidence", "low_confidence", "analysis_provider", "ai_execution", "analysis_summary", "operations_review_notes",
   "quote_section", "quote_version", "quote_status", "quoted_amount", "currency", "required_legal_capacity", "selected_pricing_service", "exact_pdf_page_count", "calculated_hours", "fixed_service_rate_cad", "raw_price_cad", "final_rounded_price_cad", "pricing_exchange_rate", "pricing_exchange_rate_date", "pricing_version", "estimate_method", "quote_column", "scope_summary", "delivery_timeline_hours", "quote_valid_until", "recommended_plan", "quote_issued_by", "quote_issued_on",
   "pricing_approval_section", "pricing_approval_status", "pricing_approved_by", "pricing_approval_column", "pricing_approved_on", "pricing_rejection_reason",
@@ -38,6 +38,7 @@
   {"default": "Confidential", "fieldname": "confidentiality_level", "fieldtype": "Select", "label": "Confidentiality", "options": "Standard\nConfidential\nHighly Confidential\nRestricted", "reqd": 1},
 
   {"fieldname": "sla_section", "fieldtype": "Section Break", "label": "Pre-Upload SLA Acceptance"},
+  {"fieldname": "master_sla", "fieldtype": "Link", "label": "Master Service Level Agreement", "options": "Master Service Level Agreement", "read_only": 1},
   {"fieldname": "sla_version", "fieldtype": "Data", "label": "SLA Version", "read_only": 1, "reqd": 1},
   {"fieldname": "sla_document_snapshot", "fieldtype": "Attach", "label": "SLA Document Snapshot", "read_only": 1},
   {"fieldname": "sla_terms_snapshot", "fieldtype": "Long Text", "label": "SLA Terms Snapshot", "read_only": 1, "reqd": 1},

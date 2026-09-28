@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "creation": "2026-09-28 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "pause_start", "pause_end", "duration_minutes", "reason", "details", "requested_from_client", "created_by"
+ ],
+ "fields": [
+  {"fieldname": "pause_start", "fieldtype": "Datetime", "in_list_view": 1, "label": "Pause Start", "read_only": 1, "reqd": 1},
+  {"fieldname": "pause_end", "fieldtype": "Datetime", "in_list_view": 1, "label": "Pause End", "read_only": 1},
+  {"default": "0", "fieldname": "duration_minutes", "fieldtype": "Int", "in_list_view": 1, "label": "Duration (Minutes)", "non_negative": 1, "read_only": 1},
+  {"fieldname": "reason", "fieldtype": "Select", "in_list_view": 1, "label": "Reason", "options": "Missing Documents\nClarification of Instructions\nConfirmation of Facts\nAdditional Information Required\nClient Approval Required\nJurisdictional Clarification\nAccess Credentials Required\nResponse to Substantive Query\nOther Client Dependency", "read_only": 1, "reqd": 1},
+  {"fieldname": "details", "fieldtype": "Small Text", "label": "Details"},
+  {"default": "1", "fieldname": "requested_from_client", "fieldtype": "Check", "label": "Requested From Client", "read_only": 1},
+  {"default": "__user", "fieldname": "created_by", "fieldtype": "Link", "label": "Created By", "options": "User", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-09-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "LPO SLA Pause Log",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

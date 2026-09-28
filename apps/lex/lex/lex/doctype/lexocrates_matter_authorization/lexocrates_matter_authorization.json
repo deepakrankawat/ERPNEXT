@@ -4,7 +4,7 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": ["portal_user", "user", "can_view", "can_upload", "can_comment", "can_approve", "can_view_billing"],
+ "field_order": ["portal_user", "user", "can_view", "can_upload", "can_comment", "can_approve", "can_approve_scope_change", "can_approve_lexpack_deduction", "can_view_billing"],
  "fields": [
   {"fieldname": "portal_user", "fieldtype": "Link", "in_list_view": 1, "label": "Portal User", "options": "Lexocrates Portal User", "reqd": 1},
   {"fetch_from": "portal_user.user", "fieldname": "user", "fieldtype": "Link", "label": "User", "options": "User", "read_only": 1},
@@ -12,6 +12,8 @@
   {"default": "0", "fieldname": "can_upload", "fieldtype": "Check", "in_list_view": 1, "label": "Upload"},
   {"default": "0", "fieldname": "can_comment", "fieldtype": "Check", "in_list_view": 1, "label": "Comment"},
   {"default": "0", "fieldname": "can_approve", "fieldtype": "Check", "in_list_view": 1, "label": "Approve"},
+  {"default": "0", "description": "Approve an Assignment Scope Change (additional price/LexPack deduction) for this Matter.", "fieldname": "can_approve_scope_change", "fieldtype": "Check", "in_list_view": 1, "label": "Approve Scope Change"},
+  {"default": "0", "description": "Approve a LexPack Legal Capacity deduction for this Matter's work.", "fieldname": "can_approve_lexpack_deduction", "fieldtype": "Check", "in_list_view": 1, "label": "Approve LexPack Deduction"},
   {"default": "0", "fieldname": "can_view_billing", "fieldtype": "Check", "in_list_view": 1, "label": "Billing"}
  ],
  "index_web_pages_for_search": 0,
