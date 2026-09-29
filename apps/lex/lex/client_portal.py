@@ -120,6 +120,16 @@ def get_portal_dashboard():
 		and row.client_approval_status not in {"Approved"}
 		and has_matter_access(row.engagement, "approve")
 	] if can_approve_deliverables() else []
+	# Deliberately not routed through _safe_dashboard_section: that helper's
+	# fallback values are meant to degrade a display widget gracefully, but this
+	# is a compliance gate — falling back to "Accepted" on error would silently
+	# let a client bypass SLA acceptance. Fail closed (an explicit "Error"
+	# status) instead, and log it like every other section.
+	try:
+		master_sla = _master_sla_status(portal_user)
+	except Exception:
+		frappe.log_error(title="Client Portal Dashboard: master SLA", message=frappe.get_traceback())
+		master_sla = {"status": "Error"}
 
 	return {
 		"profile": {
@@ -161,6 +171,31 @@ def get_portal_dashboard():
 		"lexpack": lexpack,
 		"portal_users": portal_users,
 		"audit_events": audit_events,
+		"master_sla": master_sla,
+	}
+
+
+def _master_sla_status(portal_user):
+	from lex.lex.doctype.master_service_level_agreement.master_service_level_agreement import (
+		get_latest_accepted,
+		get_or_create_pending_master_sla,
+	)
+
+	accepted = get_latest_accepted(portal_user.client)
+	if accepted:
+		return {"status": "Accepted", "name": accepted.name}
+	if not portal_user.can_create_matters:
+		# Only a user who could actually hit the create_work_intake() gate needs
+		# (and should trigger provisioning of) a pending Master SLA record.
+		return {"status": "Not Applicable"}
+	doc = get_or_create_pending_master_sla(portal_user.client)
+	return {
+		"status": doc.status,
+		"name": doc.name,
+		"version": doc.version,
+		"terms_html": doc.terms_html,
+		"client_legal_name": doc.client_legal_name or portal_user.client,
+		"prefill_email": frappe.db.get_value("User", frappe.session.user, "email") or frappe.session.user,
 	}
 
 

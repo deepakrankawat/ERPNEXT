@@ -106,6 +106,14 @@ def create_work_intake(
 		frappe.throw(_("You are not authorized to submit new work."), frappe.PermissionError)
 	if requested_delivery_date and get_datetime(requested_delivery_date) <= now_datetime():
 		frappe.throw(_("Requested Delivery Date must be in the future."), frappe.ValidationError)
+
+	from lex.lex.doctype.master_service_level_agreement.master_service_level_agreement import get_latest_accepted
+
+	if not get_latest_accepted(actor.client):
+		frappe.throw(
+			_("Accept the Master Service Level Agreement before submitting new work."),
+			frappe.PermissionError,
+		)
 	master_sla, sla_version, sla_terms, sla_document = _sla_snapshot(actor.client)
 	values = {
 		"doctype": "Lexocrates Work Intake",

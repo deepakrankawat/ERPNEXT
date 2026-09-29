@@ -363,8 +363,51 @@
 		return `<section class="lex-section" data-panel="matters">${sectionHeader("My Matters", "Legal matters you are authorized to access")}${card("Matter register", `${data.matters.length} authorized matters`, matterTable(data.matters))}</section>`;
 	}
 
+	const MASTER_SLA_ACKS = [
+		["ack_read_and_understood", "it has read and understood the SLA"],
+		["ack_business_week", "it understands that Lexocrates operates a Monday-to-Friday Business Week"],
+		["ack_no_24x7_production", "it understands that the Client Portal may accept submissions outside Business Days but that this does not constitute 24/7 production service"],
+		["ack_submission_not_sla_start", "it understands that submission of an Assignment does not itself commence the delivery period"],
+		["ack_lextimator_indicative", "it understands that Lextimator™ may provide an Indicative Turnaround which is subject to scope and capacity review"],
+		["ack_fixed_quote_protection", "it understands that a Fixed Quote will not be increased merely because Lexocrates underestimated the internal time or resources required for the unchanged agreed scope"],
+		["ack_scope_changes_affect_price", "it understands that material Client-initiated changes to scope may result in a revised price and delivery date"],
+		["ack_confirmed_delivery_date_controls", "it understands that the Confirmed Delivery Date contained in the approved Assignment Confirmation is the applicable delivery commitment"],
+		["ack_priority_subject_to_availability", "it understands that Priority Service is subject to operational availability"],
+		["ack_no_automatic_express_service", "it understands that Lexocrates does not presently provide a general entitlement to Express, same-day, weekend or emergency delivery"],
+		["ack_signatory_authority", "the individual accepting this SLA is authorized to accept it on behalf of the Client"],
+	];
+
+	function masterSlaGate(data) {
+		const sla = data.master_sla || {};
+		if (sla.status === "Error") {
+			return `<article class="lex-card widget border"><div class="lex-card-body"><strong>Your Master Service Level Agreement status could not be loaded.</strong><p>Reload the page, or contact support if this continues — you cannot submit new work until this is resolved.</p></div></article>`;
+		}
+		const checks = MASTER_SLA_ACKS.map(([name, label]) => (
+			`<label class="lex-check wide"><input type="checkbox" name="${name}" value="1" required> ${escapeHTML(label)}</label>`
+		)).join("");
+		return `<article class="lex-card widget border">
+			<div class="lex-card-head widget-head"><div class="widget-label"><h3 class="widget-title">Master Service Level Agreement</h3><small>Accept once during onboarding — required before submitting new work</small></div></div>
+			<div class="lex-card-body">
+				<div class="lex-scope-box">${sla.terms_html || ""}</div>
+				<p>By accepting this SLA, the Client confirms that:</p>
+				<form id="lex-master-sla-accept" class="lex-form" data-master-sla="${escapeHTML(sla.name || "")}">
+					<div class="wide">${checks}</div>
+					<label class="wide">Organization<input type="text" value="${escapeHTML(sla.client_legal_name || "")}" disabled></label>
+					<label>Authorized Representative<input type="text" name="accepted_by_name" required maxlength="140" placeholder="Full name"></label>
+					<label>Designation<input type="text" name="accepted_by_designation" required maxlength="140" placeholder="e.g. General Counsel"></label>
+					<label class="wide">Email<input type="text" value="${escapeHTML(sla.prefill_email || "")}" disabled></label>
+					<div class="wide"><button class="lex-button btn btn-primary btn-md" type="submit">Accept SLA &amp; Continue</button></div>
+				</form>
+			</div>
+		</article>`;
+	}
+
 	function workIntakeSection(data) {
 		if (!data.permissions.can_create_matters) return "";
+		if (data.master_sla && data.master_sla.status !== "Accepted") {
+			const intakeCards = (data.intakes || []).map((intake) => intakeCard(intake, data)).join("");
+			return `<section class="lex-section" data-panel="new-matter">${masterSlaGate(data)}${intakeCards ? `<div style="margin-top: 30px;"><h3>Your Jobs</h3>${intakeCards}</div>` : ""}</section>`;
+		}
 		const standardServices = [
 			{ value: "Legal Research", label: "Legal Research & Writing" },
 			{ value: "Litigation Support", label: "Litigation Support" },
@@ -657,6 +700,23 @@
 	}
 
 	function bindForms(root, data) {
+		root.querySelectorAll("[data-master-sla]").forEach((form) => form.addEventListener("submit", async (event) => {
+			event.preventDefault();
+			const button = form.querySelector("button[type=submit]");
+			const values = formValues(form, MASTER_SLA_ACKS.map(([name]) => name));
+			setBusy(button, "Accepting...");
+			try {
+				await call("lex.lex.doctype.master_service_level_agreement.master_service_level_agreement.accept", {
+					name: form.dataset.masterSla,
+					accepted_by_name: values.accepted_by_name,
+					accepted_by_designation: values.accepted_by_designation,
+					...Object.fromEntries(MASTER_SLA_ACKS.map(([name]) => [name, values[name]])),
+				});
+				notify("Master Service Level Agreement accepted. You can now submit new work.");
+				reloadSection("new-matter");
+			} catch (error) { showError("SLA acceptance failed", error); clearBusy(button); }
+		}));
+
 		const intakeForm = document.getElementById("lex-new-intake");
 
 		if (intakeForm) {

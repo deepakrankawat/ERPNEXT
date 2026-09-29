@@ -226,6 +226,63 @@ def get_latest_accepted(client: str):
 	return frappe.get_doc("Master Service Level Agreement", name) if name else None
 
 
+def get_or_create_pending_master_sla(client: str):
+	"""Return the client's Draft/Sent-for-Acceptance Master SLA, auto-provisioning
+	the standard company-wide one on first use. Never creates a second pending
+	record if one already exists, and never touches an Accepted one — this is
+	strictly the "no formal SLA yet" onboarding path."""
+	pending_name = frappe.db.get_value(
+		"Master Service Level Agreement",
+		{"client": client, "status": ["in", ["Draft", "Sent for Acceptance"]]},
+		"name",
+		order_by="creation desc",
+	)
+	if pending_name:
+		doc = frappe.get_doc("Master Service Level Agreement", pending_name)
+		if doc.status == "Draft":
+			doc.status = "Sent for Acceptance"
+			doc.save(ignore_permissions=True)
+		return doc
+
+	from lex.work_intake import DEFAULT_SLA_TERMS
+
+	doc = frappe.get_doc({
+		"doctype": "Master Service Level Agreement",
+		"version": "1.0",
+		"effective_date": frappe.utils.nowdate(),
+		"client": client,
+		"terms_html": DEFAULT_SLA_TERMS.replace("\n", "<br>"),
+		"status": "Sent for Acceptance",
+		"lexocrates_representative_name": "Lexocrates Legal Operations",
+		"lexocrates_representative_designation": "Legal Operations",
+		"lexocrates_signed_on": frappe.utils.nowdate(),
+	}).insert(ignore_permissions=True)
+	return doc
+
+
+@frappe.whitelist()
+def get_my_master_sla_status():
+	"""Portal-facing: does the current client have an Accepted Master SLA yet?
+	If not, auto-provision (or fetch) the pending one and return everything the
+	client-portal onboarding gate needs to render the acceptance form."""
+	from lex.work_intake import _require_portal_user
+
+	actor = _require_portal_user()
+	accepted = get_latest_accepted(actor.client)
+	if accepted:
+		return {"status": "Accepted", "name": accepted.name}
+
+	doc = get_or_create_pending_master_sla(actor.client)
+	return {
+		"status": doc.status,
+		"name": doc.name,
+		"version": doc.version,
+		"terms_html": doc.terms_html,
+		"client_legal_name": doc.client_legal_name or actor.client,
+		"prefill_email": frappe.db.get_value("User", frappe.session.user, "email") or frappe.session.user,
+	}
+
+
 def has_permission(doc, ptype="read", user=None, debug=False):
 	user = user or frappe.session.user
 	if _has_management_access(user):
