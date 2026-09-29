@@ -313,6 +313,9 @@ override_whitelisted_methods = {
 	"frappe.handler.download_file": "lex.pdf_watermark.secure_download_file",
 	"frappe.utils.file_manager.download_file": "lex.pdf_watermark.secure_download_file",
 	"frappe.core.doctype.file.file.download_file": "lex.pdf_watermark.secure_download_file",
+	# Send the magic-link login email through the Lexocrates branded template
+	# instead of Frappe's generic default email frame.
+	"frappe.www.login.send_login_link": "lex.auth_overrides.send_login_link",
 }
 #
 # each overriding function accepts a `data` argument;
