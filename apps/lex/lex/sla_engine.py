@@ -103,6 +103,71 @@ def sla_start_checklist(job) -> dict:
 	}
 
 
+JOB_CONFLICT_WAIT_STATUSES = {"Submitted", "Conflict Check"}
+JOB_PRICING_WAIT_STATUSES = {"Under Review", "Lextimator Assessment"}
+
+
+def sync_job_conflict_status(matter: str):
+	"""Reflect a Matter's conflict-screening progress onto any linked Job that is
+	currently waiting on it. The conflict-check engine (conflict_check.py) remains
+	the sole authority on `LPO Matter.conflict_check_status`; this only advances
+	the Job's own status label to match, and never runs its own screening logic.
+
+	Idempotent and a no-op for any Job not currently sitting in a conflict-wait
+	status, so it cannot affect the legacy Draft -> Activated funding path.
+	"""
+	job_names = frappe.get_all(
+		"LPO Job",
+		filters={"engagement": matter, "job_status": ["in", list(JOB_CONFLICT_WAIT_STATUSES)]},
+		pluck="name",
+	)
+	if not job_names:
+		return
+	conflict_status = frappe.db.get_value("LPO Matter", matter, "conflict_check_status")
+	for name in job_names:
+		try:
+			_advance_job_conflict_status(name, conflict_status)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"Job conflict-status sync {name}")
+
+
+def _advance_job_conflict_status(job_name: str, conflict_status: str | None):
+	with _portal_service_writes():
+		job = frappe.get_doc("LPO Job", job_name)
+		if job.job_status == "Submitted" and conflict_status not in {None, "", "Not Run"}:
+			job.job_status = "Conflict Check"
+			job.save(ignore_permissions=True)
+			job.reload()
+		if job.job_status == "Conflict Check" and conflict_status in {"Cleared", "No Match Found"}:
+			job.job_status = "Under Review"
+			job.save(ignore_permissions=True)
+
+
+def sync_job_pricing_status(job_name: str | None):
+	"""Reflect a Work Intake's Lextimator pricing completion onto its linked Job.
+
+	instant_estimator.py / work_intake.py remain the sole authority on pricing;
+	this only advances the Job's status label once a quote is Ready, and is a
+	no-op for any Job not currently sitting in a pricing-wait status.
+	"""
+	if not job_name or not frappe.db.exists("LPO Job", job_name):
+		return
+	try:
+		with _portal_service_writes():
+			job = frappe.get_doc("LPO Job", job_name)
+			if job.job_status not in JOB_PRICING_WAIT_STATUSES:
+				return
+			if job.job_status == "Under Review":
+				job.job_status = "Lextimator Assessment"
+				job.save(ignore_permissions=True)
+				job.reload()
+			if job.job_status == "Lextimator Assessment":
+				job.job_status = "Awaiting Internal Scope Review"
+				job.save(ignore_permissions=True)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"Job pricing-status sync {job_name}")
+
+
 def try_start_sla(job) -> bool:
 	"""Start the SLA clock if, and only if, every spec-section-9 condition holds.
 

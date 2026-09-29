@@ -715,6 +715,12 @@ def _process_documents(
 		doc.status = "Quote Ready"
 		doc.save(ignore_permissions=True)
 	_sync_job_commercial(doc)
+	try:
+		from lex.sla_engine import sync_job_pricing_status
+
+		sync_job_pricing_status(doc.job)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"Job pricing-status sync dispatch {doc.name}")
 	_notify_client_quote_ready(doc)
 	_audit(
 		doc,

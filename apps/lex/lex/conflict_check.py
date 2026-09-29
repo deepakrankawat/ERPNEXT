@@ -453,6 +453,7 @@ def run_conflict_check(matter_name: str, trigger_reason: str = "Initial Intake",
 	matter.conflict_matches_html = _render_matches_html(event, unique_matches)
 	matter.flags.ignore_conflict_recheck = True
 	matter.save(ignore_permissions=True)
+	_sync_linked_job_conflict_status(matter.name)
 
 	# Trigger chat & compliance alerts if matches are found
 	if unique_matches:
@@ -465,6 +466,20 @@ def run_conflict_check(matter_name: str, trigger_reason: str = "Initial Intake",
 		"match_count": len(unique_matches),
 		"matches": unique_matches,
 	}
+
+
+def _sync_linked_job_conflict_status(matter: str):
+	"""Reflect this Matter's conflict status onto any Job waiting on it.
+
+	Best-effort only: conflict-check recording must never fail because of a
+	downstream status-label sync.
+	"""
+	try:
+		from lex.sla_engine import sync_job_conflict_status
+
+		sync_job_conflict_status(matter)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"Job conflict-status sync dispatch {matter}")
 
 
 def _render_matches_html(event, matches: list[dict]) -> str:
@@ -606,6 +621,7 @@ def record_conflict_decision(event_name: str, decision: str, reason: str, review
 	)
 	matter.flags.ignore_conflict_recheck = True
 	matter.save(ignore_permissions=True)
+	_sync_linked_job_conflict_status(matter.name)
 
 	# Update compliance log if linked
 	if event.compliance_log and frappe.db.exists("LPO Compliance Log", event.compliance_log):
