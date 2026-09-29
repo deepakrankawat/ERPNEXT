@@ -131,6 +131,7 @@ after_migrate = [
 	"lex.pdf_watermark.ensure_all_pdfs_private",
 	"lex.audit_worm_chain.backfill_audit_hash_chain",
 	"lex.lexocrates_chat_sync.backfill_matter_chat_channels",
+	"lex.lex.doctype.master_service_level_agreement.master_service_level_agreement.ensure_print_format",
 ]
 
 # Uninstallation

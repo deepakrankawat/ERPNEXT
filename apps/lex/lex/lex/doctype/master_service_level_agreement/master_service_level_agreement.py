@@ -52,9 +52,13 @@ def send_for_acceptance(name: str):
 	return {"name": doc.name, "status": doc.status}
 
 
+SLA_PRINT_FORMAT = "Master Service Level Agreement"
+
+
 @frappe.whitelist()
 def accept(
 	name: str,
+	accepted_by_name: str,
 	accepted_by_designation: str,
 	ack_read_and_understood: int = 0,
 	ack_business_week: int = 0,
@@ -91,6 +95,8 @@ def accept(
 		frappe.throw(_("Every acknowledgement must be checked before the SLA can be accepted."), frappe.ValidationError)
 	if not (accepted_by_designation or "").strip():
 		frappe.throw(_("Provide the signatory's designation."), frappe.MandatoryError)
+	if not (accepted_by_name or "").strip():
+		frappe.throw(_("Provide the authorized representative's name."), frappe.MandatoryError)
 
 	user = frappe.session.user
 	if is_client_user(user):
@@ -103,6 +109,7 @@ def accept(
 	for field, value in acks.items():
 		doc.set(field, cint(value))
 	doc.accepted_by = user
+	doc.accepted_by_name = accepted_by_name.strip()
 	doc.accepted_by_designation = accepted_by_designation.strip()
 	doc.accepted_by_email = frappe.db.get_value("User", user, "email") or user
 	doc.acceptance_datetime = now_datetime()
@@ -124,12 +131,73 @@ def accept(
 		doc.acceptance_audit_reference = audit_event.name
 
 	_supersede_previous(doc)
+	_email_signed_copy(doc)
 	return {
 		"name": doc.name,
 		"status": doc.status,
 		"acceptance_datetime": doc.acceptance_datetime,
 		"acceptance_audit_reference": doc.acceptance_audit_reference,
+		"pdf_emailed_to": doc.pdf_emailed_to,
 	}
+
+
+def _email_signed_copy(doc):
+	"""Best-effort: email the signed SLA as a PDF to the client's own address.
+
+	Never blocks acceptance itself — a failed email is logged, not raised, since
+	the acceptance record (and its audit event) is already durably saved.
+	"""
+	if not doc.accepted_by_email:
+		return
+	from lex.work_intake import _outgoing_email_is_ready
+
+	if not _outgoing_email_is_ready() or getattr(frappe.flags, "in_test", False):
+		return
+	try:
+		pdf = frappe.attach_print(
+			doc.doctype,
+			doc.name,
+			print_format=SLA_PRINT_FORMAT,
+			doc=doc,
+		)
+		message = _(
+			"<p>Attached is your signed copy of the Master Service Level Agreement "
+			"between {0} and Lexocrates Legal Services Private Limited, accepted on "
+			"{1} by {2} ({3}).</p><p>Please retain this copy for your records.</p>"
+		).format(
+			frappe.utils.escape_html(doc.client_legal_name or doc.client),
+			frappe.utils.format_datetime(doc.acceptance_datetime),
+			frappe.utils.escape_html(doc.accepted_by_name),
+			frappe.utils.escape_html(doc.accepted_by_designation),
+		)
+		frappe.sendmail(
+			recipients=[doc.accepted_by_email],
+			subject=_("Your signed Lexocrates Master Service Level Agreement ({0})").format(doc.version),
+			message=message,
+			attachments=[pdf],
+			reference_doctype=doc.doctype,
+			reference_name=doc.name,
+			delayed=False,
+			send_priority=1,
+			x_priority=1,
+			add_unsubscribe_link=0,
+		)
+		doc.pdf_emailed_on = now_datetime()
+		doc.pdf_emailed_to = doc.accepted_by_email
+		frappe.db.set_value(
+			doc.doctype, doc.name,
+			{"pdf_emailed_on": doc.pdf_emailed_on, "pdf_emailed_to": doc.pdf_emailed_to},
+		)
+		create_portal_audit_event(
+			client=doc.client,
+			user=doc.accepted_by,
+			action="Master SLA Signed Copy Emailed",
+			object_type=doc.doctype,
+			object_id=doc.name,
+			new_value={"recipient": doc.accepted_by_email},
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"Master SLA signed-copy email failed for {doc.name}")
 
 
 def _supersede_previous(doc):
@@ -165,6 +233,85 @@ def has_permission(doc, ptype="read", user=None, debug=False):
 	if is_client_user(user):
 		return ptype in {"read", "print", "report"} and has_customer_access(doc.client, user)
 	return False
+
+
+SLA_PRINT_FORMAT_HTML = """
+<div class="sla-print" style="font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;line-height:1.5;font-size:13px;">
+	<h2 style="text-align:center;margin-bottom:4px;">MASTER SERVICE LEVEL AGREEMENT</h2>
+	<p style="text-align:center;margin-top:0;color:#555;">Legal Process Outsourcing &amp; Legal Support Services &middot; Version {{ doc.version }}</p>
+
+	<table style="width:100%;margin:16px 0;">
+		<tr><td style="width:50%;"><strong>Company:</strong> {{ doc.company }}</td><td><strong>Effective Date:</strong> {{ frappe.utils.formatdate(doc.effective_date) if doc.effective_date else "" }}</td></tr>
+		<tr><td><strong>Client:</strong> {{ doc.client_legal_name or doc.client }}</td><td><strong>Status:</strong> {{ doc.status }}</td></tr>
+	</table>
+	{% if doc.client_address %}<p><strong>Address:</strong> {{ doc.client_address }}</p>{% endif %}
+
+	<div style="margin:16px 0;">{{ doc.terms_html or "" }}</div>
+
+	<p>This SLA may be accepted electronically during Client onboarding.<br>By accepting this SLA, the Client confirms that:</p>
+	{% set acks = [
+		(doc.ack_read_and_understood, "it has read and understood the SLA;"),
+		(doc.ack_business_week, "it understands that Lexocrates operates a Monday-to-Friday Business Week;"),
+		(doc.ack_no_24x7_production, "it understands that the Client Portal may accept submissions outside Business Days but that this does not constitute 24/7 production service;"),
+		(doc.ack_submission_not_sla_start, "it understands that submission of an Assignment does not itself commence the delivery period;"),
+		(doc.ack_lextimator_indicative, "it understands that Lextimator&trade; may provide an Indicative Turnaround which is subject to scope and capacity review;"),
+		(doc.ack_fixed_quote_protection, "it understands that a Fixed Quote will not be increased merely because Lexocrates underestimated the internal time or resources required for the unchanged agreed scope;"),
+		(doc.ack_scope_changes_affect_price, "it understands that material Client-initiated changes to scope may result in a revised price and delivery date;"),
+		(doc.ack_confirmed_delivery_date_controls, "it understands that the Confirmed Delivery Date contained in the approved Assignment Confirmation is the applicable delivery commitment;"),
+		(doc.ack_priority_subject_to_availability, "it understands that Priority Service is subject to operational availability;"),
+		(doc.ack_no_automatic_express_service, "it understands that Lexocrates does not presently provide a general entitlement to Express, same-day, weekend or emergency delivery; and"),
+		(doc.ack_signatory_authority, "the individual accepting this SLA is authorized to accept it on behalf of the Client."),
+	] %}
+	<ul style="list-style:none;padding-left:0;">
+		{% for checked, text in acks %}
+		<li style="margin-bottom:6px;">{{ "&#9745;" if checked else "&#9744;" }}&nbsp; {{ text }}</li>
+		{% endfor %}
+	</ul>
+
+	<table style="width:100%;margin-top:28px;border-collapse:collapse;">
+		<tr>
+			<td style="width:50%;vertical-align:top;padding-right:16px;">
+				<h4>ACCEPTED FOR THE CLIENT</h4>
+				<p>
+					Organization: {{ doc.client_legal_name or doc.client or "" }}<br>
+					Authorized Representative: {{ doc.accepted_by_name or "" }}<br>
+					Designation: {{ doc.accepted_by_designation or "" }}<br>
+					Email: {{ doc.accepted_by_email or "" }}<br>
+					Date &amp; Time: {{ frappe.utils.format_datetime(doc.acceptance_datetime) if doc.acceptance_datetime else "" }}<br>
+					Electronic Signature / Acceptance: {{ "Accepted electronically" if doc.electronic_acceptance else "" }}
+				</p>
+			</td>
+			<td style="width:50%;vertical-align:top;padding-left:16px;border-left:1px solid #ccc;">
+				<h4>LEXOCRATES LEGAL SERVICES PRIVATE LIMITED</h4>
+				<p>
+					Authorized Representative: {{ doc.lexocrates_representative_name or "" }}<br>
+					Designation: {{ doc.lexocrates_representative_designation or "" }}<br>
+					Date: {{ frappe.utils.formatdate(doc.lexocrates_signed_on) if doc.lexocrates_signed_on else "" }}
+				</p>
+			</td>
+		</tr>
+	</table>
+</div>
+"""
+
+
+def ensure_print_format():
+	"""Idempotently install/refresh the Master SLA Print Format used for the
+	client's signed-copy PDF. Registered in hooks.py's after_migrate so it stays
+	in sync with SLA_PRINT_FORMAT_HTML across deploys."""
+	if frappe.db.exists("Print Format", SLA_PRINT_FORMAT):
+		doc = frappe.get_doc("Print Format", SLA_PRINT_FORMAT)
+	else:
+		doc = frappe.new_doc("Print Format")
+		doc.name = SLA_PRINT_FORMAT
+		doc.doc_type = "Master Service Level Agreement"
+	doc.module = "Lex"
+	doc.print_format_type = "Jinja"
+	doc.standard = "No"
+	doc.disabled = 0
+	doc.html = SLA_PRINT_FORMAT_HTML
+	doc.flags.ignore_permissions = True
+	doc.save(ignore_permissions=True)
 
 
 def get_permission_query_conditions(user=None):
