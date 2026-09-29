@@ -1316,6 +1316,21 @@ body.lex-portal-sidebar-open {
 	cursor: not-allowed;
 }
 
+.lex-spinner {
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	opacity: 0.85;
+	animation: lex-spin 0.7s linear infinite;
+	flex-shrink: 0;
+}
+
+@keyframes lex-spin {
+	to { transform: rotate(360deg); }
+}
+
 .lex-button-row {
 	display: flex;
 	align-items: center;

@@ -94,6 +94,23 @@
 		else window.alert(`${title}: ${message}`);
 	}
 
+	// Inline button loading state: disables the button, swaps its label for a
+	// spinner + status text, and remembers the original markup so clearBusy can
+	// restore it exactly (including on the error path).
+	function setBusy(button, label) {
+		if (!button.dataset.lexIdleHtml) button.dataset.lexIdleHtml = button.innerHTML;
+		button.disabled = true;
+		button.innerHTML = `<span class="lex-spinner" aria-hidden="true"></span>${escapeHTML(label)}`;
+	}
+
+	function clearBusy(button) {
+		button.disabled = false;
+		if (button.dataset.lexIdleHtml) {
+			button.innerHTML = button.dataset.lexIdleHtml;
+			delete button.dataset.lexIdleHtml;
+		}
+	}
+
 	function bindLogout(button) {
 		button?.addEventListener("click", async () => {
 			button.disabled = true;
@@ -656,15 +673,16 @@
 			const file = upload.elements.file.files[0];
 			if (!file) return;
 			if (file.size > 10 * 1024 * 1024) return showError("Upload failed", "File must be 10 MB or smaller.");
-			button.disabled = true;
+			setBusy(button, "Uploading and scanning...");
 			try {
 				const content = await readFile(file);
+				setBusy(button, "Scanning and estimating...");
 				const response = await call("lex.work_intake.upload_document", { intake: upload.dataset.intakeUpload, filename: file.name, content });
 				if (response.estimate) notify("Document scanned and Job cost estimate updated");
 				else if (response.quarantine_passed) notify("Document passed security scanning. Add detailed instructions to run the estimate.");
 				else notify(`Document remains quarantined: ${response.scan_status}`, "orange");
 				reloadSection("new-matter");
-			} catch (error) { showError("Upload failed", error); button.disabled = false; }
+			} catch (error) { showError("Upload failed", error); clearBusy(button); }
 		}));
 		root.querySelectorAll("[data-intake-instructions]").forEach((form) => form.addEventListener("submit", async (event) => {
 			event.preventDefault();
@@ -680,7 +698,7 @@
 			} catch (error) { showError("Instructions could not be saved", error); button.disabled = false; }
 		}));
 		root.querySelectorAll("[data-analyze-intake]").forEach((button) => button.addEventListener("click", async () => {
-			button.disabled = true; button.textContent = "Estimating...";
+			setBusy(button, "Estimating...");
 			try {
 				const result = await call("lex.work_intake.request_cost_estimate", { intake: button.dataset.analyzeIntake });
 				const message = result.status === "Operations Review"
@@ -690,7 +708,7 @@
 						: "Cost estimate submitted for approval";
 				notify(message, result.status === "Operations Review" ? "orange" : "green");
 				reloadSection("new-matter");
-			} catch (error) { showError("Cost estimate could not start", error); button.disabled = false; button.textContent = "Request cost estimate"; }
+			} catch (error) { showError("Cost estimate could not start", error); clearBusy(button); }
 		}));
 		root.querySelectorAll("[data-fund-existing]").forEach((button) => button.addEventListener("click", async () => {
 			if (!window.confirm("Use the required Legal Capacity and activate this Matter and Job?")) return;
