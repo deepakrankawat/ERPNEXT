@@ -522,6 +522,81 @@ def ensure_lexocrates_branding():
 		frappe.clear_cache()
 
 
+_EMAIL_HEADER = """<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <title>Lexocrates Legal Services</title>
+  <style>
+    body, table, td, p, a, li { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; font-family:Arial, Helvetica, sans-serif; }
+    table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse !important; }
+    img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; }
+    body { margin:0 !important; padding:0 !important; width:100% !important; background:#F3F4F6; }
+    @media screen and (max-width:600px) {
+      .email-card { width:100% !important; max-width:100% !important; }
+      .card-body { padding:26px 20px !important; }
+      .card-header { padding:24px 22px !important; }
+      .card-footer { padding:22px 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background:#F3F4F6;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" class="email-card" style="width:100%; max-width:600px; background:#FFFFFF;">
+          <tr>
+            <td class="card-header" align="left" style="background:#0B2545; border-bottom:3px solid #3476B9; padding:28px 38px 30px 20px; text-align:left;">
+              <img src="https://engine.lexocrates.com/assets/lex/images/lexocrates-logo-light.svg" alt="Lexocrates logo" width="180" style="display:block; width:180px; max-width:100%; height:auto; color:#FFFFFF;">
+              <p style="margin:16px 0 0; padding-left:18px; font-size:20px; font-weight:bold; line-height:27px; letter-spacing:.1px; color:#FFFFFF;">{{TAGLINE}}</p>
+            </td>
+          </tr>
+          <tr>
+            <td class="card-body" style="background:#FFFFFF; padding:38px 38px 32px; font-size:14.5px; line-height:24px; color:#111111;">
+"""
+
+_EMAIL_FOOTER = """
+            </td>
+          </tr>
+          <tr>
+            <td class="card-footer" align="center" style="background:#F7F8FA; border-top:1px solid #D9E0E8; padding:23px 38px 25px; text-align:center; color:#4B5563;">
+              <p style="margin:0 0 11px; font-size:13px; font-weight:bold; line-height:19px; color:#0B2545;">Lexocrates Legal Services</p>
+
+              <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 17px;">
+                <tr>
+                  <td style="padding-right:10px;">
+                    <a href="https://www.lexocrates.com/" target="_blank" title="Lexocrates website" style="display:inline-block; border:1px solid #CBD5E1; border-radius:4px; padding:7px 11px; color:#0B2545; background:#FFFFFF; font-size:12px; line-height:18px; font-weight:bold; text-decoration:none;"><span aria-hidden="true" style="font-size:14px; vertical-align:middle;">&#127760;</span> &nbsp;Website</a>
+                  </td>
+                  <td>
+                    <a href="https://www.linkedin.com/company/lexocrates-legal-services-pvt-ltd/" target="_blank" title="Lexocrates on LinkedIn" style="display:inline-block; border:1px solid #CBD5E1; border-radius:4px; padding:7px 11px; color:#0B2545; background:#FFFFFF; font-size:12px; line-height:18px; font-weight:bold; text-decoration:none;"><span aria-hidden="true" style="font-size:14px;">in</span> &nbsp;LinkedIn</a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 4px; font-size:10px; font-weight:bold; line-height:15px; color:#6B7280;">Confidentiality Notice</p>
+              <p style="margin:0; font-size:10px; line-height:15px; color:#7A8492;">This email may contain confidential information. If you received it in error, please notify the sender and delete it.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def _branded_email(tagline: str, body: str) -> str:
+	"""Wrap one template's body content in the shared Lexocrates branded header
+	(logo + tagline on navy background) and footer (website/LinkedIn +
+	confidentiality notice). A plain string replace, not .format()/%, because
+	the body is full of literal Jinja {{ }} expressions that must survive
+	untouched for rendering at send time."""
+	return _EMAIL_HEADER.replace("{{TAGLINE}}", tagline) + body + _EMAIL_FOOTER
+
+
 def ensure_lexocrates_email_templates():
 	"""Create or update canonical Lexocrates email templates without any third-party branding."""
 	templates = [
@@ -529,9 +604,7 @@ def ensure_lexocrates_email_templates():
 			"name": "Lexocrates Welcome & Portal Invitation",
 			"subject": "Welcome to Lexocrates Legal Operations Platform",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Welcome to Lexocrates</h2>
-	<p>Dear {{ user or recipient_name or 'Client' }},</p>
+			"response_html": _branded_email("Welcome to Lexocrates", """	<p>Dear {{ user or recipient_name or 'Client' }},</p>
 	<p>Your secure access to the <strong>Lexocrates Legal Operations Platform</strong> has been initialized.</p>
 	<p>Through the portal, you can:</p>
 	<ul style="padding-left: 20px; color: #334155; margin: 16px 0;">
@@ -545,15 +618,13 @@ def ensure_lexocrates_email_templates():
 	</p>
 	<p style="color: #64748b; font-size: 13px;">If you have any questions or require onboarding assistance, reply directly to this email.</p>
 	<p style="margin-top: 24px;">Warm regards,<br><strong>Lexocrates Client Operations</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates Password Reset & Security Code",
 			"subject": "Lexocrates Security: Reset Your Account Password",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Security Verification & Password Reset</h2>
-	<p>Hello {{ user_name or 'User' }},</p>
+			"response_html": _branded_email("Security Verification & Password Reset", """	<p>Hello {{ user_name or 'User' }},</p>
 	<p>We received a request to reset the password for your <strong>Lexocrates</strong> account (<code>{{ user }}</code>).</p>
 	<p>Please click the button below to set a new secure password:</p>
 	<p style="margin: 24px 0;">
@@ -561,15 +632,13 @@ def ensure_lexocrates_email_templates():
 	</p>
 	<p style="color: #64748b; font-size: 13px;">This link is valid for a limited time. If you did not request this change, you can safely disregard this email or contact our security team immediately.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Security & Trust</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates New Legal Matter Created",
 			"subject": "New Legal Matter Initialized: {{ doc.name }} - {{ doc.matter_title }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Legal Matter Confirmation</h2>
-	<p>Dear {{ doc.client_name or 'Client' }},</p>
+			"response_html": _branded_email("Legal Matter Confirmation", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
 	<p>A new legal matter has been successfully opened and registered on the Lexocrates Operations Platform.</p>
 	<table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
 		<tr style="background-color: #0f172a; color: #ffffff;">
@@ -589,15 +658,13 @@ def ensure_lexocrates_email_templates():
 		<a href="{{ frappe.utils.get_url('/app/lpo-matter/' + doc.name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 11px 24px; border-radius: 6px; font-weight: 600; text-decoration: none;">Open Matter in Workspace →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Legal Operations</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates Legal Matter Status Update",
 			"subject": "Matter Status Update: {{ doc.name }} is now {{ doc.status }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Matter Status Milestone</h2>
-	<p>Dear {{ doc.client_name or 'Client' }},</p>
+			"response_html": _branded_email("Matter Status Milestone", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
 	<p>Please be advised that legal matter <strong>{{ doc.name }}</strong> ({{ doc.matter_title }}) has transitioned to status: <span style="display: inline-block; padding: 3px 10px; border-radius: 999px; background: #e0f2fe; color: #0284c7; font-weight: 700; font-size: 13px;">{{ doc.status }}</span>.</p>
 	<div style="margin: 20px 0; padding: 16px; background-color: #f8fafc; border-left: 4px solid #0284c7; border-radius: 4px;">
 		<strong>Latest Operational Notes:</strong><br>
@@ -607,15 +674,13 @@ def ensure_lexocrates_email_templates():
 		<a href="{{ frappe.utils.get_url('/app/lpo-matter/' + doc.name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 11px 24px; border-radius: 6px; font-weight: 600; text-decoration: none;">Review Matter Progress →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Legal Operations</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates LPO Job Assignment",
 			"subject": "Task Assigned: {{ doc.name }} - {{ doc.job_title }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">New Job Assignment</h2>
-	<p>Dear {{ doc.assigned_analyst or 'Team Member' }},</p>
+			"response_html": _branded_email("New Job Assignment", """	<p>Dear {{ doc.assigned_analyst or 'Team Member' }},</p>
 	<p>You have been assigned to execute the following legal task under Matter <strong>{{ doc.engagement }}</strong>:</p>
 	<table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
 		<tr style="background-color: #0f172a; color: #ffffff;">
@@ -635,30 +700,26 @@ def ensure_lexocrates_email_templates():
 		<a href="{{ frappe.utils.get_url('/app/lpo-job/' + doc.name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 11px 24px; border-radius: 6px; font-weight: 600; text-decoration: none;">Open Job Task →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Operations Desk</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates LPO Job Deliverable Ready",
 			"subject": "Deliverable Ready for Review: {{ doc.job_title }} (Matter: {{ doc.engagement }})",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Work Deliverable Ready</h2>
-	<p>Dear {{ doc.client_name or 'Client' }},</p>
+			"response_html": _branded_email("Work Deliverable Ready", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
 	<p>We are pleased to inform you that the deliverables for task <strong>{{ doc.name }}</strong> (<em>{{ doc.job_title }}</em>) have been completed, audited for quality, and uploaded to your secure workspace.</p>
 	<p style="margin: 24px 0;">
 		<a href="https://engine.lexocrates.com/client-portal#approvals" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 12px 26px; border-radius: 6px; font-weight: 600; text-decoration: none;">Download & Review Deliverable →</a>
 	</p>
 	<p>Please review the work product and provide your comments or approval via the portal chat.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Legal Team</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates QA Review & Approval Notice",
 			"subject": "QA Audit Certificate Passed: {{ doc.name }} for Job {{ doc.job }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Quality Assurance Audit Clearance</h2>
-	<p>Hello Team,</p>
+			"response_html": _branded_email("Quality Assurance Audit Clearance", """	<p>Hello Team,</p>
 	<p>Quality Review audit record <strong>{{ doc.name }}</strong> for Job <strong>{{ doc.job }}</strong> has been completed with status: <strong style="color: #16a34a;">{{ doc.review_status }}</strong>.</p>
 	<table style="width: 100%; border-collapse: collapse; margin: 18px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
 		<tr style="background-color: #0f172a; color: #ffffff;">
@@ -673,15 +734,13 @@ def ensure_lexocrates_email_templates():
 		</tr>
 	</table>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Quality & Compliance</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates Work Intake Acknowledgment",
 			"subject": "Work Intake Request Received: {{ doc.name }} - {{ doc.title }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Work Intake Acknowledgment</h2>
-	<p>Dear {{ doc.submitted_by or 'Client' }},</p>
+			"response_html": _branded_email("Work Intake Acknowledgment", """	<p>Dear {{ doc.submitted_by or 'Client' }},</p>
 	<p>Thank you for submitting your legal intake request. We have received your request and assigned reference <strong>{{ doc.name }}</strong>.</p>
 	<div style="margin: 18px 0; padding: 16px; background-color: #f8fafc; border-left: 4px solid #0284c7; border-radius: 4px;">
 		<strong>Intake Title:</strong> {{ doc.title }}<br>
@@ -690,15 +749,13 @@ def ensure_lexocrates_email_templates():
 	</div>
 	<p>Our intake counsel is currently reviewing your documentation and will provide scoping and fixed-quote terms within the standard SLA window.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Intake Desk</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates Fixed Quote Proposal",
 			"subject": "Fixed-Fee Legal Quote Proposal: {{ doc.name }} - {{ doc.title }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Fixed-Fee Legal Proposal</h2>
-	<p>Dear {{ doc.client_name or 'Client' }},</p>
+			"response_html": _branded_email("Fixed-Fee Legal Proposal", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
 	<p>We are pleased to provide the fixed-fee quotation for <strong>{{ doc.title }}</strong> (Reference: <code>{{ doc.name }}</code>).</p>
 	<div style="margin: 20px 0; padding: 20px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; text-align: center;">
 		<span style="font-size: 13px; color: #166534; font-weight: 600; text-transform: uppercase;">Fixed Quote Amount</span>
@@ -709,15 +766,13 @@ def ensure_lexocrates_email_templates():
 		<a href="{{ frappe.utils.get_url('/app/lexocrates-work-intake/' + doc.name) }}" style="display: inline-block; background-color: #16a34a; color: #ffffff; padding: 12px 28px; border-radius: 6px; font-weight: 700; text-decoration: none;">Review & Accept Proposal →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Commercial Operations</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates Sales Invoice & Payment Link",
 			"subject": "Invoice {{ doc.name }} from Lexocrates Legal Services",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Invoice for Legal Services</h2>
-	<p>Dear {{ doc.customer_name or 'Client' }},</p>
+			"response_html": _branded_email("Invoice for Legal Services", """	<p>Dear {{ doc.customer_name or 'Client' }},</p>
 	<p>Please find details for Invoice <strong>{{ doc.name }}</strong> issued by Lexocrates Legal Services.</p>
 	<table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
 		<tr style="background-color: #0f172a; color: #ffffff;">
@@ -737,15 +792,13 @@ def ensure_lexocrates_email_templates():
 		<a href="{{ frappe.utils.get_url('/app/sales-invoice/' + doc.name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 12px 26px; border-radius: 6px; font-weight: 600; text-decoration: none;">View Invoice & Pay Online →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Finance Operations</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates Payment Receipt & Confirmation",
 			"subject": "Payment Receipt for Invoice {{ doc.name or doc.voucher_no }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Payment Confirmation & Receipt</h2>
-	<p>Dear {{ doc.party_name or doc.customer or 'Client' }},</p>
+			"response_html": _branded_email("Payment Confirmation & Receipt", """	<p>Dear {{ doc.party_name or doc.customer or 'Client' }},</p>
 	<p>We gratefully acknowledge receipt of your payment for <strong>{{ doc.name or doc.voucher_no }}</strong>.</p>
 	<div style="margin: 20px 0; padding: 20px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">
 		<table style="width: 100%; border-collapse: collapse;">
@@ -765,15 +818,13 @@ def ensure_lexocrates_email_templates():
 	</div>
 	<p>Your client ledger and matter balances have been updated in real-time.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Accounts & Finance</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates LexPack Legal Capacity Purchase",
 			"subject": "LexPack Legal Capacity Purchase Confirmed - {{ doc.plan_name }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">LexPack Legal Capacity Confirmed</h2>
-	<p>Dear {{ doc.client_name or 'Client' }},</p>
+			"response_html": _branded_email("LexPack Legal Capacity Confirmed", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
 	<p>Your purchase of <strong>{{ doc.plan_name }}</strong> LexPack Legal Capacity bundle has been processed successfully.</p>
 	<div style="margin: 20px 0; padding: 20px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
 		<table style="width: 100%; border-collapse: collapse;">
@@ -793,15 +844,13 @@ def ensure_lexocrates_email_templates():
 	</div>
 	<p>Your Legal Capacity does not expire and can be used for eligible legal assignments in the same currency.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates LexPack Services</strong></p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates Website Contact - Sales Notification",
 			"subject": "New website enquiry: {{ request_subject }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">New Website Enquiry</h2>
-	<p>A new enquiry has been submitted through the Lexocrates compliance contact page.</p>
+			"response_html": _branded_email("New Website Enquiry", """	<p>A new enquiry has been submitted through the Lexocrates compliance contact page.</p>
 	<table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #e2e8f0;">
 		<tr><th style="width: 150px; padding: 9px 12px; text-align: left; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">CRM Lead</th><td style="padding: 9px 12px; border-bottom: 1px solid #e2e8f0;"><a href="{{ lead_url }}" style="color: #0284c7;">{{ lead_name }}</a></td></tr>
 		<tr><th style="padding: 9px 12px; text-align: left; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">Contact</th><td style="padding: 9px 12px; border-bottom: 1px solid #e2e8f0;">{{ request_name }}</td></tr>
@@ -812,20 +861,57 @@ def ensure_lexocrates_email_templates():
 	<div style="margin: 18px 0; padding: 16px; white-space: pre-wrap; background: #f8fafc; border-left: 4px solid #0284c7; border-radius: 4px;">{{ request_message }}</div>
 	<p style="margin: 24px 0;"><a href="{{ lead_url }}" style="display: inline-block; background: #0284c7; color: #fff; padding: 11px 22px; border-radius: 6px; font-weight: 700; text-decoration: none;">Open CRM Lead →</a></p>
 	<p style="color: #64748b; font-size: 13px;">Service level: acknowledge the sender within 24 business hours. Replying to this notification will address the enquiry sender.</p>
-</div>"""
+""")
 		},
 		{
 			"name": "Lexocrates General Legal Communication",
 			"subject": "Lexocrates Communication: {{ subject or 'Notice' }}",
 			"use_html": 1,
-			"response_html": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6;">
-	<p>Dear {{ recipient_name or 'Client' }},</p>
+			"response_html": _branded_email("Lexocrates Communication", """	<p>Dear {{ recipient_name or 'Client' }},</p>
 	<div style="margin: 20px 0; padding: 18px; background-color: #f8fafc; border-left: 4px solid #0284c7; border-radius: 4px;">
 		{{ message_body or content }}
 	</div>
 	<p>For more details or actions, please visit the <a href="{{ link or frappe.utils.get_url() }}" style="color: #0284c7; font-weight: 600;">Lexocrates Portal</a>.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Legal Services</strong></p>
-</div>"""
+""")
+		},
+		{
+			"name": "Lexocrates Pilot Engagement Outreach",
+			"subject": "Know the cost before you delegate.",
+			"use_html": 1,
+			"response_html": _branded_email("Know the cost before you delegate.", """              <p style="margin:0 0 16px; color:#111111;">Dear {{ doc.first_name }},</p>
+
+              <p style="margin:0 0 16px; color:#111111;">A legal assignment may be ready to delegate, but the decision often pauses at one question: what will it cost?</p>
+
+              <p style="margin:0 0 16px; color:#111111;">When the answer depends on how many hours the work eventually takes, it can be difficult to budget for the assignment or discuss the cost with your client in advance.</p>
+
+              <p style="margin:0 0 16px; color:#111111;">At Lexocrates, we bring that conversation forward. Once you share an assignment, <strong>Lextimator™</strong> assesses its scope, volume, complexity, and delivery requirements, then provides a confirmed fixed quotation before work begins. You can review the quotation and decide whether you wish to proceed.</p>
+
+              <p style="margin:0 0 10px; color:#111111;">For firms with ongoing legal support needs, <strong>LexPack™</strong> lets you prepay for legal processing capacity and save on eligible assignments. Choose the tier that fits your expected volume:</p>
+
+              <ul style="margin:0 0 16px; padding-left:24px; color:#111111;">
+                <li>Starter — 7% savings</li>
+                <li>Growth — 14% savings</li>
+                <li>Professional — 21% savings</li>
+                <li>Business — 28% savings</li>
+              </ul>
+
+              <p style="margin:0 0 16px; color:#111111;">There’s no monthly retainer or expiration date.</p>
+
+              <p style="margin:0 0 16px; color:#111111;">We support law firms with legal research and memoranda, litigation support, document review, and related legal workflows.</p>
+
+              <p style="margin:0 0 16px; color:#111111;"><strong>Experience Lexocrates before you commit.</strong> Start with a complimentary, limited-scope Pilot Engagement. Share a suitable legal task and see our work quality, responsiveness, and process firsthand.</p>
+
+              <p style="margin:0 0 16px; color:#111111;">If you decide to continue, Lextimator™ provides a fixed quotation before each assignment. You can work with us one assignment at a time or choose LexPack™ for ongoing work. No subscription or LexPack™ purchase is needed for the pilot.</p>
+
+              <p style="margin:0 0 16px; color:#111111;">If you have an assignment you’re considering delegating, simply reply to this email. I’d be glad to discuss the requirements and explain how we would assess it.</p>
+
+              <p style="margin:0 0 24px; color:#111111;">See how our workflow works through the website button below.</p>
+
+              <p style="margin:0 0 16px; color:#111111;">Warm regards,</p>
+
+              <p style="margin:0; line-height:22px; color:#111111;">Khushal Singh Shekhawat<br>Sales and Marketing Manager<br><strong>Lexocrates Legal Services Pvt. Ltd.</strong></p>
+""")
 		},
 	]
 
