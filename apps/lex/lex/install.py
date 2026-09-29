@@ -522,78 +522,79 @@ def ensure_lexocrates_branding():
 		frappe.clear_cache()
 
 
-_EMAIL_HEADER = """<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="x-apple-disable-message-reformatting">
-  <title>Lexocrates Legal Services</title>
-  <style>
-    body, table, td, p, a, li { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; font-family:Arial, Helvetica, sans-serif; }
-    table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse !important; }
-    img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; }
-    body { margin:0 !important; padding:0 !important; width:100% !important; background:#F3F4F6; }
-    @media screen and (max-width:600px) {
-      .email-card { width:100% !important; max-width:100% !important; }
-      .card-body { padding:26px 20px !important; }
-      .card-header { padding:24px 22px !important; }
-      .card-footer { padding:22px 20px !important; }
-    }
-  </style>
-</head>
-<body style="margin:0; padding:0; background:#F3F4F6;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;">
-    <tr>
-      <td align="center" style="padding:32px 12px;">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" class="email-card" style="width:100%; max-width:600px; background:#FFFFFF;">
-          <tr>
-            <td class="card-header" align="left" style="background:#0B2545; border-bottom:3px solid #3476B9; padding:28px 38px 30px 20px; text-align:left;">
-              <img src="https://engine.lexocrates.com/assets/lex/images/lexocrates-logo-light.svg" alt="Lexocrates logo" width="180" style="display:block; width:180px; max-width:100%; height:auto; color:#FFFFFF;">
-              <p style="margin:16px 0 0; padding-left:18px; font-size:20px; font-weight:bold; line-height:27px; letter-spacing:.1px; color:#FFFFFF;">{{TAGLINE}}</p>
-            </td>
-          </tr>
-          <tr>
-            <td class="card-body" style="background:#FFFFFF; padding:38px 38px 32px; font-size:14.5px; line-height:24px; color:#111111;">
+_EMAIL_HEADER = """<style>
+  body, table, td, p, a, li { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; font-family:Arial, Helvetica, sans-serif; }
+  table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse !important; }
+  img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; }
+  @media screen and (max-width:600px) {
+    .email-card { width:100% !important; max-width:100% !important; }
+    .card-body { padding:26px 20px !important; }
+    .card-header { padding:24px 22px !important; }
+    .card-footer { padding:22px 20px !important; }
+  }
+</style>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;">
+  <tr>
+    <td align="center" style="padding:32px 12px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" class="email-card" style="width:100%; max-width:600px; background:#FFFFFF;">
+        <tr>
+          <td class="card-header" align="left" style="background:#0B2545; border-bottom:3px solid #3476B9; padding:28px 38px 30px 20px; text-align:left;">
+            <img src="https://engine.lexocrates.com/assets/lex/images/lexocrates-logo-light.svg" alt="Lexocrates logo" width="180" style="display:block; width:180px; max-width:100%; height:auto; color:#FFFFFF;">
+            <p style="margin:16px 0 0; padding-left:18px; font-size:20px; font-weight:bold; line-height:27px; letter-spacing:.1px; color:#FFFFFF;">{{TAGLINE}}</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="card-body" style="background:#FFFFFF; padding:38px 38px 32px; font-size:14.5px; line-height:24px; color:#111111;">
 """
 
 _EMAIL_FOOTER = """
-            </td>
-          </tr>
-          <tr>
-            <td class="card-footer" align="center" style="background:#F7F8FA; border-top:1px solid #D9E0E8; padding:23px 38px 25px; text-align:center; color:#4B5563;">
-              <p style="margin:0 0 11px; font-size:13px; font-weight:bold; line-height:19px; color:#0B2545;">Lexocrates Legal Services</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="card-footer" align="center" style="background:#F7F8FA; border-top:1px solid #D9E0E8; padding:23px 38px 25px; text-align:center; color:#4B5563;">
+            <p style="margin:0 0 11px; font-size:13px; font-weight:bold; line-height:19px; color:#0B2545;">Lexocrates Legal Services</p>
 
-              <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 17px;">
-                <tr>
-                  <td style="padding-right:10px;">
-                    <a href="https://www.lexocrates.com/" target="_blank" title="Lexocrates website" style="display:inline-block; border:1px solid #CBD5E1; border-radius:4px; padding:7px 11px; color:#0B2545; background:#FFFFFF; font-size:12px; line-height:18px; font-weight:bold; text-decoration:none;"><span aria-hidden="true" style="font-size:14px; vertical-align:middle;">&#127760;</span> &nbsp;Website</a>
-                  </td>
-                  <td>
-                    <a href="https://www.linkedin.com/company/lexocrates-legal-services-pvt-ltd/" target="_blank" title="Lexocrates on LinkedIn" style="display:inline-block; border:1px solid #CBD5E1; border-radius:4px; padding:7px 11px; color:#0B2545; background:#FFFFFF; font-size:12px; line-height:18px; font-weight:bold; text-decoration:none;"><span aria-hidden="true" style="font-size:14px;">in</span> &nbsp;LinkedIn</a>
-                  </td>
-                </tr>
-              </table>
+            <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 17px;">
+              <tr>
+                <td style="padding-right:10px;">
+                  <a href="https://www.lexocrates.com/" target="_blank" title="Lexocrates website" style="display:inline-block; border:1px solid #CBD5E1; border-radius:4px; padding:7px 11px; color:#0B2545; background:#FFFFFF; font-size:12px; line-height:18px; font-weight:bold; text-decoration:none;"><span aria-hidden="true" style="font-size:14px; vertical-align:middle;">&#127760;</span> &nbsp;Website</a>
+                </td>
+                <td>
+                  <a href="https://www.linkedin.com/company/lexocrates-legal-services-pvt-ltd/" target="_blank" title="Lexocrates on LinkedIn" style="display:inline-block; border:1px solid #CBD5E1; border-radius:4px; padding:7px 11px; color:#0B2545; background:#FFFFFF; font-size:12px; line-height:18px; font-weight:bold; text-decoration:none;"><span aria-hidden="true" style="font-size:14px;">in</span> &nbsp;LinkedIn</a>
+                </td>
+              </tr>
+            </table>
 
-              <p style="margin:0 0 4px; font-size:10px; font-weight:bold; line-height:15px; color:#6B7280;">Confidentiality Notice</p>
-              <p style="margin:0; font-size:10px; line-height:15px; color:#7A8492;">This email may contain confidential information. If you received it in error, please notify the sender and delete it.</p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>"""
+            <p style="margin:0 0 4px; font-size:10px; font-weight:bold; line-height:15px; color:#6B7280;">Confidentiality Notice</p>
+            <p style="margin:0; font-size:10px; line-height:15px; color:#7A8492;">This email may contain confidential information. If you received it in error, please notify the sender and delete it.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>"""
 
 
 def _branded_email(tagline: str, body: str) -> str:
 	"""Wrap one template's body content in the shared Lexocrates branded header
 	(logo + tagline on navy background) and footer (website/LinkedIn +
-	confidentiality notice). A plain string replace, not .format()/%, because
-	the body is full of literal Jinja {{ }} expressions that must survive
-	untouched for rendering at send time."""
+	confidentiality notice).
+
+	Deliberately a *fragment* (no <!DOCTYPE>/<html>/<head>/<body>): Frappe's
+	frappe.sendmail() unconditionally re-wraps whatever `message` it is given
+	inside its own templates/emails/standard.html shell (`<p>{{ content }}</p>`,
+	see frappe/email/email_body.py get_formatted_html) — there is no supported
+	way to opt out of that wrapper. Handing it a second complete HTML document
+	as "content" nested a real <html> inside Frappe's own <html><body>, which
+	most mail clients then mangle (stripping the nested <style>/<head> and
+	falling back to unstyled/plain rendering — the "old" template the user
+	kept seeing). Handing it a fragment instead lets Frappe's own shell — which
+	adds no visible branding of its own here since header/with_container are
+	never passed — carry it without conflict.
+
+	A plain string replace, not .format()/%, because the body is full of
+	literal Jinja {{ }} expressions that must survive untouched for rendering
+	at send time."""
 	return _EMAIL_HEADER.replace("{{TAGLINE}}", tagline) + body + _EMAIL_FOOTER
 
 
