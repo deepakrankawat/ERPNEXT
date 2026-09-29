@@ -637,9 +637,9 @@ def ensure_lexocrates_email_templates():
 		},
 		{
 			"name": "Lexocrates New Legal Matter Created",
-			"subject": "New Legal Matter Initialized: {{ doc.name }} - {{ doc.matter_title }}",
+			"subject": "New Legal Matter Initialized: {{ name }} - {{ matter_title }}",
 			"use_html": 1,
-			"response_html": _branded_email("Legal Matter Confirmation", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
+			"response_html": _branded_email("Legal Matter Confirmation", """	<p>Dear {{ client_name or 'Client' }},</p>
 	<p>A new legal matter has been successfully opened and registered on the Lexocrates Operations Platform.</p>
 	<table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
 		<tr style="background-color: #0f172a; color: #ffffff;">
@@ -649,40 +649,40 @@ def ensure_lexocrates_email_templates():
 			<th style="padding: 10px 14px; text-align: left; font-size: 13px;">Lead Manager</th>
 		</tr>
 		<tr style="background-color: #f8fafc;">
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0; font-weight: 700; color: #0284c7;">{{ doc.name }}</td>
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ doc.matter_title }}</td>
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ doc.practice_area or 'General LPO' }}</td>
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ doc.matter_manager or 'Assigned Team' }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0; font-weight: 700; color: #0284c7;">{{ name }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ matter_title }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ practice_area or 'General LPO' }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ matter_manager or 'Assigned Team' }}</td>
 		</tr>
 	</table>
 	<p style="margin: 24px 0;">
-		<a href="{{ frappe.utils.get_url('/app/lpo-matter/' + doc.name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 11px 24px; border-radius: 6px; font-weight: 600; text-decoration: none;">Open Matter in Workspace →</a>
+		<a href="{{ frappe.utils.get_url('/app/lpo-matter/' + name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 11px 24px; border-radius: 6px; font-weight: 600; text-decoration: none;">Open Matter in Workspace →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Legal Operations</strong></p>
 """)
 		},
 		{
 			"name": "Lexocrates Legal Matter Status Update",
-			"subject": "Matter Status Update: {{ doc.name }} is now {{ doc.status }}",
+			"subject": "Matter Status Update: {{ name }} is now {{ status }}",
 			"use_html": 1,
-			"response_html": _branded_email("Matter Status Milestone", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
-	<p>Please be advised that legal matter <strong>{{ doc.name }}</strong> ({{ doc.matter_title }}) has transitioned to status: <span style="display: inline-block; padding: 3px 10px; border-radius: 999px; background: #e0f2fe; color: #0284c7; font-weight: 700; font-size: 13px;">{{ doc.status }}</span>.</p>
+			"response_html": _branded_email("Matter Status Milestone", """	<p>Dear {{ client_name or 'Client' }},</p>
+	<p>Please be advised that legal matter <strong>{{ name }}</strong> ({{ matter_title }}) has transitioned to status: <span style="display: inline-block; padding: 3px 10px; border-radius: 999px; background: #e0f2fe; color: #0284c7; font-weight: 700; font-size: 13px;">{{ status }}</span>.</p>
 	<div style="margin: 20px 0; padding: 16px; background-color: #f8fafc; border-left: 4px solid #0284c7; border-radius: 4px;">
 		<strong>Latest Operational Notes:</strong><br>
-		{{ doc.description or 'Work is progressing according to agreed SLA guidelines.' }}
+		{{ description or 'Work is progressing according to agreed SLA guidelines.' }}
 	</div>
 	<p style="margin: 24px 0;">
-		<a href="{{ frappe.utils.get_url('/app/lpo-matter/' + doc.name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 11px 24px; border-radius: 6px; font-weight: 600; text-decoration: none;">Review Matter Progress →</a>
+		<a href="{{ frappe.utils.get_url('/app/lpo-matter/' + name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 11px 24px; border-radius: 6px; font-weight: 600; text-decoration: none;">Review Matter Progress →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Legal Operations</strong></p>
 """)
 		},
 		{
 			"name": "Lexocrates LPO Job Assignment",
-			"subject": "Task Assigned: {{ doc.name }} - {{ doc.job_title }}",
+			"subject": "Task Assigned: {{ name }} - {{ job_title }}",
 			"use_html": 1,
-			"response_html": _branded_email("New Job Assignment", """	<p>Dear {{ doc.assigned_analyst or 'Team Member' }},</p>
-	<p>You have been assigned to execute the following legal task under Matter <strong>{{ doc.engagement }}</strong>:</p>
+			"response_html": _branded_email("New Job Assignment", """	<p>Dear {{ assigned_analyst or 'Team Member' }},</p>
+	<p>You have been assigned to execute the following legal task under Matter <strong>{{ engagement }}</strong>:</p>
 	<table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
 		<tr style="background-color: #0f172a; color: #ffffff;">
 			<th style="padding: 10px 14px; text-align: left; font-size: 13px;">Job ID</th>
@@ -691,24 +691,24 @@ def ensure_lexocrates_email_templates():
 			<th style="padding: 10px 14px; text-align: left; font-size: 13px;">Status</th>
 		</tr>
 		<tr style="background-color: #f8fafc;">
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0; font-weight: 700; color: #0284c7;">{{ doc.name }}</td>
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ doc.job_title }}</td>
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ doc.priority or 'Medium' }}</td>
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ doc.job_status or 'Draft' }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0; font-weight: 700; color: #0284c7;">{{ name }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ job_title }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ priority or 'Medium' }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ job_status or 'Draft' }}</td>
 		</tr>
 	</table>
 	<p style="margin: 24px 0;">
-		<a href="{{ frappe.utils.get_url('/app/lpo-job/' + doc.name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 11px 24px; border-radius: 6px; font-weight: 600; text-decoration: none;">Open Job Task →</a>
+		<a href="{{ frappe.utils.get_url('/app/lpo-job/' + name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 11px 24px; border-radius: 6px; font-weight: 600; text-decoration: none;">Open Job Task →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Operations Desk</strong></p>
 """)
 		},
 		{
 			"name": "Lexocrates LPO Job Deliverable Ready",
-			"subject": "Deliverable Ready for Review: {{ doc.job_title }} (Matter: {{ doc.engagement }})",
+			"subject": "Deliverable Ready for Review: {{ job_title }} (Matter: {{ engagement }})",
 			"use_html": 1,
-			"response_html": _branded_email("Work Deliverable Ready", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
-	<p>We are pleased to inform you that the deliverables for task <strong>{{ doc.name }}</strong> (<em>{{ doc.job_title }}</em>) have been completed, audited for quality, and uploaded to your secure workspace.</p>
+			"response_html": _branded_email("Work Deliverable Ready", """	<p>Dear {{ client_name or 'Client' }},</p>
+	<p>We are pleased to inform you that the deliverables for task <strong>{{ name }}</strong> (<em>{{ job_title }}</em>) have been completed, audited for quality, and uploaded to your secure workspace.</p>
 	<p style="margin: 24px 0;">
 		<a href="https://engine.lexocrates.com/client-portal#approvals" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 12px 26px; border-radius: 6px; font-weight: 600; text-decoration: none;">Download & Review Deliverable →</a>
 	</p>
@@ -718,10 +718,10 @@ def ensure_lexocrates_email_templates():
 		},
 		{
 			"name": "Lexocrates QA Review & Approval Notice",
-			"subject": "QA Audit Certificate Passed: {{ doc.name }} for Job {{ doc.job }}",
+			"subject": "QA Audit Certificate Passed: {{ name }} for Job {{ job }}",
 			"use_html": 1,
 			"response_html": _branded_email("Quality Assurance Audit Clearance", """	<p>Hello Team,</p>
-	<p>Quality Review audit record <strong>{{ doc.name }}</strong> for Job <strong>{{ doc.job }}</strong> has been completed with status: <strong style="color: #16a34a;">{{ doc.review_status }}</strong>.</p>
+	<p>Quality Review audit record <strong>{{ name }}</strong> for Job <strong>{{ job }}</strong> has been completed with status: <strong style="color: #16a34a;">{{ review_status }}</strong>.</p>
 	<table style="width: 100%; border-collapse: collapse; margin: 18px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
 		<tr style="background-color: #0f172a; color: #ffffff;">
 			<th style="padding: 9px 12px; text-align: left; font-size: 13px;">Reviewer</th>
@@ -729,9 +729,9 @@ def ensure_lexocrates_email_templates():
 			<th style="padding: 9px 12px; text-align: left; font-size: 13px;">Status</th>
 		</tr>
 		<tr style="background-color: #f8fafc;">
-			<td style="padding: 9px 12px; border-top: 1px solid #e2e8f0;">{{ doc.reviewer }}</td>
-			<td style="padding: 9px 12px; border-top: 1px solid #e2e8f0; font-weight: 700;">{{ doc.score or '100%' }}</td>
-			<td style="padding: 9px 12px; border-top: 1px solid #e2e8f0; color: #16a34a; font-weight: 700;">{{ doc.review_status }}</td>
+			<td style="padding: 9px 12px; border-top: 1px solid #e2e8f0;">{{ reviewer }}</td>
+			<td style="padding: 9px 12px; border-top: 1px solid #e2e8f0; font-weight: 700;">{{ score or '100%' }}</td>
+			<td style="padding: 9px 12px; border-top: 1px solid #e2e8f0; color: #16a34a; font-weight: 700;">{{ review_status }}</td>
 		</tr>
 	</table>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Quality & Compliance</strong></p>
@@ -739,14 +739,14 @@ def ensure_lexocrates_email_templates():
 		},
 		{
 			"name": "Lexocrates Work Intake Acknowledgment",
-			"subject": "Work Intake Request Received: {{ doc.name }} - {{ doc.title }}",
+			"subject": "Work Intake Request Received: {{ name }} - {{ title }}",
 			"use_html": 1,
-			"response_html": _branded_email("Work Intake Acknowledgment", """	<p>Dear {{ doc.submitted_by or 'Client' }},</p>
-	<p>Thank you for submitting your legal intake request. We have received your request and assigned reference <strong>{{ doc.name }}</strong>.</p>
+			"response_html": _branded_email("Work Intake Acknowledgment", """	<p>Dear {{ submitted_by or 'Client' }},</p>
+	<p>Thank you for submitting your legal intake request. We have received your request and assigned reference <strong>{{ name }}</strong>.</p>
 	<div style="margin: 18px 0; padding: 16px; background-color: #f8fafc; border-left: 4px solid #0284c7; border-radius: 4px;">
-		<strong>Intake Title:</strong> {{ doc.title }}<br>
-		<strong>Service Stream:</strong> {{ doc.service_stream or 'General LPO' }}<br>
-		<strong>Urgency:</strong> {{ doc.urgency or 'Standard' }}
+		<strong>Intake Title:</strong> {{ title }}<br>
+		<strong>Service Stream:</strong> {{ service_stream or 'General LPO' }}<br>
+		<strong>Urgency:</strong> {{ urgency or 'Standard' }}
 	</div>
 	<p>Our intake counsel is currently reviewing your documentation and will provide scoping and fixed-quote terms within the standard SLA window.</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Intake Desk</strong></p>
@@ -754,27 +754,27 @@ def ensure_lexocrates_email_templates():
 		},
 		{
 			"name": "Lexocrates Fixed Quote Proposal",
-			"subject": "Fixed-Fee Legal Quote Proposal: {{ doc.name }} - {{ doc.title }}",
+			"subject": "Fixed-Fee Legal Quote Proposal: {{ name }} - {{ title }}",
 			"use_html": 1,
-			"response_html": _branded_email("Fixed-Fee Legal Proposal", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
-	<p>We are pleased to provide the fixed-fee quotation for <strong>{{ doc.title }}</strong> (Reference: <code>{{ doc.name }}</code>).</p>
+			"response_html": _branded_email("Fixed-Fee Legal Proposal", """	<p>Dear {{ client_name or 'Client' }},</p>
+	<p>We are pleased to provide the fixed-fee quotation for <strong>{{ title }}</strong> (Reference: <code>{{ name }}</code>).</p>
 	<div style="margin: 20px 0; padding: 20px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; text-align: center;">
 		<span style="font-size: 13px; color: #166534; font-weight: 600; text-transform: uppercase;">Fixed Quote Amount</span>
-		<div style="font-size: 28px; font-weight: 800; color: #15803d; margin: 4px 0;">{{ doc.currency or '$' }} {{ doc.quote_amount or '0.00' }}</div>
+		<div style="font-size: 28px; font-weight: 800; color: #15803d; margin: 4px 0;">{{ currency or '$' }} {{ quote_amount or '0.00' }}</div>
 		<span style="font-size: 12px; color: #166534;">Includes standard QA audit, revisions, and compliance verification</span>
 	</div>
 	<p style="margin: 24px 0; text-align: center;">
-		<a href="{{ frappe.utils.get_url('/app/lexocrates-work-intake/' + doc.name) }}" style="display: inline-block; background-color: #16a34a; color: #ffffff; padding: 12px 28px; border-radius: 6px; font-weight: 700; text-decoration: none;">Review & Accept Proposal →</a>
+		<a href="{{ frappe.utils.get_url('/app/lexocrates-work-intake/' + name) }}" style="display: inline-block; background-color: #16a34a; color: #ffffff; padding: 12px 28px; border-radius: 6px; font-weight: 700; text-decoration: none;">Review & Accept Proposal →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Commercial Operations</strong></p>
 """)
 		},
 		{
 			"name": "Lexocrates Sales Invoice & Payment Link",
-			"subject": "Invoice {{ doc.name }} from Lexocrates Legal Services",
+			"subject": "Invoice {{ name }} from Lexocrates Legal Services",
 			"use_html": 1,
-			"response_html": _branded_email("Invoice for Legal Services", """	<p>Dear {{ doc.customer_name or 'Client' }},</p>
-	<p>Please find details for Invoice <strong>{{ doc.name }}</strong> issued by Lexocrates Legal Services.</p>
+			"response_html": _branded_email("Invoice for Legal Services", """	<p>Dear {{ customer_name or 'Client' }},</p>
+	<p>Please find details for Invoice <strong>{{ name }}</strong> issued by Lexocrates Legal Services.</p>
 	<table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
 		<tr style="background-color: #0f172a; color: #ffffff;">
 			<th style="padding: 10px 14px; text-align: left; font-size: 13px;">Invoice No</th>
@@ -783,37 +783,37 @@ def ensure_lexocrates_email_templates():
 			<th style="padding: 10px 14px; text-align: right; font-size: 13px;">Grand Total</th>
 		</tr>
 		<tr style="background-color: #f8fafc;">
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0; font-weight: 700; color: #0284c7;">{{ doc.name }}</td>
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ doc.posting_date }}</td>
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ doc.due_date or doc.posting_date }}</td>
-			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0; font-weight: 800; text-align: right; color: #0f172a;">{{ doc.currency }} {{ doc.grand_total }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0; font-weight: 700; color: #0284c7;">{{ name }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ posting_date }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0;">{{ due_date or posting_date }}</td>
+			<td style="padding: 10px 14px; border-top: 1px solid #e2e8f0; font-weight: 800; text-align: right; color: #0f172a;">{{ currency }} {{ grand_total }}</td>
 		</tr>
 	</table>
 	<p style="margin: 24px 0;">
-		<a href="{{ frappe.utils.get_url('/app/sales-invoice/' + doc.name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 12px 26px; border-radius: 6px; font-weight: 600; text-decoration: none;">View Invoice & Pay Online →</a>
+		<a href="{{ frappe.utils.get_url('/app/sales-invoice/' + name) }}" style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 12px 26px; border-radius: 6px; font-weight: 600; text-decoration: none;">View Invoice & Pay Online →</a>
 	</p>
 	<p style="margin-top: 24px;">Sincerely,<br><strong>Lexocrates Finance Operations</strong></p>
 """)
 		},
 		{
 			"name": "Lexocrates Payment Receipt & Confirmation",
-			"subject": "Payment Receipt for Invoice {{ doc.name or doc.voucher_no }}",
+			"subject": "Payment Receipt for Invoice {{ name or voucher_no }}",
 			"use_html": 1,
-			"response_html": _branded_email("Payment Confirmation & Receipt", """	<p>Dear {{ doc.party_name or doc.customer or 'Client' }},</p>
-	<p>We gratefully acknowledge receipt of your payment for <strong>{{ doc.name or doc.voucher_no }}</strong>.</p>
+			"response_html": _branded_email("Payment Confirmation & Receipt", """	<p>Dear {{ party_name or customer or 'Client' }},</p>
+	<p>We gratefully acknowledge receipt of your payment for <strong>{{ name or voucher_no }}</strong>.</p>
 	<div style="margin: 20px 0; padding: 20px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">
 		<table style="width: 100%; border-collapse: collapse;">
 			<tr>
 				<td style="padding: 6px 0; color: #166534; font-size: 13px;">Payment Reference:</td>
-				<td style="padding: 6px 0; font-weight: 700; color: #15803d; text-align: right;">{{ doc.reference_no or doc.name }}</td>
+				<td style="padding: 6px 0; font-weight: 700; color: #15803d; text-align: right;">{{ reference_no or name }}</td>
 			</tr>
 			<tr>
 				<td style="padding: 6px 0; color: #166534; font-size: 13px;">Payment Date:</td>
-				<td style="padding: 6px 0; font-weight: 700; color: #15803d; text-align: right;">{{ doc.posting_date or doc.clearance_date }}</td>
+				<td style="padding: 6px 0; font-weight: 700; color: #15803d; text-align: right;">{{ posting_date or clearance_date }}</td>
 			</tr>
 			<tr>
 				<td style="padding: 6px 0; color: #166534; font-size: 13px;">Amount Cleared:</td>
-				<td style="padding: 6px 0; font-weight: 800; font-size: 18px; color: #15803d; text-align: right;">{{ doc.paid_amount or doc.grand_total }}</td>
+				<td style="padding: 6px 0; font-weight: 800; font-size: 18px; color: #15803d; text-align: right;">{{ paid_amount or grand_total }}</td>
 			</tr>
 		</table>
 	</div>
@@ -823,23 +823,23 @@ def ensure_lexocrates_email_templates():
 		},
 		{
 			"name": "Lexocrates LexPack Legal Capacity Purchase",
-			"subject": "LexPack Legal Capacity Purchase Confirmed - {{ doc.plan_name }}",
+			"subject": "LexPack Legal Capacity Purchase Confirmed - {{ plan_name }}",
 			"use_html": 1,
-			"response_html": _branded_email("LexPack Legal Capacity Confirmed", """	<p>Dear {{ doc.client_name or 'Client' }},</p>
-	<p>Your purchase of <strong>{{ doc.plan_name }}</strong> LexPack Legal Capacity bundle has been processed successfully.</p>
+			"response_html": _branded_email("LexPack Legal Capacity Confirmed", """	<p>Dear {{ client_name or 'Client' }},</p>
+	<p>Your purchase of <strong>{{ plan_name }}</strong> LexPack Legal Capacity bundle has been processed successfully.</p>
 	<div style="margin: 20px 0; padding: 20px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
 		<table style="width: 100%; border-collapse: collapse;">
 			<tr>
 				<td style="padding: 6px 0; color: #64748b;">Bundle Purchased:</td>
-				<td style="padding: 6px 0; font-weight: 700; color: #0f172a; text-align: right;">{{ doc.plan_name }}</td>
+				<td style="padding: 6px 0; font-weight: 700; color: #0f172a; text-align: right;">{{ plan_name }}</td>
 			</tr>
 			<tr>
 				<td style="padding: 6px 0; color: #64748b;">Legal Capacity Credited:</td>
-				<td style="padding: 6px 0; font-weight: 800; font-size: 16px; color: #0284c7; text-align: right;">{{ doc.currency }} {{ doc.legal_capacity_amount }}</td>
+				<td style="padding: 6px 0; font-weight: 800; font-size: 16px; color: #0284c7; text-align: right;">{{ currency }} {{ legal_capacity_amount }}</td>
 			</tr>
 			<tr>
 				<td style="padding: 6px 0; color: #64748b;">Amount Paid:</td>
-				<td style="padding: 6px 0; font-weight: 700; color: #0f172a; text-align: right;">{{ doc.currency or '$' }} {{ doc.price }}</td>
+				<td style="padding: 6px 0; font-weight: 700; color: #0f172a; text-align: right;">{{ currency or '$' }} {{ price }}</td>
 			</tr>
 		</table>
 	</div>
@@ -880,7 +880,7 @@ def ensure_lexocrates_email_templates():
 			"name": "Lexocrates Pilot Engagement Outreach",
 			"subject": "Know the cost before you delegate.",
 			"use_html": 1,
-			"response_html": _branded_email("Know the cost before you delegate.", """              <p style="margin:0 0 16px; color:#111111;">Dear {{ doc.first_name }},</p>
+			"response_html": _branded_email("Know the cost before you delegate.", """              <p style="margin:0 0 16px; color:#111111;">Dear {{ first_name }},</p>
 
               <p style="margin:0 0 16px; color:#111111;">A legal assignment may be ready to delegate, but the decision often pauses at one question: what will it cost?</p>
 

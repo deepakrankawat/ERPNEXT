@@ -161,17 +161,22 @@ def _formatted_sender(sender_user: str | None) -> str | None:
 
 
 def _recipients_and_context(campaign):
+	# Flat field context (not {"doc": ...}) to match how Frappe's own Email
+	# Template rendering (EmailTemplate.get_formatted_response, used by every
+	# "select template" compose box across the system) passes the reference
+	# document's fields directly — templates written as {{ field }} then work
+	# whether dispatched by this scheduler or sent manually.
 	if campaign.email_campaign_for == "Email Group":
 		recipients = frappe.get_all(
 			"Email Group Member",
 			filters={"email_group": campaign.recipient, "unsubscribed": 0},
 			pluck="email",
 		)
-		context = {"doc": frappe.get_doc("Email Group", campaign.recipient)}
+		context = frappe.get_doc("Email Group", campaign.recipient).as_dict()
 	else:
 		email = frappe.db.get_value(campaign.email_campaign_for, campaign.recipient, "email_id")
 		recipients = [email] if email else []
-		context = {"doc": frappe.get_doc(campaign.email_campaign_for, campaign.recipient)}
+		context = frappe.get_doc(campaign.email_campaign_for, campaign.recipient).as_dict()
 	if not recipients:
 		frappe.throw(
 			_("No subscribed email recipients were found for Email Campaign {0}.").format(campaign.name),
