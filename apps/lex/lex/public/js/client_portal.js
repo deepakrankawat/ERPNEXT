@@ -41,11 +41,50 @@
 		return "blue";
 	};
 	const call = (method, args = {}) => frappe.call({ method, args }).then((response) => response.message);
+
+	// frappe.call() has no upload-progress event (it wraps fetch), so a real
+	// byte-level progress bar needs a raw XHR for this one call. Used only for
+	// document uploads, where payloads can run into several MB.
+	function callWithProgress(method, args, onProgress, onUploadDone) {
+		return new Promise((resolve, reject) => {
+			const xhr = new XMLHttpRequest();
+			xhr.open("POST", `/api/method/${method}`);
+			xhr.setRequestHeader("Content-Type", "application/json; charset=utf-8");
+			xhr.setRequestHeader("X-Frappe-CSRF-Token", frappe.csrf_token || "");
+			xhr.upload.onprogress = (event) => {
+				if (onProgress && event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+			};
+			// Fires once the request body has fully left the browser, before the
+			// (possibly multi-second) server-side scan/estimate response arrives —
+			// the right moment to switch the UI from "uploading" to "processing".
+			xhr.upload.onload = () => { if (onUploadDone) onUploadDone(); };
+			xhr.onload = () => {
+				let data;
+				try { data = JSON.parse(xhr.responseText); } catch (error) { return reject(error); }
+				if (xhr.status >= 200 && xhr.status < 300) resolve(data.message);
+				else reject(data);
+			};
+			xhr.onerror = () => reject(new Error("Network error during upload."));
+			xhr.send(JSON.stringify(args));
+		});
+	}
 	const presence = new Map();
 	let currentPresenceUser = null;
 	let presenceHeartbeatTimer = null;
 	let lastPresenceActivity = Date.now();
 	const presenceApi = "lex.lex.doctype.lexocrates_chat_presence.lexocrates_chat_presence";
+
+	// render() re-runs on every in-place section refresh now (see reloadSection),
+	// not just on first page load. These flags let the *_bind functions register
+	// their document/window-level listeners exactly once per page lifetime, while
+	// `current*` refs keep those listeners pointed at each refresh's latest
+	// closure instead of firing against a stale, already-replaced DOM/data.
+	let navigationGlobalsBound = false;
+	let navbarGlobalsBound = false;
+	let presenceGlobalsBound = false;
+	let currentActivate = () => {};
+	let currentSetSidebarOpen = () => {};
+	let currentCloseUserMenu = () => {};
 	const fmtDate = (value) => {
 		if (!value) return "—";
 		try { return frappe.datetime.str_to_user(value); }
@@ -109,6 +148,14 @@
 			button.innerHTML = button.dataset.lexIdleHtml;
 			delete button.dataset.lexIdleHtml;
 		}
+	}
+
+	// Same idle-label bookkeeping as setBusy, but shows a live byte-upload percent
+	// instead of a static status string.
+	function setUploadProgress(button, percent) {
+		if (!button.dataset.lexIdleHtml) button.dataset.lexIdleHtml = button.innerHTML;
+		button.disabled = true;
+		button.innerHTML = `<span class="lex-spinner" aria-hidden="true"></span>Uploading... ${percent}%`;
 	}
 
 	function bindLogout(button) {
@@ -236,6 +283,12 @@
 		document.getElementById("lex-presence-select")?.addEventListener("change", (event) => {
 			heartbeatPresence(!document.hidden, event.target.value);
 		});
+		// The activity/visibility/realtime/pagehide wiring below has no per-render
+		// state to go stale (it only touches top-level `lastPresenceActivity` and
+		// the module-level heartbeat functions), so — unlike bindNavigation/bindNavbar
+		// above — it can simply run once and be skipped on later in-place refreshes.
+		if (presenceGlobalsBound) return;
+		presenceGlobalsBound = true;
 		for (const eventName of ["mousemove", "keydown", "click", "touchstart"]) {
 			document.addEventListener(eventName, () => { lastPresenceActivity = Date.now(); }, { passive: true });
 		}
@@ -539,17 +592,27 @@
 			if (section === "messages") loadChat();
 			window.scrollTo({ top: 0, behavior: "smooth" });
 		};
+		// render() now re-runs bindNavigation() on every in-place refresh (see
+		// reloadSection), not just on first page load. activate/setSidebarOpen close
+		// over this call's `root`/`data`, so route the persistent document/window
+		// listeners through mutable top-level refs updated on every call, and
+		// register the listeners themselves only once to avoid piling up duplicates.
+		currentActivate = activate;
+		currentSetSidebarOpen = setSidebarOpen;
 		root.querySelectorAll("[data-section]").forEach((button) => button.addEventListener("click", () => { window.location.hash = button.dataset.section; activate(button.dataset.section); }));
 		root.querySelectorAll("[data-go]").forEach((button) => button.addEventListener("click", () => { window.location.hash = button.dataset.go; activate(button.dataset.go); }));
 		menuButton?.addEventListener("click", () => setSidebarOpen(true));
 		root.querySelectorAll("[data-close-sidebar]").forEach((button) => button.addEventListener("click", () => setSidebarOpen(false)));
-		document.addEventListener("keydown", (event) => {
-			if (event.key === "Escape") setSidebarOpen(false);
-		});
-		window.addEventListener("resize", () => {
-			if (window.innerWidth >= 1080) setSidebarOpen(false);
-		}, { passive: true });
-		window.addEventListener("hashchange", () => activate(window.location.hash.slice(1)), { passive: true });
+		if (!navigationGlobalsBound) {
+			navigationGlobalsBound = true;
+			document.addEventListener("keydown", (event) => {
+				if (event.key === "Escape") currentSetSidebarOpen(false);
+			});
+			window.addEventListener("resize", () => {
+				if (window.innerWidth >= 1080) currentSetSidebarOpen(false);
+			}, { passive: true });
+			window.addEventListener("hashchange", () => currentActivate(window.location.hash.slice(1)), { passive: true });
+		}
 		activate(window.location.hash.slice(1) || "overview");
 	}
 
@@ -563,12 +626,16 @@
 			menu?.classList.toggle('show', open);
 			menuToggle.setAttribute('aria-expanded', String(open));
 		});
-		document.addEventListener('click', (event) => {
+		currentCloseUserMenu = (event) => {
 			if (!event.target.closest('.lex-user-dropdown')) {
 				menu?.classList.remove('show');
 				menuToggle?.setAttribute('aria-expanded', 'false');
 			}
-		});
+		};
+		if (!navbarGlobalsBound) {
+			navbarGlobalsBound = true;
+			document.addEventListener('click', (event) => currentCloseUserMenu(event));
+		}
 		const search = document.getElementById('lex-workspace-search');
 		search?.addEventListener('submit', (event) => {
 			event.preventDefault();
@@ -673,11 +740,15 @@
 			const file = upload.elements.file.files[0];
 			if (!file) return;
 			if (file.size > 10 * 1024 * 1024) return showError("Upload failed", "File must be 10 MB or smaller.");
-			setBusy(button, "Uploading and scanning...");
+			setUploadProgress(button, 0);
 			try {
 				const content = await readFile(file);
-				setBusy(button, "Scanning and estimating...");
-				const response = await call("lex.work_intake.upload_document", { intake: upload.dataset.intakeUpload, filename: file.name, content });
+				const response = await callWithProgress(
+					"lex.work_intake.upload_document",
+					{ intake: upload.dataset.intakeUpload, filename: file.name, content },
+					(percent) => setUploadProgress(button, percent),
+					() => setBusy(button, "Scanning and estimating..."),
+				);
 				if (response.estimate) notify("Document scanned and Job cost estimate updated");
 				else if (response.quarantine_passed) notify("Document passed security scanning. Add detailed instructions to run the estimate.");
 				else notify(`Document remains quarantined: ${response.scan_status}`, "orange");
@@ -765,7 +836,21 @@
 	}
 
 	function reloadSection(section) {
-		setTimeout(() => window.location.assign(`/client-portal?refresh=${Date.now()}#${encodeURIComponent(section)}`), 650);
+		// Re-fetch the dashboard payload and re-run the same render() pipeline used
+		// on first load, in place — no browser navigation, no full JS/CSS re-download,
+		// no white-flash unload. Falls back to a full page reload only if the
+		// in-place refresh itself fails, so the user is never stuck on stale data.
+		setTimeout(async () => {
+			const root = document.getElementById("lex-client-portal");
+			if (!root) return window.location.assign(`/client-portal?refresh=${Date.now()}#${encodeURIComponent(section)}`);
+			window.location.hash = section;
+			try {
+				const data = await call("lex.client_portal.get_portal_dashboard");
+				render(root, data);
+			} catch (error) {
+				window.location.assign(`/client-portal?refresh=${Date.now()}#${encodeURIComponent(section)}`);
+			}
+		}, 650);
 	}
 
 	let razorpayLoader = null;
