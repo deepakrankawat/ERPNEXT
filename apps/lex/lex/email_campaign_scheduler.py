@@ -36,8 +36,7 @@ def process_due_email_campaigns(now_utc: datetime | None = None):
 				scheduled_utc = scheduled_datetime_utc(campaign, entry)
 				if scheduled_utc > now_utc:
 					continue
-				if _queue_dispatch(campaign, entry, scheduled_utc):
-					results["queued"] += 1
+				results["queued"] += _queue_dispatch(campaign, entry, scheduled_utc)
 			except Exception:
 				results["failed"] += 1
 				_record_dispatch_error(campaign, entry, scheduled_utc or now_utc, frappe.get_traceback())
@@ -67,8 +66,43 @@ def scheduled_datetime_utc(campaign, entry) -> datetime:
 	return scheduled_utc
 
 
-def _queue_dispatch(campaign, entry, scheduled_utc: datetime) -> bool:
-	dispatch_key = _dispatch_key(campaign.name, entry.name or entry.idx)
+def _queue_dispatch(campaign, entry, scheduled_utc: datetime) -> int:
+	"""Queue this schedule entry. Lead Group targets are fanned out one dispatch
+	per member so each Lead's own fields (first_name, etc.) render into their
+	copy of the email -- a group send is otherwise a single shared broadcast
+	with no per-recipient personalization available."""
+	if campaign.email_campaign_for != "Lead Group":
+		return _queue_single_dispatch(campaign, entry, scheduled_utc)
+
+	queued = 0
+	for member in _lead_group_members(campaign.recipient):
+		try:
+			queued += _queue_single_dispatch(campaign, entry, scheduled_utc, lead=member.lead, email=member.email)
+		except Exception:
+			_record_dispatch_error(campaign, entry, scheduled_utc, frappe.get_traceback(), member=member.lead)
+			frappe.log_error(
+				frappe.get_traceback(),
+				_("Timed Email Campaign Dispatch Failed: {0} ({1})").format(campaign.name, member.lead),
+			)
+	return queued
+
+
+def _lead_group_members(recipient):
+	members = frappe.get_all(
+		"Lead Group Member",
+		filters={"lead_group": recipient, "unsubscribed": 0, "email": ["is", "set"]},
+		fields=["lead", "email"],
+	)
+	if not members:
+		frappe.throw(
+			_("No subscribed Leads with an email address were found in Lead Group {0}.").format(recipient),
+			frappe.ValidationError,
+		)
+	return members
+
+
+def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str | None = None, email: str | None = None) -> int:
+	dispatch_key = _dispatch_key(campaign.name, entry.name or entry.idx, lead)
 	frappe.db.sql(
 		f"select name from `tab{DISPATCH_DOCTYPE}` where name=%s for update",
 		dispatch_key,
@@ -80,12 +114,12 @@ def _queue_dispatch(campaign, entry, scheduled_utc: datetime) -> bool:
 		as_dict=True,
 	)
 	if dispatch and dispatch.status in FINAL_DISPATCH_STATES:
-		return False
+		return 0
 	if dispatch and dispatch.communication and frappe.db.exists(
 		"Email Queue", {"communication": dispatch.communication}
 	):
 		frappe.db.set_value(DISPATCH_DOCTYPE, dispatch.name, {"status": "Queued", "error": None})
-		return False
+		return 0
 	if not dispatch:
 		dispatch_doc = frappe.get_doc({
 			"doctype": DISPATCH_DOCTYPE,
@@ -104,7 +138,11 @@ def _queue_dispatch(campaign, entry, scheduled_utc: datetime) -> bool:
 		dispatch_doc.error = None
 		dispatch_doc.save(ignore_permissions=True)
 
-	recipients, context = _recipients_and_context(campaign)
+	if lead:
+		recipients = [email]
+		context = frappe.get_doc("Lead", lead).as_dict()
+	else:
+		recipients, context = _recipients_and_context(campaign)
 	template = frappe.get_cached_doc("Email Template", entry.email_template)
 	subject = frappe.render_template(template.subject, context)
 	content = frappe.render_template(template.response_, context)
@@ -156,7 +194,7 @@ def _queue_dispatch(campaign, entry, scheduled_utc: datetime) -> bool:
 	dispatch_doc.status = "Queued"
 	dispatch_doc.error = None
 	dispatch_doc.save(ignore_permissions=True)
-	return True
+	return 1
 
 
 def _formatted_sender(sender_user: str | None) -> str | None:
@@ -191,13 +229,6 @@ def _recipients_and_context(campaign):
 			pluck="email",
 		)
 		context = frappe.get_doc("Email Group", campaign.recipient).as_dict()
-	elif campaign.email_campaign_for == "Lead Group":
-		recipients = frappe.get_all(
-			"Lead Group Member",
-			filters={"lead_group": campaign.recipient, "unsubscribed": 0, "email": ["is", "set"]},
-			pluck="email",
-		)
-		context = frappe.get_doc("Lead Group", campaign.recipient).as_dict()
 	else:
 		email = frappe.db.get_value(campaign.email_campaign_for, campaign.recipient, "email_id")
 		recipients = [email] if email else []
@@ -231,7 +262,19 @@ def _sync_dispatch_delivery_states():
 def _mark_campaign_complete_if_queued(campaign, schedules):
 	if not schedules:
 		return
-	keys = [_dispatch_key(campaign.name, entry.name or entry.idx) for entry in schedules]
+	keys = []
+	for entry in schedules:
+		if campaign.email_campaign_for == "Lead Group":
+			leads = frappe.get_all(
+				"Lead Group Member",
+				filters={"lead_group": campaign.recipient, "unsubscribed": 0, "email": ["is", "set"]},
+				pluck="lead",
+			)
+			keys.extend(_dispatch_key(campaign.name, entry.name or entry.idx, lead) for lead in leads)
+		else:
+			keys.append(_dispatch_key(campaign.name, entry.name or entry.idx))
+	if not keys:
+		return
 	completed = frappe.get_all(
 		DISPATCH_DOCTYPE,
 		filters={"name": ["in", keys], "status": ["in", list(FINAL_DISPATCH_STATES)]},
@@ -241,8 +284,8 @@ def _mark_campaign_complete_if_queued(campaign, schedules):
 		frappe.db.set_value("Email Campaign", campaign.name, "status", "Completed")
 
 
-def _record_dispatch_error(campaign, entry, scheduled_utc, error):
-	key = _dispatch_key(campaign.name, entry.name or entry.idx)
+def _record_dispatch_error(campaign, entry, scheduled_utc, error, member: str | None = None):
+	key = _dispatch_key(campaign.name, entry.name or entry.idx, member)
 	values = {"status": "Error", "error": error[-10000:]}
 	if frappe.db.exists(DISPATCH_DOCTYPE, key):
 		frappe.db.set_value(DISPATCH_DOCTYPE, key, values)
@@ -260,8 +303,11 @@ def _record_dispatch_error(campaign, entry, scheduled_utc, error):
 		}).insert(ignore_permissions=True)
 
 
-def _dispatch_key(campaign_name: str, schedule_identifier) -> str:
-	return hashlib.sha256(f"{campaign_name}:{schedule_identifier}".encode()).hexdigest()
+def _dispatch_key(campaign_name: str, schedule_identifier, member: str | None = None) -> str:
+	key = f"{campaign_name}:{schedule_identifier}"
+	if member:
+		key = f"{key}:{member}"
+	return hashlib.sha256(key.encode()).hexdigest()
 
 
 def _parse_time(value) -> time:
