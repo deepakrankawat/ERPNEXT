@@ -123,6 +123,8 @@ def after_install():
 	ensure_home_workspace_actions()
 	ensure_lexpack_master_data()
 	ensure_lexpack_catalog()
+	from lex.pilot import ensure_initial_pilot_limit
+	ensure_initial_pilot_limit()
 	ensure_accounting_workspace_actions()
 	ensure_account_creation_form_fields()
 	ensure_default_chat_channels()
@@ -851,9 +853,11 @@ def ensure_lexocrates_email_templates():
 
               <p style="margin:0 0 16px; color:#111111;">We support law firms with legal research and memoranda, litigation support, document review, and related legal workflows.</p>
 
-              <p style="margin:0 0 16px; color:#111111;"><strong>Experience Lexocrates before you commit.</strong> Start with a complimentary, limited-scope Pilot Engagement. Share a suitable legal task and see our work quality, responsiveness, and process firsthand.</p>
+              <p style="margin:0 0 16px; color:#111111;"><strong>Complimentary Pilot Engagement</strong><br>Limited-Scope Assignment at No Cost</p>
 
-              <p style="margin:0 0 16px; color:#111111;">If you decide to continue, Lextimator™ provides a fixed quotation before each assignment. You can work with us one assignment at a time or choose LexPack™ for ongoing work. No subscription or LexPack™ purchase is needed for the pilot.</p>
+              <p style="margin:0 0 16px; color:#111111;">Eligible new clients may begin with one limited-scope assignment, up to the applicable complimentary pilot value, at no charge. One complimentary pilot is available per client organisation, subject to Lexocrates approving the scope.</p>
+
+              <p style="margin:0 0 16px; color:#111111;">Lextimator™ → Complimentary Pilot Engagement → Pay Per Assignment or LexPack™. No subscription or LexPack™ purchase is needed for the pilot.</p>
 
               <p style="margin:0 0 16px; color:#111111;">If you have an assignment you’re considering delegating, simply reply to this email. I’d be glad to discuss the requirements and explain how we would assess it.</p>
 

@@ -3,13 +3,20 @@
 	--compliance-muted: #5f6b7a;
 	--compliance-line: #dbe3ec;
 	--compliance-soft: #f6f8fb;
-	--compliance-accent: #0b65a5;
-	--compliance-navy: #0b1628;
+	--compliance-accent: #B8860B;
+	--compliance-accent-vivid: #E5A91E;
+	--compliance-navy: #0B1736;
+	--compliance-font-heading: 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
 body {
 	background: #fff;
 	color: var(--compliance-ink);
+	font-family: 'Lato', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+h1, h2, h3, h4 {
+	font-family: var(--compliance-font-heading);
 }
 
 .compliance-shell {
@@ -322,7 +329,7 @@ body {
 
 .compliance-field input:focus,
 .compliance-field textarea:focus {
-	outline: 3px solid rgba(11, 101, 165, .14);
+	outline: 3px solid rgba(184, 134, 11, .18);
 	border-color: var(--compliance-accent);
 }
 
@@ -342,8 +349,8 @@ body {
 .compliance-submit {
 	margin-top: 18px;
 	padding: 12px 20px;
-	color: #fff;
-	background: var(--compliance-accent);
+	color: var(--compliance-navy);
+	background: var(--compliance-accent-vivid);
 	border: 0;
 	border-radius: 8px;
 	font-weight: 750;

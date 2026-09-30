@@ -10,6 +10,7 @@
   "checkout_section", "checkout_name", "checkout_description", "checkout_theme_color", "accounting_section",
   "company", "selling_item", "direct_quote_item", "mode_of_payment", "accounting_column", "razorpay_clearing_account", "income_account", "cost_center",
   "intake_section", "intake_sla_version", "intake_sla_document", "quote_currency", "quote_validity_days", "low_confidence_threshold", "enable_ai_intake_analysis", "intake_ai_provider", "intake_ai_model", "auto_approve_ai_pricing", "auto_approve_ai_pricing_authorized_by", "auto_approve_ai_pricing_authorized_on", "intake_sla_terms",
+  "pilot_section", "complimentary_pilot_limits",
   "webhook_help"
  ],
  "fields": [
@@ -52,6 +53,8 @@
   {"fieldname": "auto_approve_ai_pricing_authorized_by", "fieldtype": "Link", "label": "Auto-Approval Authorized By", "options": "User", "read_only": 1},
   {"fieldname": "auto_approve_ai_pricing_authorized_on", "fieldtype": "Datetime", "label": "Auto-Approval Authorized On", "read_only": 1},
   {"fieldname": "intake_sla_terms", "fieldtype": "Long Text", "label": "Client Intake SLA Terms"},
+  {"fieldname": "pilot_section", "fieldtype": "Section Break", "label": "Complimentary Pilot Engagement"},
+  {"description": "Set a separate value limit for each market. Leave a market unconfigured to keep its pilot unavailable until approved terms are entered.", "fieldname": "complimentary_pilot_limits", "fieldtype": "Table", "label": "Complimentary Pilot Value Limits", "options": "Complimentary Pilot Limit"},
   {"fieldname": "webhook_help", "fieldtype": "HTML", "options": "<p class='text-muted'>Configure Razorpay payment, refund, and dispute webhooks shown by Check Readiness to <code>/api/method/lex.lexpack.handle_razorpay_webhook</code>. The verified endpoint fulfils payments and reconciles full/partial refunds and chargebacks for LexPack and direct fixed-quote payments. Keep the webhook secret different from the API key secret.</p>"}
  ],
  "index_web_pages_for_search": 0,

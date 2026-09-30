@@ -85,7 +85,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("100dvh", styles)
 		self.assertIn(".lex-wizard-step.is-active", styles)
 		self.assertIn("background: var(--lex-primary-soft)", styles)
-		self.assertIn("client_portal.css?v=20260924-2", template)
+		self.assertIn("client_portal.css?v=20260930-1", template)
 
 	def test_client_portal_has_standard_intake_without_quick_estimate_button(self):
 		app_path = Path(frappe.get_app_path("lex"))
@@ -117,7 +117,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn('>Job</span>', script)
 		self.assertIn('>Payment</span>', script)
 		template = (app_path / "www" / "client-portal.html").read_text(encoding="utf-8")
-		self.assertIn('client_portal.js?v=20260928-4', template)
+		self.assertIn('client_portal.js?v=20260930-1', template)
 		self.assertNotIn("An internal compliance record is retained.", script)
 
 	def test_requested_delivery_date_is_the_operational_deadline(self):

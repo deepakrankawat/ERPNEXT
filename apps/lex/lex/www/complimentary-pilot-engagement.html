@@ -1,0 +1,59 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Complimentary Pilot Engagement | Lexocrates{% endblock %}
+{% block head_include %}
+	{{ super() }}
+	<meta name="description" content="Eligible new Lexocrates clients may begin with one limited-scope assignment at no charge, subject to scope approval.">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=Montserrat:wght@600;700;800&display=swap">
+	<link rel="stylesheet" href="/assets/lex/css/legal_compliance.css?v=20260930-1">
+{% endblock %}
+
+{% block page_container %}
+{% include "templates/includes/compliance_header.html" %}
+<main>
+	<section class="compliance-hero"><div class="compliance-shell">
+		<p class="compliance-eyebrow">Start with Lexocrates</p>
+		<h1>Complimentary Pilot Engagement</h1>
+		<p class="compliance-summary">Limited-Scope Assignment at No Cost</p>
+	</div></section>
+	<div class="compliance-shell" style="padding-block:56px 84px">
+		<section class="compliance-content" aria-label="Pilot terms">
+			<p>Eligible new clients may begin with one limited-scope assignment, up to the applicable complimentary pilot value, at no charge.</p>
+			<p>One complimentary pilot is available per client organisation, subject to Lexocrates approving the scope.</p>
+			<label for="pilot-market">Select your market to see the applicable value limit</label>
+			<select id="pilot-market" class="form-control" style="max-width:340px" aria-describedby="pilot-limit">
+				<option value="">Select a market</option>
+				{% for item in pilot_markets %}
+				<option value="{{ item.currency }}" data-limit="{{ item.limit or '' }}">{{ item.market }}</option>
+				{% endfor %}
+			</select>
+			<p id="pilot-limit" role="status" aria-live="polite"></p>
+			<h2>How it works</h2>
+			<p>Lextimator™ → Complimentary Pilot Engagement → Pay Per Assignment or LexPack™</p>
+			<p>After the pilot, choose a fixed-price assignment or a LexPack™ for ongoing work.</p>
+			<p><a href="/client-registration">Start with Lexocrates</a></p>
+		</section>
+	</div>
+</main>
+{% include "templates/includes/compliance_footer.html" %}
+<script>
+(() => {
+	const market = document.getElementById("pilot-market");
+	const result = document.getElementById("pilot-limit");
+	market.addEventListener("change", () => {
+		const option = market.selectedOptions[0];
+		const currency = option.value;
+		if (!currency) { result.textContent = ""; return; }
+		if (!option.dataset.limit) {
+			result.textContent = "The complimentary pilot value limit for this market will be confirmed by Lexocrates.";
+			return;
+		}
+		const prefixes = { CAD: "CA$", USD: "US$", GBP: "£" };
+		const amount = Number(option.dataset.limit).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+		result.textContent = `Complimentary Pilot Value Limit: ${prefixes[currency]}${amount}`;
+	});
+})();
+</script>
+{% endblock %}

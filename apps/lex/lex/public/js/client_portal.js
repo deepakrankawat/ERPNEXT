@@ -344,8 +344,16 @@
 		return `<section class="lex-section active" data-panel="overview">
 			<div class="lex-welcome"><div><p class="lex-eyebrow">Secure organization workspace</p><h2>Welcome, ${escapeHTML(data.profile.full_name)}</h2><p>Everything shown here is limited to ${escapeHTML(data.client.customer_name)} and your assigned permissions.</p></div><div class="lex-progress"><div class="lex-progress-meta"><span>Workspace setup</span><strong>${data.onboarding.completed}/${data.onboarding.total}</strong></div><div class="lex-progress-track"><span style="width:${progress}%"></span></div><div class="lex-progress-steps">${data.onboarding.steps.map((step) => `<button type="button" data-go="${escapeHTML(step.section)}" class="${step.complete ? "done" : ""}">${step.complete ? "✓" : "○"} ${escapeHTML(step.label)}</button>`).join("")}</div></div></div>
 			<div class="lex-metrics">${metric("Active intakes", data.metrics.active_intakes, "Before Matter confirmation", "plus")}${metric("Open work", data.metrics.open_jobs, "Funded jobs in progress", "clipboard")}${metric("Pending approvals", data.metrics.approvals, "Your decisions required", "check")}${metric("Documents", data.metrics.documents, "Secure files available", "file")}</div>
-			<div class="lex-grid"><div class="lex-stack">${card("Recent matters", "Permission-filtered", matterTable(data.matters.slice(0, 6)))}${card("Current work", "Latest authorized requests", jobTable(data.jobs.slice(0, 7), data.matters))}</div><div class="lex-stack">${card("Quick actions", "Common client tasks", `<div class="lex-card-body"><div class="lex-quick-actions">${quick.map(([section, title, note, iconName]) => `<button type="button" class="lex-action-tile" data-go="${section}">${icon(iconName)}<span><strong>${escapeHTML(title)}</strong><span>${escapeHTML(note)}</span></span></button>`).join("")}</div></div>`)}${walletCard(data)}${auditCard(data.audit_events)}</div></div>
+			<div class="lex-grid"><div class="lex-stack">${pilotCard(data)}${card("Recent matters", "Permission-filtered", matterTable(data.matters.slice(0, 6)))}${card("Current work", "Latest authorized requests", jobTable(data.jobs.slice(0, 7), data.matters))}</div><div class="lex-stack">${card("Quick actions", "Common client tasks", `<div class="lex-card-body"><div class="lex-quick-actions">${quick.map(([section, title, note, iconName]) => `<button type="button" class="lex-action-tile" data-go="${section}">${icon(iconName)}<span><strong>${escapeHTML(title)}</strong><span>${escapeHTML(note)}</span></span></button>`).join("")}</div></div>`)}${walletCard(data)}${auditCard(data.audit_events)}</div></div>
 		</section>`;
+	}
+
+	function pilotCard(data) {
+		const pilot = data.pilot;
+		if (!pilot) return "";
+		const limit = pilot.value_limit ? `Applicable limit: ${escapeHTML(fmtMoney(pilot.value_limit, pilot.currency))}.` : "The applicable market limit will be shown when configured.";
+		const status = pilot.status === "Used" ? "Pilot used by this organisation" : pilot.status === "Requested" ? "Pilot approval requested" : "One pilot per client organisation";
+		return card("Complimentary Pilot Engagement", "Limited-Scope Assignment at No Cost", `<div class="lex-card-body"><p>Eligible new clients may begin with one limited-scope assignment, up to the applicable complimentary pilot value, at no charge.</p><p>${limit} Subject to Lexocrates approving the scope.</p><small>${escapeHTML(status)}</small></div>`);
 	}
 
 	function matterTable(rows) {
@@ -541,7 +549,7 @@
 		const action = review
 			? `<div class="lex-intake-action lex-review-state"><h4>Human validation where required</h4><div class="lex-quote-summary"><span><small>Estimated cost</small><strong>${escapeHTML(fmtMoney(intake.quoted_amount, intake.currency))}</strong></span><span><small>Delivery deadline</small><strong>${escapeHTML(fmtDate(intake.requested_delivery_date))}</strong></span></div><p>Lextimator<sup class="lex-tm">TM</sup> has prepared the estimate. Legal Operations will confirm the scope and fixed price before payment opens.</p></div>${additionalJobDocuments(intake, (intake.documents || []).map((row) => `<li>${escapeHTML(row.file_name)}</li>`).join(""))}`
 			: fundingOptions(intake, data) + (intake.status === "Quote Ready" ? additionalJobDocuments(intake, (intake.documents || []).map((row) => `<li>${escapeHTML(row.file_name)}</li>`).join("")) : "");
-		return `<article class="lex-card lex-intake-card"><div class="lex-card-head widget-head"><div><h3>${escapeHTML(intake.intake_title)}</h3><small>${escapeHTML(intake.matter_title || "Matter pending")} · ${escapeHTML(intake.job_title || "Draft Job pending")}</small></div><span class="indicator-pill ${indicatorColor(intake.status)} ${statusClass(intake.status)}">${escapeHTML(intake.status)}</span></div><div class="lex-intake-steps"><span class="${intake.document_count ? "done" : ""}">Documents</span><span class="${intake.cost_estimate_status === "Ready" ? "done" : ""}">Lextimator<sup class="lex-tm">TM</sup> estimate</span><span class="${["Ready", "Accepted"].includes(intake.quote_status) ? "done" : ""}">Confirmed fixed price</span><span class="${intake.funding_status === "Funded" ? "done" : ""}">Payment or Legal Capacity</span></div>${action}${clientDeleteAction(intake)}</article>`;
+		return `<article class="lex-card lex-intake-card"><div class="lex-card-head widget-head"><div><h3>${escapeHTML(intake.intake_title)}</h3><small>${escapeHTML(intake.matter_title || "Matter pending")} · ${escapeHTML(intake.job_title || "Draft Job pending")}</small></div><span class="indicator-pill ${indicatorColor(intake.status)} ${statusClass(intake.status)}">${escapeHTML(intake.status)}</span></div><div class="lex-intake-steps"><span class="${intake.document_count ? "done" : ""}">Documents</span><span class="${intake.cost_estimate_status === "Ready" ? "done" : ""}">Lextimator<sup class="lex-tm">TM</sup> estimate</span><span class="${["Ready", "Accepted"].includes(intake.quote_status) ? "done" : ""}">Confirmed fixed price</span><span class="${intake.funding_status === "Funded" ? "done" : ""}">${intake.funding_route === "Complimentary Pilot" ? "Complimentary pilot" : "Payment or Legal Capacity"}</span></div>${action}${clientDeleteAction(intake)}</article>`;
 	}
 
 	function fundingOptions(intake, data) {
@@ -551,6 +559,14 @@
 		const enough = available >= required;
 		const plan = intake.recommended_plan_details;
 		const paymentEnabled = Boolean(data.lexpack?.payment_enabled);
+		const pilot = data.pilot || {};
+		const canRequestPilot = pilot.status === "Available" && intake.pilot_status === "Not Requested"
+			&& pilot.currency === currency && Number(intake.quoted_amount) <= Number(pilot.value_limit);
+		const pilotAction = intake.pilot_status === "Requested"
+			? '<article><strong>Complimentary Pilot Engagement</strong><p>Awaiting Lexocrates scope approval. This one-time allowance is separate from LexPack Legal Capacity.</p></article>'
+			: canRequestPilot
+				? `<article><strong>Complimentary Pilot Engagement</strong><p>Limited-scope assignment at no cost, subject to Lexocrates approval. Applicable limit: ${escapeHTML(fmtMoney(pilot.value_limit, currency))}.</p><button class="lex-button btn btn-primary btn-sm" type="button" data-request-pilot="${escapeHTML(intake.name)}">Request pilot approval</button></article>`
+				: "";
 		const capacityAction = enough && intake.can_fund_legal_capacity
 			? `<button class="lex-button btn btn-primary btn-sm" type="button" data-fund-existing="${escapeHTML(intake.name)}">Use ${escapeHTML(capacityMoney(required, currency))} Legal Capacity</button>`
 			: "";
@@ -563,7 +579,7 @@
 		const lexpackOption = plan
 			? `<article><strong>Option 2 · Explore LexPack<sup class="lex-tm">TM</sup> savings</strong><p>${escapeHTML(plan.discount_percent)}% value advantage: pay ${escapeHTML(fmtMoney(plan.price, plan.currency))} and receive ${escapeHTML(capacityMoney(plan.legal_capacity_amount, plan.currency))} Legal Capacity.</p>${planAction || '<span class="text-muted">LexPack checkout is not available for this account.</span>'}</article>`
 			: "";
-		return `<div class="lex-intake-action"><h4>Confirmed fixed price</h4><div class="lex-quote-summary"><span><small>Pay per assignment</small><strong>${escapeHTML(fmtMoney(intake.quoted_amount, currency))}</strong></span><span><small>Legal Capacity required</small><strong>${escapeHTML(capacityMoney(required, currency))}</strong></span><span><small>Available Legal Capacity</small><strong>${escapeHTML(capacityMoney(available, currency))}</strong></span><span><small>Delivery deadline</small><strong>${escapeHTML(fmtDate(intake.requested_delivery_date))}</strong></span></div><div class="lex-scope-box"><strong>Confirmed scope · quote v${fmtNumber(intake.quote_version)}</strong><p>${escapeHTML(intake.scope_summary)}</p><small>Valid until ${escapeHTML(fmtDate(intake.quote_valid_until))}</small></div><div class="lex-funding-choice"><article><strong>Option 1 · Pay for this assignment</strong><p>Pay the confirmed fixed price without purchasing a LexPack<sup class="lex-tm">TM</sup>.</p>${directAction}${capacityAction}</article>${lexpackOption}</div>${intake.failure_reason ? `<div class="lex-alert">${escapeHTML(intake.failure_reason)}</div>` : ""}</div>`;
+		return `<div class="lex-intake-action"><h4>Confirmed fixed price</h4><div class="lex-quote-summary"><span><small>Pay per assignment</small><strong>${escapeHTML(fmtMoney(intake.quoted_amount, currency))}</strong></span><span><small>Legal Capacity required</small><strong>${escapeHTML(capacityMoney(required, currency))}</strong></span><span><small>Available Legal Capacity</small><strong>${escapeHTML(capacityMoney(available, currency))}</strong></span><span><small>Delivery deadline</small><strong>${escapeHTML(fmtDate(intake.requested_delivery_date))}</strong></span></div><div class="lex-scope-box"><strong>Confirmed scope · quote v${fmtNumber(intake.quote_version)}</strong><p>${escapeHTML(intake.scope_summary)}</p><small>Valid until ${escapeHTML(fmtDate(intake.quote_valid_until))}</small></div><div class="lex-funding-choice">${pilotAction}<article><strong>Pay for this assignment</strong><p>Pay the confirmed fixed price without purchasing a LexPack<sup class="lex-tm">TM</sup>.</p>${directAction}${capacityAction}</article>${lexpackOption}</div>${intake.failure_reason ? `<div class="lex-alert">${escapeHTML(intake.failure_reason)}</div>` : ""}</div>`;
 	}
 
 	function walletCard(data) {
@@ -847,6 +863,14 @@
 			try { const result = await call("lex.work_intake.fund_with_existing_legal_capacity", { intake: button.dataset.fundExisting }); notify(`Activated ${result.matter} / ${result.job}`); reloadSection("new-matter"); }
 			catch (error) { showError("Funding failed", error); button.disabled = false; button.textContent = "Use available Legal Capacity"; }
 		}));
+		root.querySelectorAll("[data-request-pilot]").forEach((button) => button.addEventListener("click", async () => {
+			setBusy(button, "Requesting approval...");
+			try {
+				await call("lex.pilot.request_complimentary_pilot", { intake: button.dataset.requestPilot });
+				notify("Complimentary pilot request sent for Lexocrates scope approval.");
+				reloadSection("new-matter");
+			} catch (error) { showError("Pilot request failed", error); clearBusy(button); }
+		}));
 		root.querySelectorAll("[data-delete-intake]").forEach((button) => button.addEventListener("click", async () => {
 			if (!window.confirm("Delete this Job from the Client Workspace? You will no longer see the Job or its activity history.")) return;
 			button.disabled = true;
@@ -895,22 +919,20 @@
 		bindAdministration(data);
 	}
 
-	function reloadSection(section) {
+	async function reloadSection(section) {
 		// Re-fetch the dashboard payload and re-run the same render() pipeline used
 		// on first load, in place — no browser navigation, no full JS/CSS re-download,
 		// no white-flash unload. Falls back to a full page reload only if the
 		// in-place refresh itself fails, so the user is never stuck on stale data.
-		setTimeout(async () => {
-			const root = document.getElementById("lex-client-portal");
-			if (!root) return window.location.assign(`/client-portal?refresh=${Date.now()}#${encodeURIComponent(section)}`);
-			window.location.hash = section;
-			try {
-				const data = await call("lex.client_portal.get_portal_dashboard");
-				render(root, data);
-			} catch (error) {
-				window.location.assign(`/client-portal?refresh=${Date.now()}#${encodeURIComponent(section)}`);
-			}
-		}, 650);
+		const root = document.getElementById("lex-client-portal");
+		if (!root) return window.location.assign(`/client-portal?refresh=${Date.now()}#${encodeURIComponent(section)}`);
+		window.location.hash = section;
+		try {
+			const data = await call("lex.client_portal.get_portal_dashboard");
+			render(root, data);
+		} catch (error) {
+			window.location.assign(`/client-portal?refresh=${Date.now()}#${encodeURIComponent(section)}`);
+		}
 	}
 
 	let razorpayLoader = null;

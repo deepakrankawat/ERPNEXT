@@ -231,6 +231,7 @@ WORKSPACES = (
 		("Open Leads", "Total Clients", "Monthly Revenue"),
 		(
 			Shortcut("Leads", "DocType", "Lead", "List"),
+			Shortcut("Find Leads (Explorium)", "Page", "explorium-leads", color="#2490ef"),
 			Shortcut("Opportunities", "DocType", "Opportunity", "List"),
 			Shortcut("Campaigns", "DocType", "Campaign", "List"),
 			Shortcut("Customers", "DocType", "Customer", "List"),

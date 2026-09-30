@@ -1,0 +1,19 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["market", "currency", "complimentary_pilot_value_limit", "enabled"],
+ "fields": [
+  {"fieldname": "market", "fieldtype": "Select", "in_list_view": 1, "label": "Market", "options": "Canada\nUnited States\nUnited Kingdom", "reqd": 1},
+  {"fieldname": "currency", "fieldtype": "Link", "in_list_view": 1, "label": "Currency", "options": "Currency", "reqd": 1},
+  {"fieldname": "complimentary_pilot_value_limit", "fieldtype": "Currency", "in_list_view": 1, "label": "Complimentary Pilot Value Limit", "options": "currency", "reqd": 1},
+  {"default": "1", "fieldname": "enabled", "fieldtype": "Check", "in_list_view": 1, "label": "Enabled"}
+ ],
+ "istable": 1,
+ "module": "Lex",
+ "name": "Complimentary Pilot Limit",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC"
+}

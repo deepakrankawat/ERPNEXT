@@ -13,6 +13,7 @@
   "document_section", "detailed_instructions", "document_count", "clean_document_count", "security_status", "extraction_status", "extracted_text", "analysis_section", "analysis_status", "analysis_confidence", "low_confidence", "analysis_provider", "ai_execution", "analysis_summary", "operations_review_notes",
   "quote_section", "quote_version", "quote_status", "quoted_amount", "currency", "required_legal_capacity", "selected_pricing_service", "exact_pdf_page_count", "calculated_hours", "fixed_service_rate_cad", "raw_price_cad", "final_rounded_price_cad", "pricing_exchange_rate", "pricing_exchange_rate_date", "pricing_version", "estimate_method", "quote_column", "scope_summary", "delivery_timeline_hours", "quote_valid_until", "recommended_plan", "quote_issued_by", "quote_issued_on",
   "pricing_approval_section", "pricing_approval_status", "pricing_approved_by", "pricing_approval_column", "pricing_approved_on", "pricing_rejection_reason",
+  "pilot_section", "pilot_status", "pilot_value_limit", "pilot_approved_by", "pilot_approved_on",
   "funding_section", "funding_route", "funding_status", "lexpack_purchase", "wallet_reservation", "funding_column", "razorpay_order_id", "razorpay_payment_id", "signature_verified", "gateway_event_id", "failure_reason", "refunded_amount", "exchange_rate", "sales_invoice", "payment_entry",
   "execution_section", "matter", "job", "sla_started_on", "delivery_due_on"
  ],
@@ -94,8 +95,13 @@
   {"fieldname": "pricing_approved_on", "fieldtype": "Datetime", "label": "Decided On", "read_only": 1},
   {"fieldname": "pricing_rejection_reason", "fieldtype": "Small Text", "label": "Rejection Reason", "read_only": 1},
 
+  {"fieldname": "pilot_section", "fieldtype": "Section Break", "label": "Complimentary Pilot Engagement"},
+  {"default": "Not Requested", "fieldname": "pilot_status", "fieldtype": "Select", "label": "Pilot Status", "options": "Not Requested\nRequested\nApproved\nDeclined", "read_only": 1},
+  {"fieldname": "pilot_value_limit", "fieldtype": "Currency", "label": "Complimentary Pilot Value Limit", "options": "currency", "read_only": 1},
+  {"fieldname": "pilot_approved_by", "fieldtype": "Link", "label": "Pilot Approved By", "options": "User", "read_only": 1},
+  {"fieldname": "pilot_approved_on", "fieldtype": "Datetime", "label": "Pilot Approved On", "read_only": 1},
   {"fieldname": "funding_section", "fieldtype": "Section Break", "label": "Funding Decision"},
-  {"default": "Not Selected", "fieldname": "funding_route", "fieldtype": "Select", "label": "Funding Route", "options": "Not Selected\nExisting Legal Capacity\nRecommended LexPack\nDirect Quote", "read_only": 1},
+  {"default": "Not Selected", "fieldname": "funding_route", "fieldtype": "Select", "label": "Funding Route", "options": "Not Selected\nExisting Legal Capacity\nRecommended LexPack\nDirect Quote\nComplimentary Pilot", "read_only": 1},
   {"default": "Not Started", "fieldname": "funding_status", "fieldtype": "Select", "label": "Funding Status", "options": "Not Started\nPayment Pending\nFunded\nFailed\nCancelled\nRefund Pending\nPartially Refunded\nRefunded\nDisputed\nChargeback", "read_only": 1},
   {"fieldname": "lexpack_purchase", "fieldtype": "Link", "label": "LexPack Purchase", "options": "LexPack Purchase", "read_only": 1},
   {"fieldname": "wallet_reservation", "fieldtype": "Link", "label": "Legal Capacity Reservation", "options": "Lexocrates Wallet Transaction", "read_only": 1},

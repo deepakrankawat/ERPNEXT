@@ -3,12 +3,20 @@ from __future__ import annotations
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint, now_datetime
+from frappe.utils import cint, flt, now_datetime
 
 
 class LexPackSettings(Document):
 	def validate(self):
 		self.api_timeout_seconds = max(5, min(cint(self.api_timeout_seconds or 15), 60))
+		market_currencies = {"Canada": "CAD", "United States": "USD", "United Kingdom": "GBP"}
+		seen_markets = set()
+		for row in self.complimentary_pilot_limits or []:
+			if row.market in seen_markets or row.currency != market_currencies.get(row.market):
+				frappe.throw(_("Each pilot market needs one matching currency row."), frappe.ValidationError)
+			if flt(row.complimentary_pilot_value_limit) <= 0:
+				frappe.throw(_("Complimentary Pilot Value Limit must be positive."), frappe.ValidationError)
+			seen_markets.add(row.market)
 		if self.has_value_changed("auto_approve_ai_pricing") and not getattr(
 			frappe.flags, "lexocrates_ceo_ai_auto_approval_update", False
 		):

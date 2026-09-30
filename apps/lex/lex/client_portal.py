@@ -100,6 +100,9 @@ def get_portal_dashboard():
 		"LexPack", lambda: get_lexpack_portal_data(portal_user),
 		{"plans": [], "purchases": [], "payment_enabled": False, "purchase_access": False},
 	)
+	from lex.pilot import pilot_offer_for_client
+
+	pilot = _safe_dashboard_section("complimentary pilot", lambda: pilot_offer_for_client(portal_user.client), None)
 	portal_users = _safe_dashboard_section("portal users", lambda: _portal_users(portal_user), [])
 	audit_events = _safe_dashboard_section("audit events", lambda: frappe.get_all(
 		"Lexocrates Portal Audit Event",
@@ -169,6 +172,7 @@ def get_portal_dashboard():
 		"wallet": wallet,
 		"transactions": transactions,
 		"lexpack": lexpack,
+		"pilot": pilot,
 		"portal_users": portal_users,
 		"audit_events": audit_events,
 		"master_sla": master_sla,

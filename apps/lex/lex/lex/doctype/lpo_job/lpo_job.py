@@ -331,6 +331,11 @@ class LPOJob(Document):
 				flt(self.quoted_amount) <= 0 or not self.sales_invoice or not self.payment_entry
 			):
 				frappe.throw(_("A paid Direct Quote is required before activating this Job."), frappe.ValidationError)
+			if self.job_billing_method == "Complimentary Pilot" and (
+				self.funding_route != "Complimentary Pilot" or not self.work_intake
+				or frappe.db.get_value("Lexocrates Work Intake", self.work_intake, "pilot_status") != "Approved"
+			):
+				frappe.throw(_("An approved Complimentary Pilot Engagement is required before activating this Job."), frappe.ValidationError)
 	def _validate_job_documents(self):
 		for row in self.job_documents:
 			file_row = frappe.db.get_value(

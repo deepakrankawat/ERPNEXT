@@ -1265,7 +1265,7 @@ def portal_intakes(actor=None):
 			"quote_version", "quote_status", "quoted_amount", "currency", "required_legal_capacity", "scope_summary",
 			"estimate_method", "pricing_approval_status",
 			"delivery_timeline_hours", "quote_valid_until", "recommended_plan", "funding_route", "funding_status",
-			"lexpack_purchase", "wallet_reservation", "failure_reason", "sales_invoice", "payment_entry",
+			"lexpack_purchase", "wallet_reservation", "pilot_status", "pilot_value_limit", "failure_reason", "sales_invoice", "payment_entry",
 			"matter", "job", "sla_started_on", "delivery_due_on",
 		],
 		order_by="created_on desc",
@@ -1343,7 +1343,7 @@ def _confirm_funded_intake(doc):
 	# legacy fallback for older intakes that did not capture a requested date.
 	due = _delivery_deadline(doc, start=start)
 	reservation = None
-	if doc.funding_route != "Direct Quote":
+	if doc.funding_route not in {"Direct Quote", "Complimentary Pilot"}:
 		from lex.lex.doctype.lexocrates_wallet_transaction.lexocrates_wallet_transaction import _post_transaction
 
 		reservation = _post_transaction(
@@ -1371,7 +1371,10 @@ def _confirm_funded_intake(doc):
 	job.received_at = start
 	job.due_date = due
 	job.source_document = primary
-	job.job_billing_method = "Direct Quote" if doc.funding_route == "Direct Quote" else "LexPack"
+	job.job_billing_method = (
+		"Complimentary Pilot" if doc.funding_route == "Complimentary Pilot"
+		else "Direct Quote" if doc.funding_route == "Direct Quote" else "LexPack"
+	)
 	job.estimate_status = "Accepted"
 	job.quote_version = doc.quote_version
 	job.required_legal_capacity = _required_legal_capacity(doc)
@@ -1558,6 +1561,8 @@ def _invalidate_unfunded_estimate(doc):
 		doc.pricing_approval_status = "Not Required"
 		doc.funding_route = "Not Selected"
 		doc.funding_status = "Not Started"
+		if doc.pilot_status in {"Requested", "Declined"}:
+			doc.pilot_status = "Not Requested"
 		doc.selected_pricing_service = None
 		doc.exact_pdf_page_count = 0
 		doc.calculated_hours = 0
@@ -1593,7 +1598,8 @@ def _sync_job_commercial(doc, *, estimate_status=None):
 		return
 	funding_route = doc.funding_route or "Not Selected"
 	job.job_billing_method = (
-		"Direct Quote" if funding_route == "Direct Quote"
+		"Complimentary Pilot" if funding_route == "Complimentary Pilot"
+		else "Direct Quote" if funding_route == "Direct Quote"
 		else "LexPack" if funding_route in {"Existing Legal Capacity", "Recommended LexPack"}
 		else None
 	)

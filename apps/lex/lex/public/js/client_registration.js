@@ -176,7 +176,7 @@
 			);
 			result.scrollIntoView({ behavior: "smooth", block: "center" });
 
-			const vUrl = response?.verification_url || (response?.token ? `/client-registration?token=${response.token}` : null);
+			const vUrl = response?.verification_url || (response?.test_token ? `/client-registration?token=${response.test_token}` : null);
 			openModal(vUrl, userEmail);
 		} catch (error) {
 			show(result, error.message || String(error), "error");

@@ -56,7 +56,7 @@ doctype_js = {
 	"LPO Job": "public/js/lpo_job_chat.js",
 	"Account": "public/js/account_form_recovery.js",
 }
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+doctype_list_js = {"Lead": "public/js/lead_list.js"}
 doctype_tree_js = {
 	"Account": "public/js/account_tree_recovery.js",
 }
@@ -238,6 +238,12 @@ doc_events = {
 	},
 	"User": {
 		"on_update": "lex.portal_audit.sync_portal_user_security",
+	},
+	"Email Campaign": {
+		"on_trash": "lex.email_campaign_scheduler.delete_dispatch_records",
+	},
+	"Campaign": {
+		"on_trash": "lex.email_campaign_scheduler.delete_dispatch_records_for_campaign",
 	},
 	"LPO Job": {
 		"after_insert": "lex.chat_automation.notify_lpo_job_created",

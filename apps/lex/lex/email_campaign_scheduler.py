@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import frappe
 from frappe import _
 from frappe.core.doctype.communication.email import make
+from frappe.email.email_body import get_formatted_html
 from frappe.utils import getdate
 
 
@@ -124,8 +125,25 @@ def _queue_dispatch(campaign, entry, scheduled_utc: datetime) -> bool:
 			email_template=template.name,
 		)
 		communication_name = communication["name"]
+		# The Communication doc is the audit trail shown in the Desk timeline --
+		# store it with the same header/footer wrapping the actual outgoing
+		# email gets, so what a reviewer sees there matches what was sent.
+		# frappe.sendmail() below still renders the *unwrapped* fragment (its
+		# own pipeline wraps it once); passing the already-wrapped HTML there
+		# too would nest the wrapper inside itself.
+		try:
+			frappe.db.set_value("Communication", communication_name, "content", get_formatted_html(subject, content))
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), _("Could not store formatted preview for {0}").format(communication_name))
 		dispatch_doc.communication = communication_name
 		dispatch_doc.save(ignore_permissions=True)
+		# queue_separately=True hands the email off to a background worker that
+		# may pick it up before this function's caller commits, and that worker
+		# validates the Communication link in its own DB connection. Without an
+		# explicit commit here, the worker can run against a transaction where
+		# this Communication doesn't exist yet and fail with
+		# "Could not find Communication: <name>", silently dropping the send.
+		frappe.db.commit()
 
 	frappe.sendmail(
 		recipients=recipients,
@@ -173,6 +191,13 @@ def _recipients_and_context(campaign):
 			pluck="email",
 		)
 		context = frappe.get_doc("Email Group", campaign.recipient).as_dict()
+	elif campaign.email_campaign_for == "Lead Group":
+		recipients = frappe.get_all(
+			"Lead Group Member",
+			filters={"lead_group": campaign.recipient, "unsubscribed": 0, "email": ["is", "set"]},
+			pluck="email",
+		)
+		context = frappe.get_doc("Lead Group", campaign.recipient).as_dict()
 	else:
 		email = frappe.db.get_value(campaign.email_campaign_for, campaign.recipient, "email_id")
 		recipients = [email] if email else []
@@ -255,3 +280,54 @@ def _aware_utc(value: datetime | None) -> datetime:
 	if value.tzinfo is None:
 		return value.replace(tzinfo=timezone.utc)
 	return value.astimezone(timezone.utc)
+
+
+@frappe.whitelist()
+def create_bulk_email_campaigns(leads, campaign_name, sender, start_date, start_time, time_zone):
+	"""One Email Campaign per selected Lead, since the doctype's `recipient`
+	is a single Dynamic Link -- this is how a multi-lead send is composed
+	while keeping per-lead personalization ({{ first_name }} etc.) intact."""
+	if isinstance(leads, str):
+		leads = frappe.parse_json(leads)
+	if not leads:
+		frappe.throw(_("Select at least one Lead."), frappe.ValidationError)
+	if not frappe.db.exists("Campaign", campaign_name):
+		frappe.throw(_("Campaign {0} does not exist.").format(campaign_name), frappe.ValidationError)
+
+	created, skipped = [], []
+	for lead in leads:
+		email_id = frappe.db.get_value("Lead", lead, "email_id")
+		if not email_id:
+			skipped.append({"lead": lead, "reason": "No email address on file"})
+			continue
+		if frappe.db.exists("Email Campaign", {"campaign_name": campaign_name, "recipient": lead, "email_campaign_for": "Lead"}):
+			skipped.append({"lead": lead, "reason": "Already has this campaign"})
+			continue
+		doc = frappe.get_doc({
+			"doctype": "Email Campaign",
+			"campaign_name": campaign_name,
+			"email_campaign_for": "Lead",
+			"recipient": lead,
+			"sender": sender,
+			"start_date": start_date,
+			"start_time": start_time,
+			"time_zone": time_zone,
+			"time_scheduling_enabled": 1,
+		}).insert(ignore_permissions=True)
+		created.append(doc.name)
+	frappe.db.commit()
+	return {"created": created, "skipped": skipped}
+
+
+def delete_dispatch_records(doc, method=None):
+	"""Clear this campaign's dispatch log before Frappe's link check runs,
+	so deleting an Email Campaign isn't blocked by its own tracking records."""
+	for name in frappe.get_all(DISPATCH_DOCTYPE, filters={"email_campaign": doc.name}, pluck="name"):
+		frappe.delete_doc(DISPATCH_DOCTYPE, name, ignore_permissions=True, force=True)
+
+
+def delete_dispatch_records_for_campaign(doc, method=None):
+	"""Same as delete_dispatch_records, but for the Campaign (schedule template)
+	side of the link -- dispatch rows also point at the Campaign they used."""
+	for name in frappe.get_all(DISPATCH_DOCTYPE, filters={"campaign": doc.name}, pluck="name"):
+		frappe.delete_doc(DISPATCH_DOCTYPE, name, ignore_permissions=True, force=True)

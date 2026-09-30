@@ -13,3 +13,5 @@ lex.patches.privatize_chat_attachments
 lex.patches.enforce_delivery_governance
 lex.patches.revise_lexpack_legal_capacity
 lex.patches.purge_lexpoint_legacy
+lex.patches.configure_initial_complimentary_pilot
+lex.patches.add_lead_group_to_email_campaign

@@ -437,7 +437,7 @@
    "fieldname": "job_billing_method",
    "fieldtype": "Select",
    "label": "Billing Method",
-   "options": "\nLexPack\nDirect Quote",
+   "options": "\nLexPack\nDirect Quote\nComplimentary Pilot",
    "read_only": 1
   },
   {
@@ -565,7 +565,7 @@
    "fieldname": "funding_route",
    "fieldtype": "Select",
    "label": "Funding Route",
-   "options": "Not Selected\nExisting Legal Capacity\nRecommended LexPack\nDirect Quote",
+   "options": "Not Selected\nExisting Legal Capacity\nRecommended LexPack\nDirect Quote\nComplimentary Pilot",
    "read_only": 1
   },
   {

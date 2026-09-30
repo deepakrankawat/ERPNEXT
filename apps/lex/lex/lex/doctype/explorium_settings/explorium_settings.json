@@ -1,0 +1,23 @@
+{
+ "actions": [],
+ "creation": "2026-09-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "issingle": 1,
+ "field_order": ["api_key", "credits_help"],
+ "fields": [
+  {"fieldname": "api_key", "fieldtype": "Password", "label": "Explorium API Key"},
+  {"fieldname": "credits_help", "fieldtype": "HTML", "options": "<p class='text-muted'>Get the key from admin.explorium.ai → Access &amp; Authentication. Company/prospect search runs in free preview mode; only the final “Add to Leads” step spends credits (one contact enrichment per prospect added).</p>"}
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-09-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Explorium Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "read": 1, "role": "System Manager", "write": 1}
+ ],
+ "states": [],
+ "track_changes": 1
+}

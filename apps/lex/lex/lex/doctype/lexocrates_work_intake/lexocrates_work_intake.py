@@ -16,7 +16,7 @@ LOCKED_AFTER_FUNDING = {
 	"quoted_amount", "currency", "required_legal_capacity", "scope_summary", "delivery_timeline_hours",
 	"selected_pricing_service", "exact_pdf_page_count", "calculated_hours", "fixed_service_rate_cad",
 	"raw_price_cad", "final_rounded_price_cad", "pricing_exchange_rate", "pricing_exchange_rate_date",
-	"pricing_version", "funding_route", "matter", "job",
+	"pricing_version", "funding_route", "pilot_status", "pilot_value_limit", "pilot_approved_by", "pilot_approved_on", "matter", "job",
 }
 
 

@@ -16,11 +16,14 @@
 	--lex-ink-muted: #475569;
 	--lex-ink-faint: #64748b;
 	--lex-on-primary: #ffffff;
-	--lex-primary: #1e293b;
-	--lex-primary-hover: #0f172a;
-	--lex-primary-soft: #e2e8f0;
-	--lex-accent: #0d9488;
-	--lex-accent-soft: #e1f5f2;
+	--lex-primary: #0B1736;
+	--lex-primary-hover: #081025;
+	--lex-primary-soft: #e5e9f1;
+	--lex-accent: #B8860B;
+	--lex-accent-hover: #96690a;
+	--lex-accent-vivid: #E5A91E;
+	--lex-accent-soft: #FBF0D9;
+	--lex-on-accent: #1e1607;
 	--lex-green: #157347;
 	--lex-green-bg: #dcf5e6;
 	--lex-red: #b42318;
@@ -35,7 +38,8 @@
 	--lex-radius-sm: 7px;
 	--lex-radius-md: 12px;
 	--lex-radius-lg: 18px;
-	--lex-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--lex-font: 'Lato', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--lex-font-heading: 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
 	--lex-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 	--lex-sidebar-width: 250px;
 	--lex-content-width: 1180px;
@@ -83,6 +87,7 @@ body.lex-client-workspace-page {
 #lex-client-portal h3,
 #lex-client-portal h4 {
 	margin: 0;
+	font-family: var(--lex-font-heading);
 	font-weight: 700;
 	color: var(--lex-ink);
 	text-wrap: balance;
@@ -921,7 +926,7 @@ body.lex-portal-sidebar-open {
 /* ---------- Welcome hero + onboarding progress ---------- */
 
 .lex-welcome {
-	background: linear-gradient(135deg, #1e293b, #0f172a);
+	background: linear-gradient(135deg, var(--lex-primary), var(--lex-primary-hover));
 	color: #ffffff;
 	border-radius: var(--lex-radius-lg);
 	padding: 22px;
@@ -1439,6 +1444,7 @@ body.lex-portal-sidebar-open {
 }
 
 .lex-check {
+	display: flex !important;
 	flex-direction: row !important;
 	align-items: flex-start !important;
 	gap: 8px !important;
