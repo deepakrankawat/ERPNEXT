@@ -18,6 +18,7 @@ from lex.lex.doctype.lexocrates_portal_user.lexocrates_portal_user import (
 from lex.portal_audit import create_portal_audit_event
 
 
+SUPPORT_SENDER = "Lexocrates <support@lexocrates.com>"
 INVITATION_HOURS = 72
 REGISTRATION_HOURS = 24
 REGISTRATION_ACTIVATION_HOURS = 48
@@ -45,6 +46,7 @@ def _send_security_email_now(*, recipient: str, subject: str, message: str):
 	return frappe.sendmail(
 		recipients=[recipient],
 		subject=subject,
+		sender=SUPPORT_SENDER,
 		message=message,
 		delayed=False,
 		send_priority=1,
@@ -134,6 +136,7 @@ def invite_portal_user(
 			frappe.sendmail(
 				recipients=[invitee_email],
 				subject=_("Your secure Lexocrates Portal invitation"),
+				sender=SUPPORT_SENDER,
 				message=_(
 					"You have been invited to the Lexocrates Portal. Complete activation within {0} hours: <a href=\"{1}\">Activate account</a>."
 				).format(INVITATION_HOURS, activation_url),
@@ -461,6 +464,7 @@ def request_client_registration(
 			frappe.sendmail(
 				recipients=[email],
 				subject=_("Verify your email and activate your Lexocrates account"),
+				sender=SUPPORT_SENDER,
 				message=_(
 					"Verify your email and create your primary administrator password within {0} hours: "
 					'<a href="{1}">Verify email and create password</a>.'
@@ -588,6 +592,7 @@ def record_registration_compliance(
 				frappe.sendmail(
 					recipients=[doc.email],
 					subject=_("Your Lexocrates Client registration is approved"),
+					sender=SUPPORT_SENDER,
 					message=_("Activate your approved account within {0} hours: <a href=\"{1}\">Activate account</a>.").format(
 						REGISTRATION_ACTIVATION_HOURS, activation_url
 					),

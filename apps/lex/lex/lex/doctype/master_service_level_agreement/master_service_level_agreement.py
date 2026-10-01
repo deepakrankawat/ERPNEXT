@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import hashlib
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import cint, now_datetime
 
 from lex.client_access import get_portal_user, has_customer_access, is_client_user
-from lex.portal_audit import create_portal_audit_event
+from lex.portal_audit import _safe_user_agent, create_portal_audit_event
 
 
 MANAGEMENT_ROLES = {"LPO_Admin", "LPO_Manager", "System Manager"}
+SALES_SENDER = "Lexocrates <sales@lexocrates.com>"
 ACK_FIELDS = (
 	"ack_read_and_understood",
 	"ack_business_week",
@@ -24,6 +27,41 @@ ACK_FIELDS = (
 	"ack_signatory_authority",
 )
 
+# Once a Master SLA has been Accepted it becomes a legal record: none of these
+# fields may change again, on any save, by any role. The only legitimate
+# post-acceptance mutations are status moving to Superseded/Terminated and the
+# operational bookkeeping fields below (set via direct frappe.db.set_value
+# calls, which never re-run validate() anyway). Accepting a *new* version is
+# done by creating a brand-new Master Service Level Agreement document, never
+# by editing an already-Accepted one.
+LOCKED_AFTER_ACCEPTANCE_FIELDS = ACK_FIELDS + (
+	"version",
+	"effective_date",
+	"client",
+	"client_legal_name",
+	"client_address",
+	"terms_html",
+	"lexocrates_representative_name",
+	"lexocrates_representative_designation",
+	"lexocrates_signed_on",
+	"accepted_by_name",
+	"accepted_by",
+	"accepted_by_designation",
+	"accepted_by_email",
+	"acceptance_datetime",
+	"electronic_acceptance",
+	"ip_address",
+	"user_agent",
+	"accepted_terms_hash",
+)
+
+
+def hash_terms_html(terms_html: str | None) -> str:
+	"""SHA-256 of the exact Terms text as shown to the Client at acceptance time,
+	so a later edit to this record (or a dispute over what was agreed) can be
+	checked against the hash permanently recorded on the acceptance audit event."""
+	return hashlib.sha256((terms_html or "").encode("utf-8")).hexdigest()
+
 
 class MasterServiceLevelAgreement(Document):
 	def validate(self):
@@ -34,6 +72,31 @@ class MasterServiceLevelAgreement(Document):
 			)
 		if self.status == "Accepted" and not (self.electronic_acceptance and self.acceptance_datetime):
 			frappe.throw(_("Acceptance date/time is required before status can be Accepted."), frappe.ValidationError)
+		self._enforce_post_acceptance_lock()
+
+	def _enforce_post_acceptance_lock(self):
+		if self.is_new():
+			return
+		before = self.get_doc_before_save()
+		if not before or before.status != "Accepted":
+			return
+		for fieldname in LOCKED_AFTER_ACCEPTANCE_FIELDS:
+			if frappe.utils.cstr(self.get(fieldname)) != frappe.utils.cstr(before.get(fieldname)):
+				frappe.throw(
+					_(
+						"This Master SLA was Accepted on {0} and is now a locked legal record — "
+						"it cannot be edited. Create a new Master Service Level Agreement to "
+						"supersede it instead."
+					).format(frappe.utils.format_datetime(before.acceptance_datetime) if before.acceptance_datetime else before.name),
+					frappe.ValidationError,
+				)
+
+	def on_trash(self):
+		if self.status == "Accepted":
+			frappe.throw(
+				_("An Accepted Master SLA is a legal record and cannot be deleted."),
+				frappe.PermissionError,
+			)
 
 
 def _has_management_access(user: str) -> bool:
@@ -106,6 +169,11 @@ def accept(
 	elif not _has_management_access(user):
 		frappe.throw(_("You are not authorized to accept this SLA."), frappe.PermissionError)
 
+	# Hash the Terms text exactly as it stands right now — i.e. exactly as shown
+	# to the Client on the acceptance screen — before anything else on this
+	# document changes, so the hash can never reflect a later edit.
+	terms_hash = hash_terms_html(doc.terms_html)
+
 	for field, value in acks.items():
 		doc.set(field, cint(value))
 	doc.accepted_by = user
@@ -115,6 +183,8 @@ def accept(
 	doc.acceptance_datetime = now_datetime()
 	doc.electronic_acceptance = 1
 	doc.ip_address = getattr(frappe.local, "request_ip", None)
+	doc.user_agent = _safe_user_agent()
+	doc.accepted_terms_hash = terms_hash
 	doc.status = "Accepted"
 	doc.save(ignore_permissions=True)
 
@@ -124,7 +194,12 @@ def accept(
 		action="Master SLA Accepted",
 		object_type=doc.doctype,
 		object_id=doc.name,
-		new_value={"version": doc.version, "accepted_by": user, "designation": doc.accepted_by_designation},
+		new_value={
+			"version": doc.version,
+			"accepted_by": user,
+			"designation": doc.accepted_by_designation,
+			"accepted_terms_hash": terms_hash,
+		},
 	)
 	if audit_event:
 		frappe.db.set_value(doc.doctype, doc.name, "acceptance_audit_reference", audit_event.name)
@@ -173,6 +248,7 @@ def _email_signed_copy(doc):
 		frappe.sendmail(
 			recipients=[doc.accepted_by_email],
 			subject=_("Your signed Lexocrates Master Service Level Agreement ({0})").format(doc.version),
+			sender=SALES_SENDER,
 			message=message,
 			attachments=[pdf],
 			reference_doctype=doc.doctype,
@@ -335,7 +411,8 @@ SLA_PRINT_FORMAT_HTML = """
 					Designation: {{ doc.accepted_by_designation or "" }}<br>
 					Email: {{ doc.accepted_by_email or "" }}<br>
 					Date &amp; Time: {{ frappe.utils.format_datetime(doc.acceptance_datetime) if doc.acceptance_datetime else "" }}<br>
-					Electronic Signature / Acceptance: {{ "Accepted electronically" if doc.electronic_acceptance else "" }}
+					Electronic Signature / Acceptance: {{ "Accepted electronically" if doc.electronic_acceptance else "" }}<br>
+					{% if doc.accepted_terms_hash %}<small>Terms Checksum (SHA-256): {{ doc.accepted_terms_hash }}</small>{% endif %}
 				</p>
 			</td>
 			<td style="width:50%;vertical-align:top;padding-left:16px;border-left:1px solid #ccc;">

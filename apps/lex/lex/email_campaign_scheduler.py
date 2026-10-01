@@ -120,12 +120,17 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 	):
 		frappe.db.set_value(DISPATCH_DOCTYPE, dispatch.name, {"status": "Queued", "error": None})
 		return 0
+	# Reply-tracking needs a Lead to point back to; a Lead Group send already
+	# knows the member's Lead, a single "Lead" campaign's recipient IS the Lead.
+	dispatch_lead = lead or (campaign.recipient if campaign.email_campaign_for == "Lead" else None)
+
 	if not dispatch:
 		dispatch_doc = frappe.get_doc({
 			"doctype": DISPATCH_DOCTYPE,
 			"dispatch_key": dispatch_key,
 			"email_campaign": campaign.name,
 			"campaign": campaign.campaign_name,
+			"lead": dispatch_lead,
 			"schedule_index": entry.idx,
 			"email_template": entry.email_template,
 			"scheduled_for_utc": scheduled_utc.replace(tzinfo=None),
@@ -136,6 +141,8 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 		dispatch_doc = frappe.get_doc(DISPATCH_DOCTYPE, dispatch.name)
 		dispatch_doc.status = "Processing"
 		dispatch_doc.error = None
+		if not dispatch_doc.lead and dispatch_lead:
+			dispatch_doc.lead = dispatch_lead
 		dispatch_doc.save(ignore_permissions=True)
 
 	if lead:

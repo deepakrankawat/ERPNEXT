@@ -96,7 +96,7 @@
   {"fieldname": "pricing_rejection_reason", "fieldtype": "Small Text", "label": "Rejection Reason", "read_only": 1},
 
   {"fieldname": "pilot_section", "fieldtype": "Section Break", "label": "Complimentary Pilot Engagement"},
-  {"default": "Not Requested", "fieldname": "pilot_status", "fieldtype": "Select", "label": "Pilot Status", "options": "Not Requested\nRequested\nApproved\nDeclined", "read_only": 1},
+  {"default": "Not Requested", "fieldname": "pilot_status", "fieldtype": "Select", "in_list_view": 1, "label": "Pilot Status", "options": "Not Requested\nRequested\nApproved\nDeclined", "read_only": 1},
   {"fieldname": "pilot_value_limit", "fieldtype": "Currency", "label": "Complimentary Pilot Value Limit", "options": "currency", "read_only": 1},
   {"fieldname": "pilot_approved_by", "fieldtype": "Link", "label": "Pilot Approved By", "options": "User", "read_only": 1},
   {"fieldname": "pilot_approved_on", "fieldtype": "Datetime", "label": "Pilot Approved On", "read_only": 1},

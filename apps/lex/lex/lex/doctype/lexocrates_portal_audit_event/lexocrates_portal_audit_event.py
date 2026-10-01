@@ -14,7 +14,7 @@ class LexocratesPortalAuditEvent(Document):
 	def before_insert(self):
 		if not getattr(frappe.flags, "lexocrates_portal_audit", False):
 			frappe.throw(_("Portal audit events can only be created by the audit service."), frappe.PermissionError)
-		from lex.audit_worm_chain import GENESIS_HASH, compute_audit_event_hash
+		from lex.audit_worm_chain import CURRENT_HASH_VERSION, GENESIS_HASH, compute_audit_event_hash
 
 		self.chain_scope = self.client or "__GLOBAL__"
 		previous = frappe.db.get_value(
@@ -25,8 +25,8 @@ class LexocratesPortalAuditEvent(Document):
 			as_dict=True,
 		)
 		self.previous_hash = previous.event_hash if previous and previous.event_hash else GENESIS_HASH
-		self.hash_version = 1
-		self.event_hash = compute_audit_event_hash(self.as_dict(), self.previous_hash)
+		self.hash_version = CURRENT_HASH_VERSION
+		self.event_hash = compute_audit_event_hash(self.as_dict(), self.previous_hash, hash_version=CURRENT_HASH_VERSION)
 
 	def before_save(self):
 		if not self.is_new():

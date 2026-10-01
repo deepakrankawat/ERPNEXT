@@ -32,35 +32,8 @@ frappe.ui.form.on("Lexocrates Work Intake", {
 				.addClass("btn-primary");
 			frm.add_custom_button(__("Reject Pricing"), () => decide_pricing(frm, "Rejected"), __("Pricing Approval"));
 		}
-		if (
-			!frm.is_new() && frm.doc.pilot_status === "Requested" &&
-			(frappe.session.user === "Administrator" || ["System Manager", "LPO_Admin", "LPO_Manager", "CEO"].some((role) => frappe.user.has_role(role)))
-		) {
-			frm.add_custom_button(__("Approve Complimentary Pilot"), () => decide_pilot(frm, "Approved"), __("Complimentary Pilot"));
-			frm.add_custom_button(__("Decline Complimentary Pilot"), () => decide_pilot(frm, "Declined"), __("Complimentary Pilot"));
-		}
 	},
 });
-
-function decide_pilot(frm, decision) {
-	const submit = (notes) => frappe.call({
-		method: "lex.pilot.decide_complimentary_pilot",
-		args: { intake: frm.doc.name, decision, notes },
-		freeze: true,
-		freeze_message: __("Recording pilot scope decision..."),
-	}).then(() => frm.reload_doc());
-	if (decision === "Declined") {
-		frappe.prompt(
-			{ fieldname: "notes", label: __("Reason for declining"), fieldtype: "Small Text", reqd: 1 },
-			(values) => submit(values.notes), __("Decline Complimentary Pilot"), __("Decline")
-		);
-		return;
-	}
-	frappe.confirm(
-		__("Approve the scope of this one-time complimentary assignment for {0}? The Job will activate at no cost if it is within the configured market limit.", [frm.doc.client]),
-		() => submit(null)
-	);
-}
 
 function decide_pricing(frm, decision) {
 	const proceed = (notes) => frappe.call({

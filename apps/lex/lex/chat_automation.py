@@ -32,6 +32,7 @@ LPO_OPEN_JOB_STATUSES = {
 	"Ready for Delivery",
 }
 CLIENT_APPROVAL_URL = "https://engine.lexocrates.com/client-portal#approvals"
+SUPPORT_SENDER = "Lexocrates <support@lexocrates.com>"
 
 
 def notify_lpo_job_created(doc, method=None):
@@ -151,6 +152,7 @@ def _notify_client_deliverable_ready(job):
 		frappe.sendmail(
 			recipients=recipients,
 			subject=subject,
+			sender=SUPPORT_SENDER,
 			message=message,
 			reference_doctype="LPO Job",
 			reference_name=job.name,

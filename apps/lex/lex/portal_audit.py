@@ -8,6 +8,15 @@ import frappe
 from frappe.utils import now_datetime
 
 
+def _safe_user_agent() -> str | None:
+	"""Best-effort User-Agent capture; never raises outside a real HTTP request
+	(bench console, scheduled jobs, tests all create audit events too)."""
+	try:
+		return frappe.get_request_header("User-Agent")
+	except Exception:
+		return None
+
+
 def create_portal_audit_event(
 	*,
 	client: str,
@@ -43,6 +52,7 @@ def create_portal_audit_event(
 				"previous_value": _json(previous_value),
 				"new_value": _json(new_value),
 				"ip_address": getattr(frappe.local, "request_ip", None),
+				"user_agent": _safe_user_agent(),
 				"session_id": hashlib.sha256(session_id.encode()).hexdigest()[:24] if session_id else None,
 				"result": result,
 				"details": details,

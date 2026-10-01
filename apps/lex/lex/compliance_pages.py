@@ -8,6 +8,7 @@ from frappe.utils import escape_html, get_url_to_form, now_datetime, strip_html_
 
 SALES_NOTIFICATION_TEMPLATE = "Lexocrates Website Contact - Sales Notification"
 SALES_FALLBACK_EMAIL = "sales@lexocrates.com"
+SALES_SENDER = "Lexocrates <sales@lexocrates.com>"
 
 
 def _plain_text(value: str | None, limit: int) -> str:
@@ -41,6 +42,7 @@ def _notify_sales_managers(*, lead, name: str, email: str, subject: str, message
 	}
 	frappe.sendmail(
 		recipients=_sales_manager_recipients(),
+		sender=SALES_SENDER,
 		reply_to=email,
 		subject=frappe.render_template(template.subject, context),
 		message=frappe.render_template(template.response_html, context),

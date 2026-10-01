@@ -18,6 +18,7 @@ from lex.portal_audit import create_portal_audit_event
 # The fixed-price estimator bills only exact native PDF pages.  Accepting other
 # source formats here would let a client complete an upload that cannot advance
 # to an estimate, so the client/Desk Job-document contract is PDF-only.
+SALES_SENDER = "Lexocrates <sales@lexocrates.com>"
 ALLOWED_UPLOAD_EXTENSIONS = {".pdf"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 INTERNAL_ROLES = {"System Manager", "LPO_Admin", "LPO_Manager", "Lexocrates Finance", "Accounts Manager"}
@@ -1951,6 +1952,7 @@ def _notify_client_quote_ready(doc):
 		frappe.sendmail(
 			recipients=emails,
 			subject=_("Lexocrates job pricing is ready: {0}").format(doc.intake_title),
+			sender=SALES_SENDER,
 			message=message,
 			reference_doctype=doc.doctype,
 			reference_name=doc.name,
@@ -1962,6 +1964,49 @@ def _notify_client_quote_ready(doc):
 		_audit(doc, "Client Quote Ready Email Queued", {"recipients": recipients})
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), f"Client quote-ready email failed for {doc.name}")
+
+
+def _notify_client_pilot_approved(doc):
+	recipients = []
+	if doc.portal_user:
+		user = frappe.db.get_value("Lexocrates Portal User", doc.portal_user, "user")
+		if user:
+			recipients.append(user)
+	if doc.matter:
+		from lex.client_access import get_authorized_portal_users
+
+		recipients.extend(get_authorized_portal_users(doc.matter))
+	recipients = list(dict.fromkeys(filter(None, recipients)))
+	emails = list(filter(None, (frappe.db.get_value("User", user, "email") for user in recipients)))
+	if not emails or not _outgoing_email_is_ready() or getattr(frappe.flags, "in_test", False):
+		return
+	message = _(
+		"<p>Good news — your job has been approved under the <b>Complimentary Pilot Engagement</b> "
+		"and is now active, at no charge.</p>"
+		"<p><b>Job:</b> {0}<br><b>Matter:</b> {1}</p>"
+		"<p>Log in to the secure Client Portal to track progress and upload any remaining documents.</p>"
+		"<p><a href=\"{2}\">Open Client Portal</a></p>"
+	).format(
+		frappe.utils.escape_html(doc.job or doc.name),
+		frappe.utils.escape_html(doc.matter or ""),
+		_client_portal_url("new-matter"),
+	)
+	try:
+		frappe.sendmail(
+			recipients=emails,
+			subject=_("Your Lexocrates pilot job is approved and active: {0}").format(doc.intake_title),
+			sender=SALES_SENDER,
+			message=message,
+			reference_doctype=doc.doctype,
+			reference_name=doc.name,
+			delayed=False,
+			send_priority=1,
+			x_priority=1,
+			add_unsubscribe_link=0,
+		)
+		_audit(doc, "Client Pilot Approved Email Queued", {"recipients": recipients})
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"Client pilot-approved email failed for {doc.name}")
 
 
 def _required_legal_capacity(doc) -> float:

@@ -58,13 +58,24 @@ def _lock_client(client: str):
 	frappe.db.sql("select name from `tabCustomer` where name=%s for update", client)
 
 
+AUTO_APPROVAL_ACTOR = "Administrator"
+
+
 @frappe.whitelist()
 def request_complimentary_pilot(intake: str):
+	"""Client requests the one-time Complimentary Pilot.
+
+	Every check below is a hard business rule (market limit, currency match,
+	one pilot per client organisation) rather than a human judgement call, so
+	there is no separate manual approval step: a request that passes every
+	check is auto-approved and the Job activates immediately, in the same
+	call that recorded the request.
+	"""
 	from lex import work_intake
 
 	doc, actor = work_intake._require_intake_access(intake)
-	if not actor:
-		frappe.throw(_("A client portal account is required to request a pilot."), frappe.PermissionError)
+	if not actor or not actor.can_create_matters:
+		frappe.throw(_("Work submission authority is required to request a pilot."), frappe.PermissionError)
 	_lock_client(doc.client)
 	doc.reload()
 	work_intake._validate_ready_quote(doc)
@@ -79,47 +90,11 @@ def request_complimentary_pilot(intake: str):
 		frappe.throw(_("The assignment currency does not match the client market."), frappe.ValidationError)
 	if flt(doc.quoted_amount, 2) > offer["value_limit"]:
 		frappe.throw(_("This assignment exceeds the applicable Complimentary Pilot Value Limit."), frappe.ValidationError)
-	with work_intake._service_writes():
-		doc.pilot_status = "Requested"
-		doc.save(ignore_permissions=True)
-	work_intake._audit(doc, "Complimentary Pilot Requested", {"currency": doc.currency, "quoted_amount": doc.quoted_amount})
-	return {"status": "Requested", "intake": doc.name}
 
-
-@frappe.whitelist()
-def decide_complimentary_pilot(intake: str, decision: str, notes: str | None = None):
-	"""Legal Operations approves the scope and consumes the one-time pilot."""
-	from lex import work_intake
-
-	if frappe.session.user != "Administrator" and not set(frappe.get_roles()).intersection(
-		{"System Manager", "LPO_Admin", "LPO_Manager", "CEO"}
-	):
-		frappe.throw(_("Legal Operations approval is required for a complimentary pilot."), frappe.PermissionError)
-	if decision not in {"Approved", "Declined"}:
-		frappe.throw(_("Choose Approved or Declined."), frappe.ValidationError)
-	doc = frappe.get_doc("Lexocrates Work Intake", intake)
-	_lock_client(doc.client)
-	doc.reload()
-	if doc.pilot_status != "Requested" or doc.funding_status in {"Payment Pending", "Funded"}:
-		frappe.throw(_("This pilot request is no longer pending."), frappe.ValidationError)
-	if decision == "Declined":
-		if not (notes or "").strip():
-			frappe.throw(_("A reason is required when declining a pilot."), frappe.ValidationError)
-		with work_intake._service_writes():
-			doc.pilot_status = "Declined"
-			doc.save(ignore_permissions=True)
-		work_intake._audit(doc, "Complimentary Pilot Declined", {"notes": notes})
-		return {"status": "Declined", "intake": doc.name}
-	work_intake._validate_ready_quote(doc)
-	offer = pilot_offer_for_client(doc.client)
-	if offer["status"] == "Used" or not offer["value_limit"] or doc.currency != offer["currency"]:
-		frappe.throw(_("The complimentary pilot is unavailable for this client organisation or currency."), frappe.ValidationError)
-	if flt(doc.quoted_amount, 2) > offer["value_limit"]:
-		frappe.throw(_("This assignment exceeds the applicable Complimentary Pilot Value Limit."), frappe.ValidationError)
 	with work_intake._service_writes():
 		doc.pilot_status = "Approved"
 		doc.pilot_value_limit = offer["value_limit"]
-		doc.pilot_approved_by = frappe.session.user
+		doc.pilot_approved_by = AUTO_APPROVAL_ACTOR
 		doc.pilot_approved_on = now_datetime()
 		doc.funding_route = "Complimentary Pilot"
 		doc.funding_status = "Funded"
@@ -127,9 +102,12 @@ def decide_complimentary_pilot(intake: str, decision: str, notes: str | None = N
 		doc.quote_status = "Accepted"
 		doc.status = "Funded"
 		doc.save(ignore_permissions=True)
+	work_intake._audit(doc, "Complimentary Pilot Requested", {"currency": doc.currency, "quoted_amount": doc.quoted_amount})
+
 	result = work_intake._confirm_funded_intake(doc)
-	work_intake._audit(doc, "Complimentary Pilot Approved", {
-		"currency": doc.currency, "quoted_amount": doc.quoted_amount,
-		"value_limit": offer["value_limit"], "notes": notes,
+	doc.reload()
+	work_intake._notify_client_pilot_approved(doc)
+	work_intake._audit(doc, "Complimentary Pilot Auto-Approved", {
+		"currency": doc.currency, "quoted_amount": doc.quoted_amount, "value_limit": offer["value_limit"],
 	})
 	return {"status": "Approved", "intake": doc.name, "matter": result["matter"], "job": result["job"]}

@@ -18,6 +18,9 @@ from frappe.rate_limiter import rate_limit
 from frappe.www.login import _generate_temporary_login_link, get_login_with_email_link_ratelimit
 
 
+SUPPORT_SENDER = "Lexocrates <support@lexocrates.com>"
+
+
 @frappe.whitelist(allow_guest=True)
 @rate_limit(limit=get_login_with_email_link_ratelimit, seconds=60 * 60)
 def send_login_link(email: str):
@@ -44,6 +47,7 @@ def send_login_link(email: str):
 		frappe.sendmail(
 			subject=subject,
 			recipients=email,
+			sender=SUPPORT_SENDER,
 			message=_branded_email("Log in to your account", body),
 			now=True,
 		)

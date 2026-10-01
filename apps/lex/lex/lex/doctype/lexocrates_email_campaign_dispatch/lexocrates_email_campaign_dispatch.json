@@ -8,13 +8,17 @@
   "dispatch_key",
   "email_campaign",
   "campaign",
+  "lead",
   "schedule_index",
   "email_template",
   "scheduled_for_utc",
   "time_zone",
   "status",
   "communication",
-  "error"
+  "error",
+  "replied",
+  "reply_communication",
+  "replied_on"
  ],
  "fields": [
   {
@@ -41,6 +45,16 @@
    "options": "Campaign",
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lead",
+   "options": "Lead",
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "schedule_index",
@@ -92,6 +106,29 @@
    "fieldname": "error",
    "fieldtype": "Code",
    "label": "Error",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "replied",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Replied",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "reply_communication",
+   "fieldtype": "Link",
+   "label": "Reply",
+   "options": "Communication",
+   "read_only": 1
+  },
+  {
+   "fieldname": "replied_on",
+   "fieldtype": "Datetime",
+   "label": "Replied On",
    "read_only": 1
   }
  ],

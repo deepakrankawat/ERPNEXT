@@ -132,6 +132,7 @@ after_migrate = [
 	"lex.audit_worm_chain.backfill_audit_hash_chain",
 	"lex.lexocrates_chat_sync.backfill_matter_chat_channels",
 	"lex.lex.doctype.master_service_level_agreement.master_service_level_agreement.ensure_print_format",
+	"lex.email_reply_handler.backfill_missed_replies",
 ]
 
 # Uninstallation
@@ -244,6 +245,9 @@ doc_events = {
 	},
 	"Campaign": {
 		"on_trash": "lex.email_campaign_scheduler.delete_dispatch_records_for_campaign",
+	},
+	"Communication": {
+		"after_insert": "lex.email_reply_handler.link_incoming_reply",
 	},
 	"LPO Job": {
 		"after_insert": "lex.chat_automation.notify_lpo_job_created",

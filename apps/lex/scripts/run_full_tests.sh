@@ -29,6 +29,8 @@ for module in \
 	lex.test_client_portal_architecture \
 	lex.test_document_export \
 	lex.test_lexpack_commerce \
+	lex.test_master_service_level_agreement \
+	lex.test_pilot \
 	lex.test_pdf_watermark \
 	lex.test_persona_workspaces \
 	lex.test_srs_acceptance_scenarios
