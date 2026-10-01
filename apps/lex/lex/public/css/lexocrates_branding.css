@@ -386,7 +386,8 @@ html[data-theme="dark"] .app-logo[app-name="erpnext"] img {
 }
 
 /* Persistent native Desk shortcut to Lexocrates Chat. */
-.lexocrates-chat-navbar .lexocrates-chat-navbar-link {
+.lexocrates-chat-navbar .lexocrates-chat-navbar-link,
+.lexocrates-email-navbar .lexocrates-email-navbar-link {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -402,18 +403,23 @@ html[data-theme="dark"] .app-logo[app-name="erpnext"] img {
 
 .lexocrates-chat-navbar .lexocrates-chat-navbar-link:hover,
 .lexocrates-chat-navbar .lexocrates-chat-navbar-link:focus-visible,
-.lexocrates-chat-navbar .lexocrates-chat-navbar-link.active {
+.lexocrates-chat-navbar .lexocrates-chat-navbar-link.active,
+.lexocrates-email-navbar .lexocrates-email-navbar-link:hover,
+.lexocrates-email-navbar .lexocrates-email-navbar-link:focus-visible,
+.lexocrates-email-navbar .lexocrates-email-navbar-link.active {
 	background: var(--control-bg);
 	color: var(--primary) !important;
 }
 
-.lexocrates-chat-navbar .lexocrates-chat-navbar-link .es-icon {
+.lexocrates-chat-navbar .lexocrates-chat-navbar-link .es-icon,
+.lexocrates-email-navbar .lexocrates-email-navbar-link .es-icon {
 	width: 18px;
 	height: 18px;
 }
 
 @media (max-width: 991px) {
-	.lexocrates-chat-navbar .lexocrates-chat-navbar-label {
+	.lexocrates-chat-navbar .lexocrates-chat-navbar-label,
+	.lexocrates-email-navbar .lexocrates-email-navbar-label {
 		display: none;
 	}
 }

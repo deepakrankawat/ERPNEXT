@@ -27,17 +27,17 @@ add_to_apps_screen = [
 # ------------------
 
 app_include_css = [
-	"/assets/lex/css/lexocrates_branding.css?v=20260908-1",
+	"/assets/lex/css/lexocrates_branding.css?v=20261001-1",
 ]
 
 app_include_js = [
 	"/assets/lex/js/lexocrates_realtime_transport.js?v=20260908-1",
 	"/assets/lex/js/lexocrates_chat_sound.js?v=20260825-1",
-	"/assets/lex/js/lexocrates_desk_navbar.js?v=20260901-1",
+	"/assets/lex/js/lexocrates_desk_navbar.js?v=20261001-1",
 ]
 
 web_include_css = [
-	"/assets/lex/css/lexocrates_branding.css?v=20260908-1",
+	"/assets/lex/css/lexocrates_branding.css?v=20261001-1",
 ]
 
 # include custom scss in every website theme (without file extension ".scss")

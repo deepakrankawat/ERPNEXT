@@ -2,6 +2,7 @@
 	"use strict";
 
 	const CHAT_ROUTE = "/app/lexocrates-chat";
+	const EMAIL_INBOX_ROUTE = "/app/communication/view/inbox";
 	const API_ROOT = "lex.lex.page.lexocrates_chat.lexocrates_chat";
 	const CHAT_ROLES = new Set([
 		"CEO",
@@ -252,6 +253,56 @@
 			return true;
 		} catch (err) {
 			console.warn("Could not setup Lexocrates chat navbar link", err);
+			return false;
+		}
+	}
+
+	function setup_email_navbar_link() {
+		try {
+			if (!window.frappe || !frappe.session || frappe.session.user === "Guest") return false;
+			const navbars = [...document.querySelectorAll("header.navbar ul.navbar-nav")];
+			const navbar =
+				navbars.find((candidate) => candidate.querySelector(".dropdown-navbar-user")) ||
+				navbars.at(-1);
+			if (!navbar) return false;
+
+			let item = navbar.querySelector("#lexocrates-email-navbar");
+			if (!item) {
+				item = document.createElement("li");
+				item.id = "lexocrates-email-navbar";
+				const chatItem = navbar.querySelector("#lexocrates-chat-navbar");
+				const notifications = navbar.querySelector(".dropdown-notifications");
+				navbar.insertBefore(item, notifications || chatItem?.nextSibling || navbar.firstChild);
+			}
+
+			const label = typeof window.__ === "function" ? __("Email Inbox") : "Email Inbox";
+			item.className = "nav-item lexocrates-email-navbar";
+			item.innerHTML = `
+				<a class="nav-link lexocrates-email-navbar-link" href="${EMAIL_INBOX_ROUTE}"
+					title="${label}" aria-label="${label}">
+					<svg class="es-icon icon-sm" aria-hidden="true">
+						<use href="#es-line-email"></use>
+					</svg>
+					<span class="lexocrates-email-navbar-label">${label}</span>
+				</a>`;
+
+			const link = item.querySelector("a");
+			const sync_active_state = () => {
+				try {
+					if (typeof frappe.get_route_str === "function") {
+						const isInbox = frappe.get_route_str().startsWith("communication/view/inbox");
+						link.classList.toggle("active", isInbox);
+					}
+				} catch (e) {}
+			};
+			sync_active_state();
+			if (window.$) {
+				$(document).off("page-change.lexocrates-email").on("page-change.lexocrates-email", sync_active_state);
+			}
+
+			return true;
+		} catch (err) {
+			console.warn("Could not setup Lexocrates email navbar link", err);
 			return false;
 		}
 	}
@@ -561,16 +612,21 @@
 
 	if (window.$) {
 		$(document).on("toolbar_setup", setup_chat_navbar_link);
+		$(document).on("toolbar_setup", setup_email_navbar_link);
 		$(document).on("page-change", patch_workspace_sidebar_natively);
 	}
 	function initialize_when_toolbar_is_ready(attempt = 0) {
 		patch_workspace_sidebar_natively();
-		if (setup_chat_navbar_link() || attempt >= 100) return;
+		const chat_ready = setup_chat_navbar_link();
+		const email_ready = setup_email_navbar_link();
+		if ((chat_ready && email_ready) || attempt >= 100) return;
 		window.setTimeout(() => initialize_when_toolbar_is_ready(attempt + 1), 100);
 	}
 	const toolbar_observer = new MutationObserver(() => {
 		patch_workspace_sidebar_natively();
-		if (setup_chat_navbar_link()) toolbar_observer.disconnect();
+		const chat_ready = setup_chat_navbar_link();
+		const email_ready = setup_email_navbar_link();
+		if (chat_ready && email_ready) toolbar_observer.disconnect();
 	});
 	toolbar_observer.observe(document.documentElement, { childList: true, subtree: true });
 
