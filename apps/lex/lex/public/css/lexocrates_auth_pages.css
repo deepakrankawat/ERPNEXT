@@ -7,14 +7,15 @@
    ========================================================================== */
 
 :root {
-	--lex-bg: #f4f6f8;
+	--lex-bg: #e5e9f1;
 	--lex-surface: #ffffff;
-	--lex-surface-2: #eef1f4;
-	--lex-border: #e1e6ea;
-	--lex-border-strong: #ccd4db;
-	--lex-ink: #101828;
-	--lex-ink-muted: #5c6b7a;
-	--lex-ink-faint: #8a97a3;
+	--lex-surface-2: #f1f5f9;
+	--lex-surface-3: #dbe3ea;
+	--lex-border: #b8c3d0;
+	--lex-border-strong: #7f8b99;
+	--lex-ink: #0f172a;
+	--lex-ink-muted: #334155;
+	--lex-ink-faint: #475569;
 	--lex-on-primary: #ffffff;
 	--lex-primary: #0B1736;
 	--lex-primary-hover: #081025;
@@ -23,12 +24,16 @@
 	--lex-accent-hover: #96690a;
 	--lex-accent-vivid: #E5A91E;
 	--lex-accent-soft: #FBF0D9;
+	--lex-green: #157347;
+	--lex-green-bg: #dcf5e6;
 	--lex-red: #b42318;
 	--lex-red-bg: #fde3e0;
-	--lex-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-	--lex-shadow-md: 0 10px 30px -12px rgba(16, 24, 40, 0.18);
-	--lex-radius-sm: 8px;
-	--lex-radius-md: 14px;
+	--lex-shadow-sm: 0 2px 5px rgba(15, 23, 42, 0.12);
+	--lex-shadow-md: 0 10px 24px rgba(15, 23, 42, 0.16), 0 2px 5px rgba(15, 23, 42, 0.12);
+	--lex-shadow-lg: 0 18px 40px rgba(16, 24, 40, 0.20);
+	--lex-radius-sm: 7px;
+	--lex-radius-md: 12px;
+	--lex-radius-lg: 18px;
 	--lex-font: 'Lato', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 	--lex-font-heading: 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
 	color-scheme: light;
@@ -123,6 +128,7 @@ html[data-theme="dark"] {
 	background: var(--lex-surface);
 	border: 1px solid var(--lex-border-strong);
 	border-radius: var(--lex-radius-sm);
+	transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .lex-frappe-page textarea.form-control {
@@ -135,6 +141,7 @@ html[data-theme="dark"] {
 .lex-auth-shell .form-control:focus,
 .lex-login-wrapper .form-control:focus {
 	outline: none;
+	background: var(--lex-surface);
 	border-color: var(--lex-primary);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--lex-primary) 18%, transparent);
 }
@@ -145,7 +152,7 @@ html[data-theme="dark"] {
 	display: block;
 	font-size: 12.5px;
 	font-weight: 600;
-	color: var(--lex-ink-muted);
+	color: var(--lex-ink);
 	margin-bottom: 6px;
 }
 
@@ -157,7 +164,7 @@ html[data-theme="dark"] {
 .lex-frappe-page .help-box {
 	margin-top: 6px;
 	font-size: 11.5px;
-	color: var(--lex-ink-faint);
+	color: var(--lex-ink-muted);
 }
 
 /* ---------- buttons (in case Frappe's website bundle doesn't cover these) ---------- */
@@ -214,14 +221,14 @@ html[data-theme="dark"] {
 
 .lex-frappe-page {
 	min-height: 100vh;
-	padding: 32px 20px 64px;
+	padding: 28px 20px 64px;
 	display: flex;
 	justify-content: center;
 }
 
 .lex-frappe-container {
 	width: 100%;
-	max-width: 860px;
+	max-width: 1180px;
 }
 
 .lex-frappe-form-card,
@@ -238,8 +245,13 @@ html[data-theme="dark"] {
 	justify-content: space-between;
 	gap: 16px;
 	flex-wrap: wrap;
-	padding: 24px 26px;
+	padding: 24px 28px;
 	margin-bottom: 18px;
+	background: linear-gradient(135deg, var(--lex-primary), var(--lex-primary-hover));
+	color: var(--lex-on-primary);
+	border: 0;
+	border-radius: var(--lex-radius-lg);
+	box-shadow: var(--lex-shadow-md);
 }
 
 .lex-form-breadcrumb {
@@ -247,21 +259,21 @@ html[data-theme="dark"] {
 	align-items: center;
 	gap: 8px;
 	font-size: 12px;
-	color: var(--lex-ink-faint);
+	color: rgba(255, 255, 255, 0.86);
 	margin-bottom: 8px;
 }
 
 .lex-frappe-page-head h1 {
 	margin: 0 0 4px;
-	font-size: 22px;
+	font-size: 24px;
 	font-weight: 700;
-	color: var(--lex-ink);
+	color: #ffffff;
 }
 
 .lex-frappe-page-head p {
 	margin: 0;
 	font-size: 13.5px;
-	color: var(--lex-ink-muted);
+	color: rgba(255, 255, 255, 0.92);
 	max-width: 52ch;
 }
 
@@ -275,7 +287,7 @@ html[data-theme="dark"] {
 	background: var(--lex-surface);
 	border: 1px solid var(--lex-border);
 	border-radius: var(--lex-radius-md);
-	box-shadow: var(--lex-shadow-sm);
+	box-shadow: var(--lex-shadow-md);
 }
 
 .lex-registration-submit-row strong {
@@ -286,7 +298,7 @@ html[data-theme="dark"] {
 
 .lex-registration-submit-row p {
 	margin: 4px 0 0;
-	color: var(--lex-ink-muted);
+	color: var(--lex-ink);
 	font-size: 12.5px;
 }
 
@@ -301,7 +313,7 @@ html[data-theme="dark"] {
 	background: var(--lex-surface);
 	border: 1px solid var(--lex-border);
 	border-radius: var(--lex-radius-md);
-	box-shadow: var(--lex-shadow-sm);
+	box-shadow: var(--lex-shadow-md);
 	padding: 18px 22px;
 	margin-bottom: 18px;
 }
@@ -311,7 +323,7 @@ html[data-theme="dark"] {
 	align-items: baseline;
 	justify-content: space-between;
 	font-size: 12.5px;
-	color: var(--lex-ink-muted);
+	color: var(--lex-ink);
 	margin-bottom: 10px;
 }
 
@@ -332,7 +344,7 @@ html[data-theme="dark"] {
 	display: block;
 	height: 100%;
 	width: 0%;
-	background: var(--lex-accent-vivid);
+	background: var(--lex-accent);
 	border-radius: 999px;
 	transition: width 0.25s ease;
 }
@@ -354,9 +366,15 @@ html[data-theme="dark"] {
 	padding: 10px 12px;
 	border: 1px solid var(--lex-border);
 	border-radius: var(--lex-radius-sm);
-	background: var(--lex-surface);
+	background: var(--lex-surface-2);
 	cursor: pointer;
 	text-align: left;
+	transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.lex-section-tracker button:hover {
+	background: var(--lex-surface);
+	border-color: var(--lex-border-strong);
 }
 
 .lex-section-tracker li[data-state="optional"] button {
@@ -385,12 +403,17 @@ html[data-theme="dark"] {
 
 .lex-section-tracker button small {
 	font-size: 11px;
-	color: var(--lex-ink-faint);
+	color: var(--lex-ink-muted);
 }
 
 .lex-section-tracker li[data-tracker-complete] .lex-tracker-number {
-	background: var(--lex-accent-vivid);
-	color: var(--lex-primary);
+	background: var(--lex-green);
+	color: #ffffff;
+}
+
+.lex-section-tracker li[data-tracker-complete] button {
+	background: var(--lex-green-bg);
+	border-color: color-mix(in srgb, var(--lex-green) 35%, var(--lex-border));
 }
 
 /* ---------- form sections ---------- */
@@ -433,11 +456,13 @@ html[data-theme="dark"] {
 	border-radius: 999px;
 	background: var(--lex-surface-2);
 	color: var(--lex-ink-muted);
+	border: 1px solid var(--lex-border);
 }
 
 .lex-section-status.optional {
 	background: var(--lex-accent-soft);
 	color: var(--lex-accent);
+	border-color: color-mix(in srgb, var(--lex-accent) 28%, var(--lex-border));
 }
 
 .lex-frappe-form-grid {

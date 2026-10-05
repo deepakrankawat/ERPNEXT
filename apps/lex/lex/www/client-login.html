@@ -24,7 +24,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=Montserrat:wght@600;700;800&display=swap">
-<link rel="stylesheet" href="/assets/lex/css/lexocrates_auth_pages.css?v=20260930-1">
+<link rel="stylesheet" href="/assets/lex/css/lexocrates_auth_pages.css?v=20261002-2">
 <style>
 	.lex-login-wrapper {
 		min-height: 82vh;
@@ -32,15 +32,15 @@
 		align-items: center;
 		justify-content: center;
 		padding: 40px 20px;
-		background: radial-gradient(circle at 50% 20%, rgba(36, 144, 239, 0.08), transparent 70%);
+		background: #e5e9f1;
 	}
 	.lex-login-card {
 		width: 100%;
 		max-width: 520px;
 		background: var(--lex-surface, #ffffff);
-		border: 1px solid var(--lex-border, #e2e8f0);
-		border-radius: 16px;
-		box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.07), 0 0 1px rgba(0, 0, 0, 0.1);
+		border: 1px solid #aebbc8;
+		border-radius: 14px;
+		box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.12);
 		padding: 36px 32px;
 	}
 	.lex-login-header {
@@ -64,21 +64,21 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.8px;
-		color: #0284c7;
-		background: #e0f2fe;
+		color: #ffffff;
+		background: #0B1736;
 		padding: 3px 10px;
 		border-radius: 9999px;
 		margin-bottom: 8px;
 	}
 	.lex-login-sub {
 		font-size: 13px;
-		color: var(--lex-muted, #64748b);
+		color: #334155;
 		margin: 0;
 	}
 	.lex-login-tabs {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		background: #f1f5f9;
+		background: #dbe3ea;
 		padding: 4px;
 		border-radius: 10px;
 		margin-bottom: 20px;
@@ -90,7 +90,7 @@
 		padding: 9px 8px;
 		font-size: 12px;
 		font-weight: 600;
-		color: #64748b;
+		color: #334155;
 		border-radius: 8px;
 		cursor: pointer;
 		transition: all 0.2s ease;
@@ -102,11 +102,11 @@
 	.lex-login-tab.active {
 		background: #ffffff;
 		color: #0f172a;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+		box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
 	}
 	.lex-register-banner {
-		background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%);
-		border: 1px solid #bae6fd;
+		background: #FBF0D9;
+		border: 1px solid #B8860B;
 		border-radius: 12px;
 		padding: 14px 16px;
 		margin-bottom: 20px;
@@ -119,16 +119,16 @@
 		margin: 0 0 2px 0;
 		font-size: 13px;
 		font-weight: 700;
-		color: #0369a1;
+		color: #0B1736;
 	}
 	.lex-register-text p {
 		margin: 0;
 		font-size: 11px;
-		color: #0c4a6e;
+		color: #334155;
 	}
 	.btn-register {
 		white-space: nowrap;
-		background: #0284c7;
+		background: #0B1736;
 		color: #ffffff !important;
 		font-weight: 600;
 		font-size: 12px;
@@ -138,7 +138,7 @@
 		transition: background 0.2s ease;
 	}
 	.btn-register:hover {
-		background: #0369a1;
+		background: #081025;
 	}
 	.lex-login-btn {
 		width: 100%;
@@ -165,7 +165,7 @@
 		background: transparent;
 		border: none;
 		padding: 6px 8px;
-		color: #64748b;
+		color: #334155;
 		cursor: pointer;
 		display: inline-flex;
 		align-items: center;
@@ -175,30 +175,30 @@
 		z-index: 5;
 	}
 	.btn-toggle-password:hover {
-		color: #0284c7;
-		background: #f1f5f9;
+		color: #0B1736;
+		background: #dbe3ea;
 	}
 	.btn-toggle-password:focus {
 		outline: none;
-		color: #0284c7;
+		color: #0B1736;
 	}
 	.lex-otp-group {
 		padding: 14px;
-		border: 1px solid #bae6fd;
+		border: 1px solid #B8860B;
 		border-radius: 10px;
-		background: #f0f9ff;
+		background: #FBF0D9;
 	}
 	.lex-otp-group p {
 		margin: 0 0 10px;
 		font-size: 12px;
 		line-height: 1.5;
-		color: #0c4a6e;
+		color: #334155;
 	}
 	.lex-login-footer {
 		margin-top: 20px;
 		text-align: center;
 		font-size: 12px;
-		color: #94a3b8;
+		color: #475569;
 	}
 </style>
 

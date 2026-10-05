@@ -59,7 +59,14 @@ def _process_reply(doc) -> bool:
 		frappe.db.set_value(
 			"Communication",
 			doc.name,
-			{"reference_doctype": "Lead", "reference_name": lead},
+			{
+				"reference_doctype": "Lead",
+				"reference_name": lead,
+				# Frappe's Email Inbox lists only received emails with status Open.
+				# Keep Sales campaign replies visible in Inbox after linking them
+				# to the Lead timeline for CRM context.
+				"status": "Open",
+			},
 		)
 	return True
 

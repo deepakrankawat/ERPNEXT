@@ -15,26 +15,27 @@ class TestLexocratesTheme(FrappeTestCase):
 
 	def test_theme_is_loaded_for_desk_and_website(self):
 		hooks = self.read("hooks.py")
-		asset = "/assets/lex/css/lexocrates_branding.css?v=20260908-1"
+		asset = "/assets/lex/css/lexocrates_branding.css?v=20261002-3"
 
 		self.assertIn("app_include_css", hooks)
 		self.assertIn("web_include_css", hooks)
+		self.assertIn("/assets/lex/js/lexocrates_email_inbox.js?v=20261002-2", hooks)
 		self.assertGreaterEqual(hooks.count(asset), 2)
 
 	def test_theme_exposes_required_design_tokens(self):
 		css = self.read("public/css/lexocrates_branding.css")
 		required_tokens = {
-			"--lex-bg": "#f4f6f8",
+			"--lex-bg": "#e5e9f1",
 			"--lex-surface": "#ffffff",
-			"--lex-surface-2": "#eef1f4",
-			"--lex-surface-3": "#e4e9ee",
-			"--lex-border": "#e1e6ea",
-			"--lex-border-strong": "#ccd4db",
-			"--lex-ink": "#101828",
-			"--lex-ink-muted": "#5c6b7a",
-			"--lex-primary": "#1e293b",
-			"--lex-primary-hover": "#0f172a",
-			"--lex-accent": "#0d9488",
+			"--lex-surface-2": "#f1f5f9",
+			"--lex-surface-3": "#dbe3ea",
+			"--lex-border": "#b8c3d0",
+			"--lex-border-strong": "#7f8b99",
+			"--lex-ink": "#0f172a",
+			"--lex-ink-muted": "#334155",
+			"--lex-primary": "#0B1736",
+			"--lex-primary-hover": "#081025",
+			"--lex-accent": "#B8860B",
 		}
 
 		for token, value in required_tokens.items():
