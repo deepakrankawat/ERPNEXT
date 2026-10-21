@@ -8,11 +8,11 @@ from frappe.model.document import Document
 from frappe.utils import cint, now_datetime
 
 from lex.client_access import get_portal_user, has_customer_access, is_client_user
+from lex.email_senders import SALES_SENDER, outgoing_email_is_ready, send_with_fallback
 from lex.portal_audit import _safe_user_agent, create_portal_audit_event
 
 
 MANAGEMENT_ROLES = {"LPO_Admin", "LPO_Manager", "System Manager"}
-SALES_SENDER = "Lexocrates <sales@lexocrates.com>"
 ACK_FIELDS = (
 	"ack_read_and_understood",
 	"ack_business_week",
@@ -224,9 +224,7 @@ def _email_signed_copy(doc):
 	"""
 	if not doc.accepted_by_email:
 		return
-	from lex.work_intake import _outgoing_email_is_ready
-
-	if not _outgoing_email_is_ready() or getattr(frappe.flags, "in_test", False):
+	if not outgoing_email_is_ready() or getattr(frappe.flags, "in_test", False):
 		return
 	try:
 		pdf = frappe.attach_print(
@@ -245,10 +243,10 @@ def _email_signed_copy(doc):
 			frappe.utils.escape_html(doc.accepted_by_name),
 			frappe.utils.escape_html(doc.accepted_by_designation),
 		)
-		frappe.sendmail(
+		send_with_fallback(
+			SALES_SENDER,
 			recipients=[doc.accepted_by_email],
 			subject=_("Your signed Lexocrates Master Service Level Agreement ({0})").format(doc.version),
-			sender=SALES_SENDER,
 			message=message,
 			attachments=[pdf],
 			reference_doctype=doc.doctype,

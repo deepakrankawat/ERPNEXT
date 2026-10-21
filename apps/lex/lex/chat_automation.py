@@ -18,7 +18,9 @@ from lex.client_access import (
 	get_authorized_portal_users,
 	has_matter_access,
 )
+from lex.email_senders import SALES_SENDER, send_with_fallback
 from lex.lexocrates_chat_sync import ensure_matter_chat_channel
+from lex.mattermost_notifications import notify
 from lex.portal_audit import create_portal_audit_event
 
 
@@ -32,7 +34,6 @@ LPO_OPEN_JOB_STATUSES = {
 	"Ready for Delivery",
 }
 CLIENT_APPROVAL_URL = "https://engine.lexocrates.com/client-portal#approvals"
-SUPPORT_SENDER = "Lexocrates <support@lexocrates.com>"
 
 
 def notify_lpo_job_created(doc, method=None):
@@ -149,10 +150,10 @@ def _notify_client_deliverable_ready(job):
 				"subject": subject,
 				"email_content": message,
 			}).insert(ignore_permissions=True)
-		frappe.sendmail(
+		send_with_fallback(
+			SALES_SENDER,
 			recipients=recipients,
 			subject=subject,
-			sender=SUPPORT_SENDER,
 			message=message,
 			reference_doctype="LPO Job",
 			reference_name=job.name,
@@ -208,6 +209,15 @@ def _notify_lpo_qa_failure(doc):
 		source_name=doc.name,
 		automation_event=f"lpo-qa-failure-global:{doc.name}:{doc.review_status}",
 	)
+	if job.assigned_analyst:
+		notify(
+			job.assigned_analyst,
+			f"QA {doc.review_status}: {job.name} needs your correction — see {doc.name}",
+			document_type="LPO QA Review",
+			document_name=doc.name,
+		)
+
+
 def notify_compliance_action(doc, method=None):
 	_run_safely("Compliance chat notification", _notify_compliance_action, doc)
 
@@ -243,6 +253,13 @@ def _notify_compliance_action(doc):
 		source_name=doc.name,
 		automation_event=f"lpo-compliance-action:{doc.name}",
 	)
+	if doc.compliance_owner:
+		notify(
+			doc.compliance_owner,
+			f"Compliance action assigned to you: {doc.compliance_type or doc.name} ({doc.severity or 'Medium'}) — {doc.name}",
+			document_type="LPO Compliance Log",
+			document_name=doc.name,
+		)
 
 
 def notify_ai_job_request_created(doc, method=None):

@@ -27,18 +27,21 @@ add_to_apps_screen = [
 # ------------------
 
 app_include_css = [
-	"/assets/lex/css/lexocrates_branding.css?v=20261002-3",
+	"/assets/lex/css/lexocrates_branding.css?v=20261016-1",
 ]
 
 app_include_js = [
 	"/assets/lex/js/lexocrates_realtime_transport.js?v=20260908-1",
 	"/assets/lex/js/lexocrates_chat_sound.js?v=20260825-1",
 	"/assets/lex/js/lexocrates_desk_navbar.js?v=20261001-1",
-	"/assets/lex/js/lexocrates_email_inbox.js?v=20261002-2",
+	"/assets/lex/js/lexocrates_email_inbox.js?v=20261007-1",
+	"/assets/lex/js/lexocrates_communication_message.js?v=20261016-2",
+	"/assets/lex/js/lexocrates_email_reply_routing.js?v=20261009-1",
+	"/assets/lex/js/lexocrates_email_sender_name.js?v=20261007-1",
 ]
 
 web_include_css = [
-	"/assets/lex/css/lexocrates_branding.css?v=20261002-3",
+	"/assets/lex/css/lexocrates_branding.css?v=20261016-1",
 ]
 
 # include custom scss in every website theme (without file extension ".scss")
@@ -56,8 +59,12 @@ doctype_js = {
 	"LPO Matter": "public/js/lpo_job_chat.js",
 	"LPO Job": "public/js/lpo_job_chat.js",
 	"Account": "public/js/account_form_recovery.js",
+	"Email Group": "public/js/email_group.js",
 }
-doctype_list_js = {"Lead": "public/js/lead_list.js"}
+doctype_list_js = {
+	"Lead": "public/js/lead_list.js",
+	"Communication": "public/js/communication_list.js",
+}
 doctype_tree_js = {
 	"Account": "public/js/account_tree_recovery.js",
 }
@@ -281,6 +288,9 @@ doc_events = {
 	"LPO AI Job Request": {
 		"after_insert": "lex.chat_automation.notify_ai_job_request_created",
 	},
+	"Notification Log": {
+		"after_insert": "lex.mattermost_notifications.enqueue_forward_to_mattermost",
+	},
 }
 
 on_login = "lex.portal_management.validate_login_surface"
@@ -304,6 +314,10 @@ scheduler_events = {
 		"* * * * *": [
 			"lex.email_campaign_scheduler.process_due_email_campaigns",
 			"lex.lex.doctype.lexocrates_chat_presence.lexocrates_chat_presence.mark_stale_presences_offline",
+		],
+		# 03:30 UTC = 09:00 IST (container clock runs UTC; site timezone is Asia/Kolkata).
+		"30 3 * * *": [
+			"lex.mattermost_notifications.post_daily_digest",
 		],
 	},
 	"daily": [

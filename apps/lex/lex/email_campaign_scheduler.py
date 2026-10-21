@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import datetime, time, timedelta, timezone
 from email.utils import formataddr
 from zoneinfo import ZoneInfo
@@ -9,10 +10,11 @@ import frappe
 from frappe import _
 from frappe.core.doctype.communication.email import make
 from frappe.email.email_body import get_formatted_html
-from frappe.utils import getdate
+from frappe.utils import getdate, parse_addr
 
 
 DISPATCH_DOCTYPE = "Lexocrates Email Campaign Dispatch"
+EMAIL_IN_TEXT_RE = re.compile(r"[A-Za-z0-9_.+-]+@[A-Za-z0-9-]+\.[A-Za-z0-9.-]+")
 FINAL_DISPATCH_STATES = {"Queued", "Sent"}
 
 
@@ -22,7 +24,17 @@ def process_due_email_campaigns(now_utc: datetime | None = None):
 	_sync_dispatch_delivery_states()
 	campaign_names = frappe.get_all(
 		"Email Campaign",
-		filters={"time_scheduling_enabled": 1, "status": ["!=", "Unsubscribed"]},
+		# A "Completed" campaign has nothing left to send by definition (see
+		# _mark_campaign_complete_if_queued) -- excluding it here is what makes
+		# that status permanent. Without this, resaving the Campaign's own
+		# schedule row (e.g. while editing the Email Template it points to)
+		# changes that row's name, which changes _dispatch_key()'s hash, which
+		# makes every already-"Sent" dispatch invisible to the lookup in
+		# _queue_single_dispatch -- so the next scheduler tick re-sends the
+		# whole campaign to everyone in the group again. Observed in production
+		# resending the same recruitment email to ~130 candidates a second and
+		# third time.
+		filters={"time_scheduling_enabled": 1, "status": ["not in", ["Unsubscribed", "Completed"]]},
 		pluck="name",
 		limit_page_length=0,
 	)
@@ -102,7 +114,7 @@ def _lead_group_members(recipient):
 
 
 def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str | None = None, email: str | None = None) -> int:
-	dispatch_key = _dispatch_key(campaign.name, entry.name or entry.idx, lead)
+	dispatch_key = _dispatch_key(campaign.name, _schedule_identifier(entry), lead)
 	frappe.db.sql(
 		f"select name from `tab{DISPATCH_DOCTYPE}` where name=%s for update",
 		dispatch_key,
@@ -154,6 +166,7 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 	subject = frappe.render_template(template.subject, context)
 	content = frappe.render_template(template.response_, context)
 	sender = _formatted_sender(campaign.sender)
+	template_files = _template_attachments(template.name)
 
 	communication_name = dispatch_doc.communication
 	if not communication_name:
@@ -168,6 +181,7 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 			sent_or_received="Sent",
 			send_email=False,
 			email_template=template.name,
+			attachments=template_files,
 		)
 		communication_name = communication["name"]
 		# The Communication doc is the audit trail shown in the Desk timeline --
@@ -180,6 +194,15 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 			frappe.db.set_value("Communication", communication_name, "content", get_formatted_html(subject, content))
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), _("Could not store formatted preview for {0}").format(communication_name))
+		# make(..., send_email=False) skips comm.send_email(), which is the
+		# only place core Frappe would otherwise fill in email_account -- so
+		# this Communication would stay permanently invisible under any
+		# specific-mailbox or "All Accounts" Inbox filter (both key off that
+		# field) despite having genuinely been sent through it.
+		sender_email = parse_addr(sender)[1] if sender else None
+		outgoing_account = _resolve_outgoing_email_account(sender_email)
+		if outgoing_account:
+			frappe.db.set_value("Communication", communication_name, "email_account", outgoing_account)
 		dispatch_doc.communication = communication_name
 		dispatch_doc.save(ignore_permissions=True)
 		# queue_separately=True hands the email off to a background worker that
@@ -197,6 +220,7 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 		sender=sender,
 		communication=communication_name,
 		queue_separately=True,
+		attachments=[{"fid": f} for f in template_files] or None,
 	)
 	dispatch_doc.status = "Queued"
 	dispatch_doc.error = None
@@ -204,8 +228,31 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 	return 1
 
 
+def _template_attachments(email_template: str) -> list[str]:
+	"""File docnames attached to an Email Template, so a file added there goes
+	out with every campaign email using it -- Email Template's own "Add
+	Template" flow in Desk only copies subject/body text, never attachments,
+	so this doesn't happen on its own."""
+	return frappe.get_all(
+		"File",
+		filters={"attached_to_doctype": "Email Template", "attached_to_name": email_template, "is_folder": 0},
+		pluck="name",
+	)
+
+
+def _resolve_outgoing_email_account(sender_email: str | None) -> str | None:
+	"""The Email Account docname that owns this address for sending, if any."""
+	if not sender_email:
+		return None
+	return frappe.db.get_value("Email Account", {"email_id": sender_email, "enable_outgoing": 1}, "name")
+
+
 def _formatted_sender(sender_user: str | None) -> str | None:
-	"""Resolve a campaign's sender User to `"Display Name" <email>`.
+	"""Resolve a campaign's sender User to `"Lexocrates" <email>`, matching the
+	display name every other outgoing system email uses (see
+	auth_overrides.SUPPORT_SENDER, compliance_pages.SALES_SENDER) -- not the
+	Email Account's own "sales"/"support" label, which recipients were
+	seeing instead of the company name.
 
 	Falls back to the bare email if no matching outgoing Email Account is found,
 	so the mail is never blocked for missing display-name config.
@@ -215,12 +262,8 @@ def _formatted_sender(sender_user: str | None) -> str | None:
 	sender_email = frappe.db.get_value("User", sender_user, "email")
 	if not sender_email:
 		return None
-	display_name = frappe.db.get_value(
-		"Email Account",
-		{"email_id": sender_email, "enable_outgoing": 1},
-		"email_account_name",
-	)
-	return formataddr((display_name, sender_email)) if display_name else sender_email
+	has_outgoing_account = bool(_resolve_outgoing_email_account(sender_email))
+	return formataddr((_("Lexocrates"), sender_email)) if has_outgoing_account else sender_email
 
 
 def _recipients_and_context(campaign):
@@ -277,9 +320,9 @@ def _mark_campaign_complete_if_queued(campaign, schedules):
 				filters={"lead_group": campaign.recipient, "unsubscribed": 0, "email": ["is", "set"]},
 				pluck="lead",
 			)
-			keys.extend(_dispatch_key(campaign.name, entry.name or entry.idx, lead) for lead in leads)
+			keys.extend(_dispatch_key(campaign.name, _schedule_identifier(entry), lead) for lead in leads)
 		else:
-			keys.append(_dispatch_key(campaign.name, entry.name or entry.idx))
+			keys.append(_dispatch_key(campaign.name, _schedule_identifier(entry)))
 	if not keys:
 		return
 	completed = frappe.get_all(
@@ -292,7 +335,7 @@ def _mark_campaign_complete_if_queued(campaign, schedules):
 
 
 def _record_dispatch_error(campaign, entry, scheduled_utc, error, member: str | None = None):
-	key = _dispatch_key(campaign.name, entry.name or entry.idx, member)
+	key = _dispatch_key(campaign.name, _schedule_identifier(entry), member)
 	values = {"status": "Error", "error": error[-10000:]}
 	if frappe.db.exists(DISPATCH_DOCTYPE, key):
 		frappe.db.set_value(DISPATCH_DOCTYPE, key, values)
@@ -308,6 +351,16 @@ def _record_dispatch_error(campaign, entry, scheduled_utc, error, member: str | 
 			"time_zone": campaign.time_zone,
 			**values,
 		}).insert(ignore_permissions=True)
+
+
+def _schedule_identifier(entry) -> str:
+	"""A Campaign Email Schedule row's own `name`/`idx` changes if that row is
+	ever deleted and re-added (e.g. editing the step in the Campaign's grid) --
+	using it in the dispatch key means a cosmetic no-op edit can make every
+	already-"Sent" dispatch for that step invisible, triggering a full resend.
+	(day, template) is what a schedule step actually *means* and stays stable
+	across row-identity churn."""
+	return f"{entry.send_after_days or 0}:{entry.email_template}"
 
 
 def _dispatch_key(campaign_name: str, schedule_identifier, member: str | None = None) -> str:
@@ -370,6 +423,87 @@ def create_bulk_email_campaigns(leads, campaign_name, sender, start_date, start_
 		created.append(doc.name)
 	frappe.db.commit()
 	return {"created": created, "skipped": skipped}
+
+
+@frappe.whitelist()
+def add_communications_to_email_group(communications, email_group):
+	"""Add the sender of each selected inbox email to an Email Group, creating
+	the group if it doesn't exist yet -- mirrors lead_group.add_leads, but for
+	inbox senders that don't have (and don't need) a Lead/Contact record of
+	their own before being added as a campaign recipient."""
+	if isinstance(communications, str):
+		communications = frappe.parse_json(communications)
+	if not communications:
+		frappe.throw(_("Select at least one email."), frappe.ValidationError)
+
+	if frappe.db.exists("Email Group", email_group):
+		group = frappe.get_doc("Email Group", email_group)
+		group.check_permission("write")
+	else:
+		group = frappe.get_doc({"doctype": "Email Group", "title": email_group}).insert()
+
+	added, skipped = [], []
+	for name in communications:
+		sender = frappe.db.get_value("Communication", name, "sender")
+		email = parse_addr(sender)[1] if sender else None
+		if not email:
+			skipped.append({"communication": name, "reason": "No sender email address found"})
+			continue
+		if frappe.db.exists("Email Group Member", {"email_group": group.name, "email": email}):
+			skipped.append({"communication": name, "email": email, "reason": "Already in the group"})
+			continue
+		frappe.get_doc({
+			"doctype": "Email Group Member",
+			"email_group": group.name,
+			"email": email,
+		}).insert(ignore_permissions=True)
+		added.append(email)
+
+	frappe.db.commit()
+	return {"email_group": group.name, "added": added, "skipped": skipped}
+
+
+@frappe.whitelist()
+def import_csv_to_email_group(email_group, file_url):
+	"""Add every email address found anywhere in an uploaded CSV to an Email
+	Group, creating the group if needed.
+
+	Deliberately column-name-agnostic: a CSV exported from the Lead list, the
+	Communication inbox, or anywhere else never agrees on a header ("Email"
+	vs "ID" vs "Sender"), so the Data Import tool's strict template kept
+	rejecting these exports. Scanning every cell for an email-shaped string
+	sidesteps that entirely.
+	"""
+	if not file_url:
+		frappe.throw(_("Upload a CSV file first."), frappe.ValidationError)
+
+	if frappe.db.exists("Email Group", email_group):
+		group = frappe.get_doc("Email Group", email_group)
+		group.check_permission("write")
+	else:
+		group = frappe.get_doc({"doctype": "Email Group", "title": email_group}).insert()
+
+	file_doc = frappe.get_doc("File", {"file_url": file_url})
+	content = file_doc.get_content()
+	if isinstance(content, bytes):
+		content = content.decode("utf-8", errors="ignore")
+
+	found_emails = {match.lower() for match in EMAIL_IN_TEXT_RE.findall(content)}
+
+	added, skipped = [], []
+	for email in sorted(found_emails):
+		if frappe.db.exists("Email Group Member", {"email_group": group.name, "email": email}):
+			skipped.append(email)
+			continue
+		frappe.get_doc({
+			"doctype": "Email Group Member",
+			"email_group": group.name,
+			"email": email,
+		}).insert(ignore_permissions=True)
+		added.append(email)
+
+	frappe.db.commit()
+	return {"email_group": group.name, "added": added, "skipped": skipped, "total_found": len(found_emails)}
 
 
 def delete_dispatch_records(doc, method=None):

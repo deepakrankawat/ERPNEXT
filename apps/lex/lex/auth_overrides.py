@@ -17,8 +17,7 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 from frappe.www.login import _generate_temporary_login_link, get_login_with_email_link_ratelimit
 
-
-SUPPORT_SENDER = "Lexocrates <support@lexocrates.com>"
+from lex.email_senders import SUPPORT_SENDER, send_with_fallback
 
 
 @frappe.whitelist(allow_guest=True)
@@ -44,10 +43,10 @@ def send_login_link(email: str):
 	</p>
 	<p style="margin:0; color:#4B5563; font-size:13px;">This link expires in {expiry} minutes. If you did not request it, you can safely ignore this email.</p>
 """
-		frappe.sendmail(
+		send_with_fallback(
+			SUPPORT_SENDER,
 			subject=subject,
 			recipients=email,
-			sender=SUPPORT_SENDER,
 			message=_branded_email("Log in to your account", body),
 			now=True,
 		)

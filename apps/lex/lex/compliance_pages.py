@@ -5,10 +5,10 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 from frappe.utils import escape_html, get_url_to_form, now_datetime, strip_html_tags, validate_email_address
 
+from lex.email_senders import SALES_SENDER, send_with_fallback
 
 SALES_NOTIFICATION_TEMPLATE = "Lexocrates Website Contact - Sales Notification"
 SALES_FALLBACK_EMAIL = "sales@lexocrates.com"
-SALES_SENDER = "Lexocrates <sales@lexocrates.com>"
 
 
 def _plain_text(value: str | None, limit: int) -> str:
@@ -40,9 +40,9 @@ def _notify_sales_managers(*, lead, name: str, email: str, subject: str, message
 		"request_message": escape_html(message),
 		"submitted_on": escape_html(str(now_datetime())),
 	}
-	frappe.sendmail(
+	send_with_fallback(
+		SALES_SENDER,
 		recipients=_sales_manager_recipients(),
-		sender=SALES_SENDER,
 		reply_to=email,
 		subject=frappe.render_template(template.subject, context),
 		message=frappe.render_template(template.response_html, context),

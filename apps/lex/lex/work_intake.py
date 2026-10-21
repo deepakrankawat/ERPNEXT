@@ -11,6 +11,7 @@ from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetim
 from frappe.utils.file_manager import save_file
 
 from lex.client_access import get_portal_user, has_matter_access, has_portal_capability
+from lex.email_senders import SALES_SENDER, outgoing_email_is_ready, send_with_fallback
 from lex.pdf_watermark import add_secure_download_url, secure_download_url_for_file_url
 from lex.portal_audit import create_portal_audit_event
 
@@ -18,7 +19,6 @@ from lex.portal_audit import create_portal_audit_event
 # The fixed-price estimator bills only exact native PDF pages.  Accepting other
 # source formats here would let a client complete an upload that cannot advance
 # to an estimate, so the client/Desk Job-document contract is PDF-only.
-SALES_SENDER = "Lexocrates <sales@lexocrates.com>"
 ALLOWED_UPLOAD_EXTENSIONS = {".pdf"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 INTERNAL_ROLES = {"System Manager", "LPO_Admin", "LPO_Manager", "Lexocrates Finance", "Accounts Manager"}
@@ -1765,7 +1765,7 @@ def _notify_ceo_of_pending_pricing(doc):
 			"email_content": message,
 		}).insert(ignore_permissions=True)
 	recipient_emails = list(filter(None, (frappe.db.get_value("User", user, "email") for user in ceo_users)))
-	if recipient_emails and _outgoing_email_is_ready():
+	if recipient_emails and outgoing_email_is_ready():
 		try:
 			frappe.sendmail(recipients=recipient_emails, subject=subject, message=message, now=False)
 		except Exception:
@@ -1910,15 +1910,6 @@ def _post_ceo_payment_confirmation(doc):
 		frappe.log_error(frappe.get_traceback(), f"CEO Payment Confirmation Chat Notification Failed for {doc.name}")
 
 
-def _outgoing_email_is_ready() -> bool:
-	return bool(
-		frappe.db.exists(
-			"Email Account",
-			{"enable_outgoing": 1, "default_outgoing": 1},
-		)
-	)
-
-
 def _client_portal_url(section: str = "new-matter") -> str:
 	base = str(frappe.conf.get("lexocrates_public_url") or "https://engine.lexocrates.com").rstrip("/")
 	return f"{base}/client-portal#{section}"
@@ -1936,7 +1927,7 @@ def _notify_client_quote_ready(doc):
 		recipients.extend(get_authorized_portal_users(doc.matter))
 	recipients = list(dict.fromkeys(filter(None, recipients)))
 	emails = list(filter(None, (frappe.db.get_value("User", user, "email") for user in recipients)))
-	if not emails or not _outgoing_email_is_ready() or getattr(frappe.flags, "in_test", False):
+	if not emails or not outgoing_email_is_ready() or getattr(frappe.flags, "in_test", False):
 		return
 	message = _(
 		"<p>Your Lexocrates job pricing is ready for review and payment.</p>"
@@ -1949,10 +1940,10 @@ def _notify_client_quote_ready(doc):
 		_client_portal_url("new-matter"),
 	)
 	try:
-		frappe.sendmail(
+		send_with_fallback(
+			SALES_SENDER,
 			recipients=emails,
 			subject=_("Lexocrates job pricing is ready: {0}").format(doc.intake_title),
-			sender=SALES_SENDER,
 			message=message,
 			reference_doctype=doc.doctype,
 			reference_name=doc.name,
@@ -1978,7 +1969,7 @@ def _notify_client_pilot_approved(doc):
 		recipients.extend(get_authorized_portal_users(doc.matter))
 	recipients = list(dict.fromkeys(filter(None, recipients)))
 	emails = list(filter(None, (frappe.db.get_value("User", user, "email") for user in recipients)))
-	if not emails or not _outgoing_email_is_ready() or getattr(frappe.flags, "in_test", False):
+	if not emails or not outgoing_email_is_ready() or getattr(frappe.flags, "in_test", False):
 		return
 	message = _(
 		"<p>Good news — your job has been approved under the <b>Complimentary Pilot Engagement</b> "
@@ -1992,10 +1983,10 @@ def _notify_client_pilot_approved(doc):
 		_client_portal_url("new-matter"),
 	)
 	try:
-		frappe.sendmail(
+		send_with_fallback(
+			SALES_SENDER,
 			recipients=emails,
 			subject=_("Your Lexocrates pilot job is approved and active: {0}").format(doc.intake_title),
-			sender=SALES_SENDER,
 			message=message,
 			reference_doctype=doc.doctype,
 			reference_name=doc.name,

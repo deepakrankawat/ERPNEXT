@@ -889,13 +889,13 @@ body:not([data-route]) .web-header-container,
 .list-view-container .list-row:has(.lex-email-inbox-meta) {
 	align-items: center;
 	border-bottom: 1px solid rgba(11, 23, 54, 0.1);
-	background: #ffffff;
+	background: var(--lex-surface);
 }
 
 [data-route^="List/Communication/Inbox"] .list-row:hover,
 .list-view-container .list-row:has(.lex-email-inbox-meta):hover {
-	background: #f8fafc;
-	box-shadow: inset 3px 0 0 #b8860b;
+	background: var(--lex-surface-2);
+	box-shadow: inset 3px 0 0 var(--lex-accent);
 }
 
 .lex-email-inbox-meta {
@@ -903,7 +903,7 @@ body:not([data-route]) .web-header-container,
 	justify-content: flex-end;
 	align-items: center;
 	gap: 10px;
-	color: #0b1736;
+	color: var(--lex-ink);
 }
 
 .lex-email-meta-top {
@@ -923,8 +923,8 @@ body:not([data-route]) .web-header-container,
 	padding: 3px 8px;
 	border: 1px solid rgba(11, 23, 54, 0.12);
 	border-radius: 999px;
-	background: #f6f8fb;
-	color: #0b1736;
+	background: var(--lex-surface-2);
+	color: var(--lex-ink);
 	font-size: 11px;
 	font-weight: 700;
 	line-height: 1;
@@ -933,8 +933,8 @@ body:not([data-route]) .web-header-container,
 .lex-email-link-pill {
 	max-width: 96px;
 	text-decoration: none;
-	color: #7a5a08;
-	background: rgba(184, 134, 11, 0.12);
+	color: var(--lex-accent);
+	background: var(--lex-accent-soft);
 	border-color: rgba(184, 134, 11, 0.22);
 }
 
@@ -945,21 +945,21 @@ body:not([data-route]) .web-header-container,
 }
 
 .lex-email-link-pill:hover {
-	color: #0b1736;
+	color: var(--lex-ink);
 	background: rgba(184, 134, 11, 0.18);
 	text-decoration: none;
 }
 
 .lex-email-chip-success {
-	background: rgba(22, 163, 74, 0.12);
+	background: var(--lex-green-bg);
 	border-color: rgba(22, 163, 74, 0.24);
-	color: #166534;
+	color: var(--lex-green);
 }
 
 .lex-email-chip-info {
-	background: rgba(37, 99, 235, 0.12);
+	background: var(--lex-blue-bg);
 	border-color: rgba(37, 99, 235, 0.22);
-	color: #1d4ed8;
+	color: var(--lex-blue);
 }
 
 .lex-email-timebox {
@@ -973,21 +973,14 @@ body:not([data-route]) .web-header-container,
 .lex-email-time {
 	font-size: 13px;
 	font-weight: 800;
-	color: #0b1736;
+	color: var(--lex-ink);
 	line-height: 1.15;
 }
 
 .lex-email-date {
 	font-size: 11px;
 	font-weight: 700;
-	color: #475569;
-	line-height: 1.15;
-}
-
-.lex-email-relative {
-	font-size: 10px;
-	font-weight: 700;
-	color: #7a5a08;
+	color: var(--lex-ink-muted);
 	line-height: 1.15;
 }
 
@@ -1006,6 +999,30 @@ body:not([data-route]) .web-header-container,
 	}
 }
 
+@media (max-width: 480px) {
+	[data-route^="List/Communication/Inbox"] .list-row,
+	.list-view-container .list-row:has(.lex-email-inbox-meta) {
+		flex-wrap: wrap;
+	}
+
+	.lex-email-inbox-meta {
+		min-width: 0;
+		gap: 4px;
+	}
+
+	.lex-email-timebox {
+		min-width: 0;
+	}
+
+	.lex-email-time {
+		font-size: 12px;
+	}
+
+	.lex-email-date {
+		font-size: 10px;
+	}
+}
+
 /* Lexocrates Communication email message view */
 .lex-communication-form .form-layout {
 	background: transparent;
@@ -1016,9 +1033,9 @@ body:not([data-route]) .web-header-container,
 	padding: 18px 20px;
 	border: 1px solid rgba(11, 23, 54, 0.14);
 	border-radius: 16px;
-	background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-	box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14), inset 4px 0 0 #b8860b;
-	color: #0b1736;
+	background: linear-gradient(135deg, var(--lex-surface) 0%, var(--lex-surface-2) 100%);
+	box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14), inset 4px 0 0 var(--lex-accent);
+	color: var(--lex-ink);
 }
 
 .lex-comm-card-head {
@@ -1037,7 +1054,7 @@ body:not([data-route]) .web-header-container,
 	font-weight: 800;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: #7a5a08;
+	color: var(--lex-accent);
 }
 
 .lex-comm-title-block h3 {
@@ -1045,7 +1062,7 @@ body:not([data-route]) .web-header-container,
 	font-size: 20px;
 	font-weight: 800;
 	line-height: 1.25;
-	color: #0b1736;
+	color: var(--lex-ink);
 }
 
 .lex-comm-time-block {
@@ -1054,7 +1071,7 @@ body:not([data-route]) .web-header-container,
 	min-width: 126px;
 	padding: 8px 10px;
 	border-radius: 12px;
-	background: #0b1736;
+	background: var(--lex-primary);
 	color: #ffffff;
 	font-variant-numeric: tabular-nums;
 }
@@ -1074,7 +1091,7 @@ body:not([data-route]) .web-header-container,
 .lex-comm-relative {
 	font-size: 11px;
 	font-weight: 800;
-	color: #f6d780;
+	color: rgba(255, 255, 255, 0.78);
 }
 
 .lex-comm-badges {
@@ -1092,35 +1109,35 @@ body:not([data-route]) .web-header-container,
 	padding: 5px 10px;
 	border: 1px solid rgba(11, 23, 54, 0.12);
 	border-radius: 999px;
-	background: #f1f5f9;
-	color: #0b1736;
+	background: var(--lex-surface-2);
+	color: var(--lex-ink);
 	font-size: 12px;
 	font-weight: 800;
 	line-height: 1;
 }
 
 .lex-comm-pill.received {
-	background: rgba(22, 163, 74, 0.12);
+	background: var(--lex-green-bg);
 	border-color: rgba(22, 163, 74, 0.24);
-	color: #166534;
+	color: var(--lex-green);
 }
 
 .lex-comm-pill.sent {
-	background: rgba(37, 99, 235, 0.12);
+	background: var(--lex-blue-bg);
 	border-color: rgba(37, 99, 235, 0.22);
-	color: #1d4ed8;
+	color: var(--lex-blue);
 }
 
 .lex-comm-linked {
-	background: rgba(184, 134, 11, 0.13);
+	background: var(--lex-accent-soft);
 	border-color: rgba(184, 134, 11, 0.28);
-	color: #7a5a08;
+	color: var(--lex-accent);
 	text-decoration: none;
 }
 
 .lex-comm-linked:hover {
 	background: rgba(184, 134, 11, 0.2);
-	color: #0b1736;
+	color: var(--lex-ink);
 	text-decoration: none;
 }
 
@@ -1134,7 +1151,7 @@ body:not([data-route]) .web-header-container,
 	padding: 10px 12px;
 	border: 1px solid rgba(11, 23, 54, 0.1);
 	border-radius: 12px;
-	background: rgba(255, 255, 255, 0.75);
+	background: var(--lex-surface-2);
 }
 
 .lex-comm-label {
@@ -1144,7 +1161,7 @@ body:not([data-route]) .web-header-container,
 	font-weight: 900;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
-	color: #475569;
+	color: var(--lex-ink-muted);
 }
 
 .lex-comm-people {
@@ -1160,27 +1177,27 @@ body:not([data-route]) .web-header-container,
 	max-width: 100%;
 	padding: 4px 8px;
 	border-radius: 999px;
-	background: #ffffff;
+	background: var(--lex-surface);
 	border: 1px solid rgba(11, 23, 54, 0.1);
 	font-size: 12px;
 	font-weight: 700;
-	color: #0f172a;
+	color: var(--lex-ink);
 	word-break: break-word;
 }
 
 .lex-comm-person.is-empty {
-	color: #64748b;
+	color: var(--lex-ink-faint);
 }
 
 .lex-comm-more {
-	background: #0b1736;
+	background: var(--lex-primary);
 	color: #ffffff;
 }
 
 .lex-communication-body-wrap {
 	border: 1px solid rgba(11, 23, 54, 0.14) !important;
 	border-radius: 16px !important;
-	background: #ffffff !important;
+	background: var(--lex-surface) !important;
 	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
 	overflow: hidden;
 }
@@ -1190,7 +1207,7 @@ body:not([data-route]) .web-header-container,
 	font-weight: 900;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
-	color: #0b1736 !important;
+	color: var(--lex-ink) !important;
 }
 
 .lex-communication-body,
@@ -1199,8 +1216,8 @@ body:not([data-route]) .web-header-container,
 	min-height: 220px;
 	font-size: 14px;
 	line-height: 1.65;
-	color: #0f172a;
-	background: #ffffff;
+	color: var(--lex-ink);
+	background: var(--lex-surface);
 }
 
 .lex-communication-form [data-fieldname="content"] img {
@@ -1218,13 +1235,33 @@ body:not([data-route]) .web-header-container,
 		justify-items: start;
 	}
 }
+
+@media (max-width: 480px) {
+	.lex-communication-message-card {
+		padding: 14px;
+		border-radius: 12px;
+	}
+
+	.lex-comm-title-block h3 {
+		font-size: 17px;
+	}
+
+	.lex-comm-address-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.lex-communication-body,
+	.lex-communication-form [data-fieldname="content"] .ql-editor {
+		padding: 14px !important;
+	}
+}
 /* Lexocrates Communication email thread chat view */
 .lex-email-thread-card {
 	margin: 0 0 18px;
 	padding: 16px;
 	border: 1px solid rgba(11, 23, 54, 0.14);
 	border-radius: 16px;
-	background: #eef2f7;
+	background: var(--lex-surface-2);
 	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
 }
 
@@ -1241,22 +1278,22 @@ body:not([data-route]) .web-header-container,
 	font-weight: 900;
 	letter-spacing: 0.07em;
 	text-transform: uppercase;
-	color: #7a5a08;
+	color: var(--lex-accent);
 }
 
 .lex-email-thread-head h4 {
 	margin: 2px 0 0;
 	font-size: 17px;
 	font-weight: 900;
-	color: #0b1736;
+	color: var(--lex-ink);
 }
 
 .lex-email-thread-count {
 	padding: 6px 10px;
 	border-radius: 999px;
-	background: #ffffff;
+	background: var(--lex-surface);
 	border: 1px solid rgba(11, 23, 54, 0.12);
-	color: #0b1736 !important;
+	color: var(--lex-ink) !important;
 	white-space: nowrap;
 }
 
@@ -1285,36 +1322,36 @@ body:not([data-route]) .web-header-container,
 	height: 34px;
 	flex: 0 0 34px;
 	border-radius: 50%;
-	background: #ffffff;
+	background: var(--lex-surface);
 	border: 1px solid rgba(11, 23, 54, 0.14);
-	color: #0b1736;
+	color: var(--lex-ink);
 	font-weight: 900;
 	box-shadow: 0 4px 10px rgba(15, 23, 42, 0.1);
 }
 
 .lex-email-thread-message.is-own .lex-email-thread-avatar {
-	background: #b8860b;
-	border-color: #b8860b;
+	background: var(--lex-accent);
+	border-color: var(--lex-accent);
 	color: #ffffff;
 }
 
 .lex-email-thread-bubble {
 	padding: 10px 12px;
 	border-radius: 14px 14px 14px 4px;
-	background: #ffffff;
+	background: var(--lex-surface);
 	border: 1px solid rgba(11, 23, 54, 0.1);
 	box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
 }
 
 .lex-email-thread-message.is-own .lex-email-thread-bubble {
 	border-radius: 14px 14px 4px 14px;
-	background: #0b1736;
-	border-color: #0b1736;
+	background: var(--lex-primary);
+	border-color: var(--lex-primary);
 	color: #ffffff;
 }
 
 .lex-email-thread-message.is-latest .lex-email-thread-bubble {
-	box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16), inset 3px 0 0 #b8860b;
+	box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16), inset 3px 0 0 var(--lex-accent);
 }
 
 .lex-email-thread-meta {
@@ -1329,12 +1366,12 @@ body:not([data-route]) .web-header-container,
 
 .lex-email-thread-meta strong {
 	font-weight: 900;
-	color: #0b1736;
+	color: var(--lex-ink);
 }
 
 .lex-email-thread-meta span {
 	font-weight: 800;
-	color: #64748b;
+	color: var(--lex-ink-faint);
 	white-space: nowrap;
 }
 
@@ -1346,12 +1383,41 @@ body:not([data-route]) .web-header-container,
 .lex-email-thread-body {
 	font-size: 14px;
 	line-height: 1.55;
-	color: #0f172a;
+	color: var(--lex-ink);
 	word-break: break-word;
 }
 
 .lex-email-thread-message.is-own .lex-email-thread-body {
 	color: #ffffff;
+}
+
+.lex-email-thread-subject {
+	font-size: 12px;
+	font-weight: 800;
+	color: var(--lex-ink-faint);
+	margin-bottom: 4px;
+}
+
+.lex-email-thread-message.is-own .lex-email-thread-subject {
+	color: rgba(255, 255, 255, 0.86);
+}
+
+.lex-email-thread-attachment {
+	color: var(--lex-ink-faint);
+}
+
+.lex-email-thread-message.is-own .lex-email-thread-attachment {
+	color: rgba(255, 255, 255, 0.86);
+}
+
+.lex-email-thread-message.is-clickable .lex-email-thread-bubble {
+	cursor: pointer;
+	transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.lex-email-thread-message.is-clickable .lex-email-thread-bubble:hover {
+	box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
+	transform: translateY(-1px);
 }
 
 .lex-raw-email-content-collapsed .lex-communication-body-wrap {
@@ -1360,12 +1426,16 @@ body:not([data-route]) .web-header-container,
 	opacity: 0.72;
 }
 
+.lex-raw-email-content-hidden {
+	display: none !important;
+}
+
 .lex-raw-email-note {
 	margin-left: 8px;
 	padding: 2px 7px;
 	border-radius: 999px;
-	background: rgba(184, 134, 11, 0.13);
-	color: #7a5a08;
+	background: var(--lex-accent-soft);
+	color: var(--lex-accent);
 	font-size: 10px;
 	font-weight: 900;
 	letter-spacing: 0;
@@ -1388,8 +1458,8 @@ body:not([data-route]) .web-header-container,
 	padding: 16px;
 	border: 1px solid rgba(11, 23, 54, 0.14);
 	border-radius: 16px;
-	background: #ffffff;
-	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12), inset 4px 0 0 #b8860b;
+	background: var(--lex-surface);
+	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12), inset 4px 0 0 var(--lex-accent);
 }
 
 .lex-email-template-preview-head {
@@ -1407,23 +1477,30 @@ body:not([data-route]) .web-header-container,
 	font-weight: 900;
 	letter-spacing: 0.07em;
 	text-transform: uppercase;
-	color: #7a5a08;
+	color: var(--lex-accent);
 }
 
 .lex-email-template-preview-head h4 {
 	margin: 2px 0 0;
 	font-size: 17px;
 	font-weight: 900;
-	color: #0b1736;
+	color: var(--lex-ink);
 }
 
 .lex-email-template-preview-pill {
 	padding: 6px 10px;
 	border-radius: 999px;
-	background: rgba(184, 134, 11, 0.13);
+	background: var(--lex-accent-soft);
 	border: 1px solid rgba(184, 134, 11, 0.24);
-	color: #7a5a08 !important;
+	color: var(--lex-accent) !important;
 	white-space: nowrap;
+}
+
+.lex-email-template-preview-head-right {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
 }
 
 .lex-email-template-preview-frame {

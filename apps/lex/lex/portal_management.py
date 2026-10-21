@@ -12,13 +12,13 @@ from frappe.utils.password_strength import test_password_strength
 
 from lex.client_access import get_portal_user, require_client_administrator
 from lex.client_schema import new_client_id
+from lex.email_senders import SUPPORT_SENDER, outgoing_email_is_ready, send_with_fallback
 from lex.lex.doctype.lexocrates_portal_user.lexocrates_portal_user import (
 	PORTAL_ROLE_TO_FRAPPE_ROLE,
 )
 from lex.portal_audit import create_portal_audit_event
 
 
-SUPPORT_SENDER = "Lexocrates <support@lexocrates.com>"
 INVITATION_HOURS = 72
 REGISTRATION_HOURS = 24
 REGISTRATION_ACTIVATION_HOURS = 48
@@ -43,10 +43,10 @@ def _public_portal_url(path: str) -> str:
 
 def _send_security_email_now(*, recipient: str, subject: str, message: str):
 	"""Hand security mail to SMTP immediately after commit, without scheduler latency."""
-	return frappe.sendmail(
+	return send_with_fallback(
+		SUPPORT_SENDER,
 		recipients=[recipient],
 		subject=subject,
-		sender=SUPPORT_SENDER,
 		message=message,
 		delayed=False,
 		send_priority=1,
@@ -131,12 +131,12 @@ def invite_portal_user(
 	)
 	activation_url = _public_portal_url(f"/client-invitation?token={token}")
 	email_sent = False
-	if not getattr(frappe.flags, "in_test", False) and _outgoing_email_is_ready():
+	if not getattr(frappe.flags, "in_test", False) and outgoing_email_is_ready():
 		try:
-			frappe.sendmail(
+			send_with_fallback(
+				SUPPORT_SENDER,
 				recipients=[invitee_email],
 				subject=_("Your secure Lexocrates Portal invitation"),
-				sender=SUPPORT_SENDER,
 				message=_(
 					"You have been invited to the Lexocrates Portal. Complete activation within {0} hours: <a href=\"{1}\">Activate account</a>."
 				).format(INVITATION_HOURS, activation_url),
@@ -424,7 +424,7 @@ def request_client_registration(
 		frappe.throw(_("This organization is already registered. Ask its Client Administrator for an invitation."), frappe.DuplicateEntryError)
 	is_test = bool(getattr(frappe.flags, "in_test", False))
 	is_development = bool(cint(frappe.conf.get("developer_mode")))
-	if not is_test and not is_development and not _outgoing_email_is_ready():
+	if not is_test and not is_development and not outgoing_email_is_ready():
 		frappe.throw(
 			_("Registration email is temporarily unavailable. Please contact Lexocrates support."),
 			frappe.ValidationError,
@@ -459,12 +459,12 @@ def request_client_registration(
 	)
 	verification_url = _public_portal_url(f"/client-registration?token={token}")
 	email_sent = False
-	if not is_test and _outgoing_email_is_ready():
+	if not is_test and outgoing_email_is_ready():
 		try:
-			frappe.sendmail(
+			send_with_fallback(
+				SUPPORT_SENDER,
 				recipients=[email],
 				subject=_("Verify your email and activate your Lexocrates account"),
-				sender=SUPPORT_SENDER,
 				message=_(
 					"Verify your email and create your primary administrator password within {0} hours: "
 					'<a href="{1}">Verify email and create password</a>.'
@@ -587,12 +587,12 @@ def record_registration_compliance(
 	result = {"registration": doc.name, "status": doc.status, "approved": approved, "email_sent": False}
 	if activation_token:
 		activation_url = _public_portal_url(f"/client-registration?activation={activation_token}")
-		if not getattr(frappe.flags, "in_test", False) and _outgoing_email_is_ready():
+		if not getattr(frappe.flags, "in_test", False) and outgoing_email_is_ready():
 			try:
-				frappe.sendmail(
+				send_with_fallback(
+					SUPPORT_SENDER,
 					recipients=[doc.email],
 					subject=_("Your Lexocrates Client registration is approved"),
-					sender=SUPPORT_SENDER,
 					message=_("Activate your approved account within {0} hours: <a href=\"{1}\">Activate account</a>.").format(
 						REGISTRATION_ACTIVATION_HOURS, activation_url
 					),
@@ -946,7 +946,7 @@ def send_email_login_link(email: str, redirect_to: str | None = None):
 	user_doc = frappe.get_doc("User", email)
 	if not user_doc.enabled:
 		frappe.throw(_("This user account is disabled."), frappe.PermissionError)
-	if not getattr(frappe.flags, "in_test", False) and not _outgoing_email_is_ready():
+	if not getattr(frappe.flags, "in_test", False) and not outgoing_email_is_ready():
 		frappe.throw(
 			_("Secure login email is not configured. Contact Lexocrates support or sign in with your password."),
 			frappe.ValidationError,
@@ -1104,7 +1104,7 @@ def send_client_email_login_link(email: str, redirect_to: str | None = None):
 	login_url = _public_portal_url(f"/login-link?token={token}")
 
 	if not getattr(frappe.flags, "in_test", False):
-		if not _outgoing_email_is_ready():
+		if not outgoing_email_is_ready():
 			frappe.throw(
 				_("Secure login email is not configured. Contact Lexocrates support or sign in with your password."),
 				frappe.ValidationError,
@@ -1257,14 +1257,6 @@ def validate_login_surface(login_manager=None):
 	elif surface == "staff" and frappe.db.get_value("User", user, "user_type") != "System User":
 		frappe.throw(_("Client accounts must use the Client Portal login."), frappe.PermissionError)
 
-
-def _outgoing_email_is_ready() -> bool:
-	return bool(
-		frappe.db.exists(
-			"Email Account",
-			{"enable_outgoing": 1, "default_outgoing": 1},
-		)
-	)
 
 
 @frappe.whitelist(allow_guest=True)

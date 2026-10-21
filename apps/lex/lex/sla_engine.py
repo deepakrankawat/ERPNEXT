@@ -12,6 +12,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, get_datetime, get_weekday, now_datetime
 
+from lex.mattermost_notifications import notify
 from lex.portal_audit import create_portal_audit_event
 from lex.work_intake import _portal_service_writes
 
@@ -318,7 +319,7 @@ def publish_assignment_sla_warnings():
 			"job_status": ["in", ["Work Commenced", "In Progress", "QA Review", "Ready for Delivery"]],
 			"confirmed_delivery_date": ["is", "set"],
 		},
-		fields=["name", "confirmed_delivery_date", "customer", "engagement"],
+		fields=["name", "job_title", "confirmed_delivery_date", "customer", "engagement", "assigned_analyst"],
 	)
 	now = now_datetime()
 	for job in jobs:
@@ -326,14 +327,31 @@ def publish_assignment_sla_warnings():
 		if remaining_hours <= 0:
 			_notify_overdue(job)
 		elif remaining_hours <= threshold_hours:
-			create_portal_audit_event(
-				client=job.customer,
-				matter=job.engagement,
-				action="Assignment Approaching Deadline",
-				object_type="LPO Job",
-				object_id=job.name,
-				new_value={"hours_remaining": round(remaining_hours, 1)},
-			)
+			_notify_approaching_deadline(job, remaining_hours)
+
+
+def _notify_approaching_deadline(job, remaining_hours):
+	create_portal_audit_event(
+		client=job.customer,
+		matter=job.engagement,
+		action="Assignment Approaching Deadline",
+		object_type="LPO Job",
+		object_id=job.name,
+		new_value={"hours_remaining": round(remaining_hours, 1)},
+	)
+	# Resend the DM once per threshold-crossing, not on every hourly scheduler tick.
+	cache_key = f"sla_warning_dm:{job.name}"
+	if frappe.cache().get_value(cache_key):
+		return
+	frappe.cache().set_value(cache_key, 1, expires_in_sec=12 * 3600)
+	notify(
+		job.assigned_analyst,
+		_("Deadline approaching ({0}h left): {1} — {2}").format(
+			round(remaining_hours, 1), job.name, job.job_title or job.name
+		),
+		document_type="LPO Job",
+		document_name=job.name,
+	)
 
 
 def _notify_overdue(job):
@@ -343,6 +361,18 @@ def _notify_overdue(job):
 		action="Assignment Overdue",
 		object_type="LPO Job",
 		object_id=job.name,
+	)
+	cache_key = f"sla_overdue_dm:{job.name}"
+	if frappe.cache().get_value(cache_key):
+		return
+	frappe.cache().set_value(cache_key, 1, expires_in_sec=24 * 3600)
+	notify(
+		job.assigned_analyst,
+		_("Overdue: {0} — {1} has passed its Confirmed Delivery Date").format(
+			job.name, job.job_title or job.name
+		),
+		document_type="LPO Job",
+		document_name=job.name,
 	)
 
 

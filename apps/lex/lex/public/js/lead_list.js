@@ -26,7 +26,7 @@
 						{ fieldname: "start_date", fieldtype: "Date", label: __("Start Date"), reqd: 1, default: frappe.datetime.get_today() },
 						{ fieldname: "start_time", fieldtype: "Time", label: __("Start Time"), reqd: 1, default: frappe.datetime.now_time() },
 						{ fieldname: "time_zone", fieldtype: "Select", label: __("Timezone"), reqd: 1, default: "Asia/Kolkata",
-							options: ["Asia/Kolkata", "America/Toronto", "America/New_York", "Europe/London"].join("\n") },
+							options: ["Asia/Kolkata", "America/Toronto", "America/Vancouver", "America/Edmonton", "America/Winnipeg", "America/New_York", "Europe/London"].join("\n") },
 					],
 					primary_action_label: __("Send"),
 					primary_action: (values) => {

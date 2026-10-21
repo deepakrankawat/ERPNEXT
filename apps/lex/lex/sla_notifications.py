@@ -13,6 +13,7 @@ import frappe
 
 from lex.chat_automation import _lpo_matter_channel, _run_safely
 from lex.lex.doctype.lexocrates_chat_message.lexocrates_chat_message import create_system_message
+from lex.mattermost_notifications import notify
 
 
 def notify_confirmation_ready(doc, method=None):
@@ -133,3 +134,10 @@ def _notify_escalation_created(doc):
 		source_doctype=doc.doctype, source_name=doc.name,
 		automation_key=f"escalation-created:{doc.name}",
 	)
+	if doc.assigned_to:
+		notify(
+			doc.assigned_to,
+			f"Level {doc.escalation_level} Escalation raised on {job.name}: {doc.escalation_reason or ''}",
+			document_type=doc.doctype,
+			document_name=doc.name,
+		)

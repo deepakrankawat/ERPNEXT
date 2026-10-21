@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.core.doctype.communication.email import make
 from frappe.model.document import Document
-from frappe.utils import add_days, getdate, today
+from frappe.utils import add_days, get_time, getdate, today
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -41,6 +41,7 @@ class EmailCampaign(Document):
 		except ZoneInfoNotFoundError:
 			frappe.throw(_("Select a valid IANA timezone for this Email Campaign."))
 		self.set_date()
+		self.validate_schedule_send_times()
 		# checking if email is set for lead. Not checking for contact as email is a mandatory field for contact.
 		if self.email_campaign_for == "Lead":
 			self.validate_lead()
@@ -61,6 +62,34 @@ class EmailCampaign(Document):
 			)
 
 		self.end_date = add_days(getdate(self.start_date), max(send_after_days))
+
+	def validate_schedule_send_times(self):
+		# A Campaign Email Schedule step's own Send At Time silently overrides
+		# this Start Time at dispatch (lex.email_campaign_scheduler.scheduled_datetime_utc
+		# prefers the step's time when set). A leftover value from an earlier
+		# test on a reused Campaign template has previously caused a send to
+		# fire hours later than the Start Time shown on this form -- block
+		# that mismatch here instead of letting it fail silently.
+		#
+		# Only the day-0 step is checked: later follow-up steps (send_after_days
+		# > 0) are allowed -- and expected -- to carry their own Send At Time
+		# distinct from this Start Time, same as any multi-day drip sequence.
+		if not self.time_scheduling_enabled:
+			return
+		campaign = frappe.get_cached_doc("Campaign", self.campaign_name)
+		this_start = get_time(self.start_time)
+		for entry in campaign.get("campaign_schedules"):
+			if not entry.send_at_time or int(entry.send_after_days or 0) != 0:
+				continue
+			if get_time(entry.send_at_time) != this_start:
+				frappe.throw(
+					_(
+						"Campaign {0}'s day-0 schedule step has its own Send At Time ({1}), which "
+						"overrides this Email Campaign's Start Time ({2}) and will send at the "
+						"wrong time. Clear Send At Time on that step so it falls back to this "
+						"Start Time, or set this Start Time to match it."
+					).format(self.campaign_name, entry.send_at_time, self.start_time)
+				)
 
 	def validate_lead(self):
 		lead_email_id = frappe.db.get_value("Lead", self.recipient, "email_id")

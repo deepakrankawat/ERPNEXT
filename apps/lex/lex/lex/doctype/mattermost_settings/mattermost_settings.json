@@ -1,0 +1,35 @@
+{
+ "actions": [],
+ "creation": "2026-10-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "issingle": 1,
+ "field_order": [
+  "enabled", "mattermost_url", "mattermost_team", "bot_access_token", "setup_help",
+  "digest_section", "digest_channel_name",
+  "slash_command_section", "slash_command_token", "slash_command_help"
+ ],
+ "fields": [
+  {"default": "1", "fieldname": "enabled", "fieldtype": "Check", "label": "Enabled"},
+  {"default": "https://msg.lexocrates.com", "fieldname": "mattermost_url", "fieldtype": "Data", "label": "Mattermost URL", "reqd": 1},
+  {"default": "lexocrates", "fieldname": "mattermost_team", "fieldtype": "Data", "label": "Mattermost Team Name", "reqd": 1},
+  {"fieldname": "bot_access_token", "fieldtype": "Password", "label": "Bot Access Token"},
+  {"fieldname": "setup_help", "fieldtype": "HTML", "options": "<p class='text-muted'>Ask a Mattermost System Admin to: System Console &rarr; Integrations &rarr; Bot Accounts &rarr; enable bot account creation &rarr; create a bot (e.g. \"Lex Notifications\") &rarr; add it to the same Team as internal users &rarr; copy its Personal Access Token here. Every internal Frappe notification (assignment, mention, share, etc.) is then DM'd to the recipient's matching Mattermost account, matched by email. Client/website users are never contacted.</p>"},
+  {"fieldname": "digest_section", "fieldtype": "Section Break", "label": "Daily Digest"},
+  {"default": "town-square", "fieldname": "digest_channel_name", "fieldtype": "Data", "label": "Digest Channel Name"},
+  {"fieldname": "slash_command_section", "fieldtype": "Section Break", "label": "Slash Command"},
+  {"fieldname": "slash_command_token", "fieldtype": "Password", "label": "Slash Command Token"},
+  {"fieldname": "slash_command_help", "fieldtype": "HTML", "options": "<p class='text-muted'>In Mattermost: Integrations &rarr; Slash Commands &rarr; Add Slash Command. Command Trigger Word: <code>matter</code>. Request URL: <code>https://engine.lexocrates.com/api/method/lex.mattermost_notifications.slash_command_lookup</code>. Request Method: POST. Copy the generated token here.</p>"}
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-10-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Mattermost Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "read": 1, "role": "System Manager", "write": 1}
+ ],
+ "states": [],
+ "track_changes": 1
+}

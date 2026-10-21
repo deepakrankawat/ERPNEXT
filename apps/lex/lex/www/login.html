@@ -290,7 +290,7 @@
 
 			if (response.message === 'Logged In' || response.message === 'No App') {
 				let target = response.home_page || '/app';
-				if (redirect && redirect.startsWith('/app')) {
+				if (redirect && (redirect.startsWith('/app') || redirect.startsWith('/api/method/frappe.integrations.oauth2.authorize'))) {
 					target = redirect;
 				}
 				window.location.href = target;
