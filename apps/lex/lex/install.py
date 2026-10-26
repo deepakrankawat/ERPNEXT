@@ -103,6 +103,21 @@ def ensure_lpo_roles():
 			).insert(ignore_permissions=True)
 		elif role_name in LPO_ROLES and not frappe.db.get_value("Role", role_name, "desk_access"):
 			frappe.db.set_value("Role", role_name, "desk_access", 1, update_modified=False)
+	ensure_mattermost_only_role_profile()
+
+
+def ensure_mattermost_only_role_profile():
+	"""Let the New User form assign LPO_Mattermost_Only via Role Profile instead of
+	hand-picking the role (and accidentally leaving another Desk role checked)."""
+	if not frappe.db.exists("DocType", "Role Profile") or frappe.db.exists("Role Profile", MATTERMOST_ONLY_ROLE):
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Role Profile",
+			"role_profile": MATTERMOST_ONLY_ROLE,
+			"roles": [{"role": MATTERMOST_ONLY_ROLE}],
+		}
+	).insert(ignore_permissions=True)
 
 
 def ensure_app_is_first():
