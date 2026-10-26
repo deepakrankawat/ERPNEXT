@@ -1270,6 +1270,12 @@ def get_website_user_home_page(user: str | None = None) -> str:
 	user = user or frappe.session.user
 	if not user or user == "Guest":
 		return "login"
+	from lex.mattermost_oauth import user_is_mattermost_only
+
+	if user_is_mattermost_only(user):
+		# Routes back through lex.www.login's already-logged-in branch, which
+		# sends this role straight to Mattermost instead of the Client Portal.
+		return "login"
 	user_type = frappe.db.get_value("User", user, "user_type")
 	if user_type == "System User":
 		return "app"
