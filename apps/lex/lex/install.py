@@ -104,6 +104,24 @@ def ensure_lpo_roles():
 		elif role_name in LPO_ROLES and not frappe.db.get_value("Role", role_name, "desk_access"):
 			frappe.db.set_value("Role", role_name, "desk_access", 1, update_modified=False)
 	ensure_mattermost_only_role_profile()
+	ensure_mattermost_oauth_client_allows_role()
+
+
+def ensure_mattermost_oauth_client_allows_role():
+	"""The Mattermost SSO OAuth Client is hand-configured (client_id/secret are
+	site-specific, set up from Mattermost Settings) and defaults to only allowing
+	the "Desk User" role. Without this, LPO_Mattermost_Only users get rejected by
+	oauthlib with a misleading "Invalid client_id parameter value" error."""
+	if not frappe.db.exists("DocType", "OAuth Client"):
+		return
+	client_name = frappe.db.get_value("OAuth Client", {"app_name": "Mattermost"}, "name")
+	if not client_name:
+		return
+	doc = frappe.get_doc("OAuth Client", client_name)
+	if MATTERMOST_ONLY_ROLE in {d.role for d in doc.allowed_roles}:
+		return
+	doc.append("allowed_roles", {"role": MATTERMOST_ONLY_ROLE})
+	doc.save(ignore_permissions=True)
 
 
 def ensure_mattermost_only_role_profile():

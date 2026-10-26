@@ -71,9 +71,12 @@ def get_context(context):
 		raise frappe.Redirect
 
 	context.title = _("Lexocrates Legal Desk Access")
+	# Left blank (not defaulted to "/app") when there's no explicit redirect request,
+	# so the login page's JS can tell "nothing requested" apart from "/app was
+	# requested" and still apply the Mattermost-only override in the former case.
 	context.redirect_to = (
 		requested_redirect
 		if requested_redirect.startswith(("/app", OAUTH_AUTHORIZE_PATH))
-		else "/app"
+		else ""
 	)
 	return context
