@@ -19,7 +19,10 @@ def get_mattermost_login_url() -> str | None:
 
 def user_is_mattermost_only(user: str | None = None) -> bool:
 	user = user or frappe.session.user
-	if not user or user == "Guest":
+	# frappe.get_roles("Administrator") always returns every Role in the system
+	# regardless of actual assignment, so Administrator must be excluded here or
+	# it gets treated as Mattermost-only and redirected away from Desk too.
+	if not user or user in ("Guest", "Administrator"):
 		return False
 	return MATTERMOST_ONLY_ROLE in frappe.get_roles(user)
 
