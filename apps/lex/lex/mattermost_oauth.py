@@ -4,6 +4,33 @@ import zlib
 
 import frappe
 
+# Users holding only this role have no Desk access (see lex.install.ensure_lpo_roles);
+# logging in should bounce them straight into Mattermost instead of /app.
+MATTERMOST_ONLY_ROLE = "LPO_Mattermost_Only"
+
+
+def get_mattermost_login_url() -> str | None:
+	mm_settings = frappe.get_cached_doc("Mattermost Settings")
+	if not mm_settings.enabled or not mm_settings.mattermost_url:
+		return None
+	return f"{mm_settings.mattermost_url.rstrip('/')}/oauth/gitlab/login"
+
+
+def user_is_mattermost_only(user: str | None = None) -> bool:
+	user = user or frappe.session.user
+	if not user or user == "Guest":
+		return False
+	return MATTERMOST_ONLY_ROLE in frappe.get_roles(user)
+
+
+@frappe.whitelist()
+def get_mattermost_only_redirect() -> str | None:
+	"""Called by the staff login page right after a successful login; returns the
+	Mattermost SSO URL when this user's only purpose is messaging, else None."""
+	if not user_is_mattermost_only():
+		return None
+	return get_mattermost_login_url()
+
 
 @frappe.whitelist()
 def gitlab_user_profile():

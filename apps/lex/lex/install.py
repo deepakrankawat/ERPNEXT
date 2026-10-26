@@ -5,6 +5,9 @@ from frappe.utils import now_datetime
 
 
 LPO_ROLES = ("LPO_Admin", "LPO_Manager", "LPO_Analyst")
+# No Desk access at all - this role exists only so a user can be bounced straight
+# to Mattermost on login (see lex.mattermost_oauth), never into /app.
+MATTERMOST_ONLY_ROLE = "LPO_Mattermost_Only"
 PORTAL_ROLES = (
 	"Lexocrates Client Administrator",
 	"Lexocrates Partner General Counsel",
@@ -88,7 +91,7 @@ ACCOUNTING_WORKSPACE_BLOCK_IDS = {
 
 def ensure_lpo_roles():
 	"""Create the application roles before DocType permissions are imported."""
-	for role_name in (*LPO_ROLES, *PORTAL_ROLES):
+	for role_name in (*LPO_ROLES, MATTERMOST_ONLY_ROLE, *PORTAL_ROLES):
 		if not frappe.db.exists("Role", role_name):
 			frappe.get_doc(
 				{

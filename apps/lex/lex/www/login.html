@@ -290,8 +290,14 @@
 
 			if (response.message === 'Logged In' || response.message === 'No App') {
 				let target = response.home_page || '/app';
-				if (redirect && (redirect.startsWith('/app') || redirect.startsWith('/api/method/frappe.integrations.oauth2.authorize'))) {
+				const hasExplicitRedirect = redirect && (redirect.startsWith('/app') || redirect.startsWith('/api/method/frappe.integrations.oauth2.authorize'));
+				if (hasExplicitRedirect) {
 					target = redirect;
+				} else {
+					try {
+						const mm = await frappe.call({ method: 'lex.mattermost_oauth.get_mattermost_only_redirect' });
+						if (mm && mm.message) target = mm.message;
+					} catch (e) { /* fall back to the normal target */ }
 				}
 				window.location.href = target;
 			} else {

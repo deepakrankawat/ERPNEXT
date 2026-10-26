@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 import frappe
 from frappe import _
 
+from lex.mattermost_oauth import get_mattermost_login_url, user_is_mattermost_only
 from lex.portal_management import _safe_local_redirect
 
 no_cache = 1
@@ -37,6 +38,8 @@ def get_context(context):
 	)
 	if frappe.session.user != "Guest":
 		redirect_to = requested_redirect
+		if not redirect_to and user_is_mattermost_only():
+			redirect_to = get_mattermost_login_url()
 		if not redirect_to:
 			user_type = frappe.db.get_value("User", frappe.session.user, "user_type")
 			if user_type == "System User":
