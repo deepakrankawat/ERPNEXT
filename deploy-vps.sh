@@ -81,6 +81,19 @@ bench_exec() {
 	docker compose -f "$COMPOSE_FILE" exec -T "$WEB_SERVICE" "$@"
 }
 
+# Nginx serves /assets/<app>/ straight off this repo's apps/<app>/<app>/public/
+# on the host (see /etc/nginx/sites-enabled/*), but `bench build` only writes
+# the hashed dist/ bundles inside the container's own filesystem - apps/ isn't
+# a mounted volume, so the host copy never updates on its own. Without this,
+# Nginx keeps serving whatever dist/ happened to exist on the host before,
+# which drifts out of sync with every fresh image build and 404s.
+echo "[3/6] Syncing built frontend assets to the host for Nginx..."
+WEB_CID="$(docker compose -f "$COMPOSE_FILE" ps -q "$WEB_SERVICE")"
+for app in frappe erpnext; do
+	rm -rf "apps/$app/$app/public/dist"
+	docker cp "$WEB_CID:/home/frappe/frappe-bench/apps/$app/$app/public/dist" "apps/$app/$app/public/dist"
+done
+
 echo "[4/6] Preparing common Frappe configuration and site..."
 bench_exec python -c 'from pathlib import Path; p = Path("sites/common_site_config.json"); p.exists() or p.write_text("{}\n")'
 bench_exec bench set-config -g db_host mariadb
