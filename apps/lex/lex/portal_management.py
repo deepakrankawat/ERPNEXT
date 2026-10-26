@@ -1248,13 +1248,19 @@ def _is_direct_test_call() -> bool:
 
 def validate_login_surface(login_manager=None):
 	"""Keep client and staff authentication surfaces isolated after credentials pass."""
+	from lex.mattermost_oauth import user_is_mattermost_only
+
 	surface = str(frappe.local.form_dict.get("lex_login_surface") or "").strip().lower()
 	user = getattr(login_manager, "user", None)
 	if not surface or not user:
 		return
 	if surface == "client":
 		_require_active_client_login_profile(user)
-	elif surface == "staff" and frappe.db.get_value("User", user, "user_type") != "System User":
+	elif (
+		surface == "staff"
+		and frappe.db.get_value("User", user, "user_type") != "System User"
+		and not user_is_mattermost_only(user)
+	):
 		frappe.throw(_("Client accounts must use the Client Portal login."), frappe.PermissionError)
 
 
