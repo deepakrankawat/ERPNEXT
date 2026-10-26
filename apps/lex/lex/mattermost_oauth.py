@@ -63,48 +63,57 @@ def gitlab_user_profile():
 		"preferred_username": handle,
 	})
 
-	# This fires before Mattermost has created/updated its own account for this
-	# login, so the add-to-team job runs in the background and retries briefly.
-	frappe.enqueue(
-		"lex.mattermost_oauth.ensure_mattermost_team_membership",
-		queue="short",
-		enqueue_after_commit=True,
-		user_email=user_email,
-	)
+	# A returning user's Mattermost account already exists, so try the add
+	# synchronously first (one quick round trip) - this is what makes repeat
+	# logins skip Mattermost's "select a team" screen entirely. A brand new
+	# signup's account doesn't exist yet at this point (Mattermost creates it
+	# only after this response comes back), so fall back to a background job
+	# that retries briefly once Mattermost has had a chance to create it.
+	#
+	# That fallback can't use enqueue_after_commit: Mattermost calls this
+	# userinfo endpoint over GET, and Frappe only runs frappe.db.commit() after
+	# unsafe (POST/PUT/DELETE) requests, so a commit-triggered enqueue here
+	# would wait for a commit that never happens and the job would never run.
+	if not ensure_mattermost_team_membership(user_email, retries=1):
+		frappe.enqueue(
+			"lex.mattermost_oauth.ensure_mattermost_team_membership",
+			queue="short",
+			user_email=user_email,
+			retries=5,
+		)
 
 
-def ensure_mattermost_team_membership(user_email: str) -> None:
+def ensure_mattermost_team_membership(user_email: str, retries: int = 5) -> bool:
 	"""Every internal user who completes Mattermost SSO should land inside the
 	single Mattermost Team configured in Mattermost Settings, without anyone
-	having to invite them by hand."""
+	having to invite them by hand. Returns True once membership is confirmed."""
 	import requests
 
 	mm_settings = frappe.get_cached_doc("Mattermost Settings")
 	if not mm_settings.enabled or not mm_settings.mattermost_url or not mm_settings.mattermost_team:
-		return
+		return False
 	token = mm_settings.get_password("bot_access_token", raise_exception=False)
 	if not token:
-		return
+		return False
 	base = mm_settings.mattermost_url.rstrip("/")
 	headers = {"Authorization": f"Bearer {token}"}
 
 	team_resp = requests.get(f"{base}/api/v4/teams/name/{mm_settings.mattermost_team}", headers=headers, timeout=10)
 	if not team_resp.ok:
 		frappe.log_error(title=f"Mattermost team lookup failed for {mm_settings.mattermost_team}")
-		return
+		return False
 	team_id = team_resp.json().get("id")
 
 	user_id = None
-	for attempt in range(5):
+	for attempt in range(retries):
 		user_resp = requests.get(f"{base}/api/v4/users/email/{user_email}", headers=headers, timeout=10)
 		if user_resp.ok:
 			user_id = user_resp.json().get("id")
 			break
-		if attempt < 4:
+		if attempt < retries - 1:
 			time.sleep(2)
 	if not user_id:
-		frappe.log_error(title=f"Mattermost account not found for team add: {user_email}")
-		return
+		return False
 
 	add_resp = requests.post(
 		f"{base}/api/v4/teams/{team_id}/members",
@@ -114,3 +123,5 @@ def ensure_mattermost_team_membership(user_email: str) -> None:
 	)
 	if not add_resp.ok and "already" not in add_resp.text.lower():
 		frappe.log_error(title=f"Mattermost add-to-team failed for {user_email}", message=add_resp.text[:500])
+		return False
+	return True
