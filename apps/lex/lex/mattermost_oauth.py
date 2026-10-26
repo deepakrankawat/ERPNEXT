@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import zlib
 
 import frappe
@@ -58,3 +59,55 @@ def gitlab_user_profile():
 		"name": user.full_name or user_email,
 		"preferred_username": handle,
 	})
+
+	# This fires before Mattermost has created/updated its own account for this
+	# login, so the add-to-team job runs in the background and retries briefly.
+	frappe.enqueue(
+		"lex.mattermost_oauth.ensure_mattermost_team_membership",
+		queue="short",
+		enqueue_after_commit=True,
+		user_email=user_email,
+	)
+
+
+def ensure_mattermost_team_membership(user_email: str) -> None:
+	"""Every internal user who completes Mattermost SSO should land inside the
+	single Mattermost Team configured in Mattermost Settings, without anyone
+	having to invite them by hand."""
+	import requests
+
+	mm_settings = frappe.get_cached_doc("Mattermost Settings")
+	if not mm_settings.enabled or not mm_settings.mattermost_url or not mm_settings.mattermost_team:
+		return
+	token = mm_settings.get_password("bot_access_token", raise_exception=False)
+	if not token:
+		return
+	base = mm_settings.mattermost_url.rstrip("/")
+	headers = {"Authorization": f"Bearer {token}"}
+
+	team_resp = requests.get(f"{base}/api/v4/teams/name/{mm_settings.mattermost_team}", headers=headers, timeout=10)
+	if not team_resp.ok:
+		frappe.log_error(title=f"Mattermost team lookup failed for {mm_settings.mattermost_team}")
+		return
+	team_id = team_resp.json().get("id")
+
+	user_id = None
+	for attempt in range(5):
+		user_resp = requests.get(f"{base}/api/v4/users/email/{user_email}", headers=headers, timeout=10)
+		if user_resp.ok:
+			user_id = user_resp.json().get("id")
+			break
+		if attempt < 4:
+			time.sleep(2)
+	if not user_id:
+		frappe.log_error(title=f"Mattermost account not found for team add: {user_email}")
+		return
+
+	add_resp = requests.post(
+		f"{base}/api/v4/teams/{team_id}/members",
+		headers=headers,
+		json={"team_id": team_id, "user_id": user_id},
+		timeout=10,
+	)
+	if not add_resp.ok and "already" not in add_resp.text.lower():
+		frappe.log_error(title=f"Mattermost add-to-team failed for {user_email}", message=add_resp.text[:500])
