@@ -54,9 +54,15 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-SecretAdminPassword123!}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-SecretEncryptionKeyChangeMe32Char!}
       - HTTP_PORT=${HTTP_PORT:-8000}
+      - LINKEDIN_ORGANIZATION_ID=${LINKEDIN_ORGANIZATION_ID:-}
+      - LINKEDIN_ACCESS_TOKEN=${LINKEDIN_ACCESS_TOKEN:-}
+      - LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID:-}
+      - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET:-}
+      - EXPLORIUM_API_KEY=${EXPLORIUM_API_KEY:-}
     extra_hosts:
       - "development.localhost:127.0.0.1"
     volumes:
+      - ./.env:/home/frappe/frappe-bench/.env:ro
       - ./apps:/home/frappe/frappe-bench/apps
       - ./sites:/home/frappe/frappe-bench/sites
       - ./logs:/home/frappe/frappe-bench/logs

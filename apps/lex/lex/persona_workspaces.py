@@ -232,6 +232,7 @@ WORKSPACES = (
 		(
 			Shortcut("Leads", "DocType", "Lead", "List"),
 			Shortcut("Find Leads (Explorium)", "Page", "explorium-leads", color="#2490ef"),
+			Shortcut("LinkedIn CRM & Analytics", "Page", "linkedin-crm", color="#0077b5"),
 			Shortcut("Opportunities", "DocType", "Opportunity", "List"),
 			Shortcut("Campaigns", "DocType", "Campaign", "List"),
 			Shortcut("Customers", "DocType", "Customer", "List"),

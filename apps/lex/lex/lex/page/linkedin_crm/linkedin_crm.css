@@ -1,0 +1,607 @@
+.linkedin-crm-page {
+	padding: 16px 20px;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	color: var(--text-color, #1f2937);
+}
+
+.linkedin-header-card {
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 12px;
+	padding: 20px 24px;
+	margin-bottom: 24px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.linkedin-brand-badge {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.linkedin-logo-icon {
+	width: 44px;
+	height: 44px;
+	background: #0077b5;
+	border-radius: 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-weight: 800;
+	font-size: 24px;
+	letter-spacing: -1px;
+}
+
+.linkedin-status-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-radius: 100px;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.linkedin-status-badge.live {
+	background: #ecfdf5;
+	color: #059669;
+	border: 1px solid #a7f3d0;
+}
+
+.linkedin-status-badge.demo {
+	background: #fffbeb;
+	color: #d97706;
+	border: 1px solid #fde68a;
+}
+
+/* KPI Metric Cards Grid */
+.linkedin-kpi-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+	gap: 16px;
+	margin-bottom: 24px;
+}
+
+.linkedin-kpi-card {
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 12px;
+	padding: 18px 20px;
+	transition: transform 0.15s ease, box-shadow 0.15s ease;
+	position: relative;
+	overflow: hidden;
+}
+
+.linkedin-kpi-card:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+}
+
+.linkedin-kpi-card::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 4px;
+	background: #0077b5;
+}
+
+.linkedin-kpi-card.posts::before { background: #2563eb; }
+.linkedin-kpi-card.comments::before { background: #059669; }
+.linkedin-kpi-card.reactions::before { background: #d97706; }
+.linkedin-kpi-card.shares::before { background: #7c3aed; }
+.linkedin-kpi-card.impressions::before { background: #0891b2; }
+.linkedin-kpi-card.followers::before { background: #e11d48; }
+
+.kpi-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: #6b7280;
+	margin-bottom: 6px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.kpi-value {
+	font-size: 28px;
+	font-weight: 700;
+	color: #111827;
+	line-height: 1.2;
+}
+
+.kpi-subtitle {
+	font-size: 12px;
+	color: #4b5563;
+	margin-top: 6px;
+}
+
+.kpi-badge {
+	font-size: 11px;
+	font-weight: 600;
+	padding: 2px 6px;
+	border-radius: 4px;
+	background: #f3f4f6;
+	color: #374151;
+}
+
+/* Post Stream and Details */
+.linkedin-section-title {
+	font-size: 18px;
+	font-weight: 700;
+	color: #111827;
+	margin: 24px 0 16px 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.linkedin-post-card {
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 12px;
+	margin-bottom: 20px;
+	padding: 20px 24px;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.post-header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+
+.post-author-avatar {
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	object-fit: cover;
+	border: 1px solid #e5e7eb;
+}
+
+.post-meta h6 {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 700;
+	color: #111827;
+}
+
+.post-meta span {
+	font-size: 12px;
+	color: #6b7280;
+}
+
+.post-body {
+	font-size: 14px;
+	line-height: 1.6;
+	color: #374151;
+	margin-bottom: 16px;
+	white-space: pre-line;
+}
+
+.post-metrics-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	padding: 12px 16px;
+	background: #f9fafb;
+	border-radius: 8px;
+	margin-bottom: 16px;
+	font-size: 13px;
+	font-weight: 600;
+	color: #4b5563;
+}
+
+.metric-pill {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+/* Comments Section */
+.comments-accordion {
+	border-top: 1px solid #f3f4f6;
+	padding-top: 16px;
+}
+
+.comments-title {
+	font-size: 14px;
+	font-weight: 700;
+	color: #111827;
+	margin-bottom: 12px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.comment-item {
+	background: #f9fafb;
+	border: 1px solid #f3f4f6;
+	border-radius: 10px;
+	padding: 14px 16px;
+	margin-bottom: 12px;
+}
+
+.comment-author-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	margin-bottom: 6px;
+}
+
+.comment-author-name {
+	font-weight: 700;
+	font-size: 13px;
+	color: #111827;
+}
+
+.comment-author-headline {
+	font-size: 12px;
+	color: #6b7280;
+}
+
+.comment-text {
+	font-size: 13px;
+	color: #1f2937;
+	margin: 8px 0;
+	line-height: 1.5;
+}
+
+.comment-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.replies-thread {
+	margin-left: 24px;
+	border-left: 2px solid #e5e7eb;
+	padding-left: 14px;
+	margin-top: 10px;
+}
+
+.reply-item {
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 8px;
+	padding: 10px 14px;
+	margin-top: 8px;
+}
+
+.reply-author {
+	font-weight: 700;
+	font-size: 12px;
+	color: #0077b5;
+}
+
+.reply-text {
+	font-size: 12px;
+	color: #374151;
+	margin-top: 4px;
+}
+
+/* Tab Navigation */
+.linkedin-tabs-nav {
+	display: flex;
+	gap: 12px;
+	border-bottom: 2px solid #e5e7eb;
+	margin-bottom: 24px;
+}
+
+.linkedin-tab-btn {
+	padding: 10px 18px;
+	font-size: 14px;
+	font-weight: 600;
+	color: #6b7280;
+	border: none;
+	background: none;
+	cursor: pointer;
+	position: relative;
+	transition: color 0.15s ease;
+}
+
+.linkedin-tab-btn:hover {
+	color: #0077b5;
+}
+
+.linkedin-tab-btn.active {
+	color: #0077b5;
+}
+
+.linkedin-tab-btn.active::after {
+	content: "";
+	position: absolute;
+	bottom: -2px;
+	left: 0;
+	right: 0;
+	height: 3px;
+	background: #0077b5;
+	border-radius: 2px 2px 0 0;
+}
+
+.tab-badge {
+	background: #ef4444;
+	color: white;
+	font-size: 11px;
+	font-weight: 700;
+	padding: 2px 6px;
+	border-radius: 100px;
+	margin-left: 6px;
+}
+
+/* LIVE MESSAGES & INBOX STYLING */
+.linkedin-inbox-container {
+	display: grid;
+	grid-template-columns: 340px 1fr;
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 12px;
+	height: 650px;
+	overflow: hidden;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* Left Conversation List */
+.inbox-sidebar {
+	border-right: 1px solid #e5e7eb;
+	display: flex;
+	flex-direction: column;
+	background: #f9fafb;
+}
+
+.inbox-search-header {
+	padding: 16px;
+	border-bottom: 1px solid #e5e7eb;
+	background: #ffffff;
+}
+
+.inbox-search-input {
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid #d1d5db;
+	border-radius: 8px;
+	font-size: 13px;
+}
+
+.conversation-list {
+	overflow-y: auto;
+	flex: 1;
+}
+
+.conversation-item {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 16px;
+	border-bottom: 1px solid #f3f4f6;
+	cursor: pointer;
+	transition: background 0.15s ease;
+	position: relative;
+}
+
+.conversation-item:hover {
+	background: #f3f4f6;
+}
+
+.conversation-item.active {
+	background: #e0f2fe;
+	border-left: 4px solid #0077b5;
+}
+
+.conv-avatar-wrap {
+	position: relative;
+}
+
+.conv-avatar {
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	object-fit: cover;
+	border: 1px solid #e5e7eb;
+}
+
+.online-dot {
+	width: 10px;
+	height: 10px;
+	background: #10b981;
+	border: 2px solid white;
+	border-radius: 50%;
+	position: absolute;
+	bottom: 0;
+	right: 0;
+}
+
+.conv-details {
+	flex: 1;
+	min-width: 0;
+}
+
+.conv-top-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 2px;
+}
+
+.conv-name {
+	font-size: 14px;
+	font-weight: 700;
+	color: #111827;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.conv-time {
+	font-size: 11px;
+	color: #9ca3af;
+}
+
+.conv-headline {
+	font-size: 12px;
+	color: #6b7280;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	margin-bottom: 4px;
+}
+
+.conv-snippet-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.conv-snippet {
+	font-size: 12px;
+	color: #4b5563;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.conv-unread-badge {
+	background: #0077b5;
+	color: white;
+	font-size: 11px;
+	font-weight: 700;
+	padding: 1px 6px;
+	border-radius: 100px;
+}
+
+/* Right Chat Panel */
+.inbox-chat-panel {
+	display: flex;
+	flex-direction: column;
+	background: #ffffff;
+}
+
+.chat-header {
+	padding: 14px 20px;
+	border-bottom: 1px solid #e5e7eb;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	background: #ffffff;
+}
+
+.chat-prospect-info {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.chat-prospect-name {
+	font-size: 15px;
+	font-weight: 700;
+	color: #111827;
+	margin: 0;
+}
+
+.chat-prospect-sub {
+	font-size: 12px;
+	color: #6b7280;
+	margin: 0;
+}
+
+.chat-messages-stream {
+	flex: 1;
+	overflow-y: auto;
+	padding: 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	background: #f8fafc;
+}
+
+.chat-bubble-row {
+	display: flex;
+	flex-direction: column;
+	max-width: 72%;
+}
+
+.chat-bubble-row.inbound {
+	align-self: flex-start;
+}
+
+.chat-bubble-row.outbound {
+	align-self: flex-end;
+}
+
+.chat-bubble {
+	padding: 12px 16px;
+	border-radius: 14px;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.chat-bubble-row.inbound .chat-bubble {
+	background: #ffffff;
+	border: 1px solid #e2e8f0;
+	color: #1e293b;
+	border-bottom-left-radius: 2px;
+}
+
+.chat-bubble-row.outbound .chat-bubble {
+	background: #0077b5;
+	color: #ffffff;
+	border-bottom-right-radius: 2px;
+}
+
+.chat-bubble-meta {
+	font-size: 11px;
+	color: #94a3b8;
+	margin-top: 4px;
+	padding: 0 4px;
+}
+
+.chat-bubble-row.outbound .chat-bubble-meta {
+	text-align: right;
+}
+
+/* Chat Input Bar */
+.chat-input-bar {
+	padding: 16px 20px;
+	border-top: 1px solid #e5e7eb;
+	display: flex;
+	gap: 12px;
+	background: #ffffff;
+	align-items: flex-end;
+}
+
+.chat-textarea {
+	flex: 1;
+	border: 1px solid #d1d5db;
+	border-radius: 8px;
+	padding: 10px 14px;
+	font-size: 14px;
+	resize: none;
+	max-height: 100px;
+	min-height: 42px;
+	font-family: inherit;
+}
+
+.chat-send-btn {
+	padding: 10px 20px;
+	background: #0077b5;
+	color: white;
+	font-weight: 600;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+	height: 42px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.chat-send-btn:hover {
+	background: #005f93;
+}
+
