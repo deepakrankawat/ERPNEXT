@@ -26,6 +26,19 @@
   "confidentiality_level",
   "task_section",
   "task_description",
+  "service_sop_section", "service_sop_code", "service_sop_instruction_snapshot", "service_sop_complexity_tier", "service_sop_target_business_days", "service_sop_turnaround_note", "service_sop_review_tier", "service_sop_coordinator_role", "service_sop_coordinator", "service_sop_preconditions_verified", "service_sop_data_residency_checked", "service_sop_controls", "service_sop_work_log", "service_sop_ai_used", "service_sop_ai_verification_note", "service_sop_client_prohibits_ai", "service_sop_delivery_cover_note", "service_sop_archive_complete", "service_sop_archive_note", "service_sop_kpi_section", "service_sop_kpi_turnaround_met", "service_sop_kpi_control_verification", "service_sop_kpi_first_pass_qc", "service_sop_kpi_escalation_count", "service_sop_kpi_ai_verification",
+  "legal_research_intake_section", "research_deliverable_format", "research_citation_style", "research_confidentiality_level", "research_client_prohibits_ai", "research_data_handling_restrictions", "research_instructing_contact_name", "research_instructing_contact_role", "research_instructing_contact_email",
+  "legal_research_execution_section",
+  "legal_research_complexity_tier", "legal_research_target_business_days", "legal_research_turnaround_note",
+  "peer_reviewer",
+  "supervising_counsel",
+  "research_plan",
+  "research_log",
+  "primary_sources_verified",
+  "secondary_sources_reviewed",
+  "noting_up_completed", "research_archive_complete", "research_archive_note",
+  "legal_research_kpi_section", "research_kpi_turnaround_hours", "research_kpi_met_delivery_date", "research_kpi_escalation_count",
+  "legal_research_workflow_html",
   "schedule_section",
   "received_at",
   "due_date",
@@ -249,6 +262,357 @@
    "fieldtype": "Text Editor",
    "label": "Task Description",
    "reqd": 1
+  },
+  {
+   "fieldname": "service_sop_section",
+   "fieldtype": "Section Break",
+   "label": "SOP-002 to SOP-006 Service Controls",
+   "depends_on": "eval:in_list(['Litigation Support','Contract Review','Document Review','Compliance Review','Drafting'], doc.job_type)"
+  },
+  {
+   "fieldname": "service_sop_code",
+   "fieldtype": "Data",
+   "label": "Applicable SOP",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_instruction_snapshot",
+   "fieldtype": "Long Text",
+   "label": "Client Instruction Snapshot",
+   "read_only": 1
+  },
+  {
+   "default": "Standard",
+   "fieldname": "service_sop_complexity_tier",
+   "fieldtype": "Select",
+   "label": "Complexity Tier",
+   "options": "Standard\nComplex\nUrgent"
+  },
+  {
+   "fieldname": "service_sop_target_business_days",
+   "fieldtype": "Int",
+   "label": "SOP Target (Business Days)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_turnaround_note",
+   "fieldtype": "Small Text",
+   "label": "Turnaround Control",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_review_tier",
+   "fieldtype": "Select",
+   "label": "Review Tier",
+   "options": "Full\nRoutine\nClient-Facing\nFiling/Court-Facing",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_coordinator_role",
+   "fieldtype": "Data",
+   "label": "Coordinator Role",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_coordinator",
+   "fieldtype": "Link",
+   "label": "Coordinator / Verifier",
+   "options": "User",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "service_sop_preconditions_verified",
+   "fieldtype": "Check",
+   "label": "SOP Preconditions Independently Verified",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "service_sop_data_residency_checked",
+   "fieldtype": "Check",
+   "label": "Data Residency and Handling Restrictions Checked",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "service_sop_controls",
+   "fieldtype": "Table",
+   "label": "SOP Control Register",
+   "options": "LPO SOP Control Entry",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "service_sop_work_log",
+   "fieldtype": "Text Editor",
+   "label": "Service Work Log",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "service_sop_ai_used",
+   "fieldtype": "Check",
+   "label": "AI / TAR Was Materially Used",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "service_sop_ai_verification_note",
+   "fieldtype": "Small Text",
+   "label": "AI / TAR Independent Verification Note",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "service_sop_client_prohibits_ai",
+   "fieldtype": "Check",
+   "label": "Client Prohibits AI Assistance",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_delivery_cover_note",
+   "fieldtype": "Small Text",
+   "label": "Client Cover Note / Outstanding Items",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "service_sop_archive_complete",
+   "fieldtype": "Check",
+   "label": "Work Log and Source Records Archived",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "service_sop_archive_note",
+   "fieldtype": "Small Text",
+   "label": "Archive / Matter Folder Note",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "service_sop_kpi_section",
+   "fieldtype": "Section Break",
+   "label": "SOP Performance Evidence",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "service_sop_kpi_turnaround_met",
+   "fieldtype": "Check",
+   "label": "Internal Working Deadline Met",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_kpi_control_verification",
+   "fieldtype": "Percent",
+   "label": "Control Verification Compliance (%)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_kpi_first_pass_qc",
+   "fieldtype": "Check",
+   "label": "Passed Required QA on First Review Cycle",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_kpi_escalation_count",
+   "fieldtype": "Int",
+   "label": "Service Escalation Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_sop_kpi_ai_verification",
+   "fieldtype": "Check",
+   "label": "AI / TAR Verification Complete",
+   "read_only": 1
+  },
+  {
+   "fieldname": "legal_research_intake_section",
+   "fieldtype": "Section Break",
+   "label": "SOP-001 Client Instruction Snapshot",
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_deliverable_format",
+   "fieldtype": "Data",
+   "label": "Requested Deliverable Format",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_citation_style",
+   "fieldtype": "Data",
+   "label": "Required Citation Style",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_confidentiality_level",
+   "fieldtype": "Data",
+   "label": "Client Confidentiality Level",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_client_prohibits_ai",
+   "fieldtype": "Check",
+   "label": "Client Prohibits AI-Assisted Research",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_data_handling_restrictions",
+   "fieldtype": "Small Text",
+   "label": "Data Handling / Residency Instructions",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_instructing_contact_name",
+   "fieldtype": "Data",
+   "label": "Instructing Individual",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_instructing_contact_role",
+   "fieldtype": "Data",
+   "label": "Instructing Individual Role",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_instructing_contact_email",
+   "fieldtype": "Data",
+   "label": "Instructing Individual Email",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "legal_research_execution_section",
+   "fieldtype": "Section Break",
+   "label": "SOP-001 Legal Research Workflow",
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "default": "Standard",
+   "fieldname": "legal_research_complexity_tier",
+   "fieldtype": "Select",
+   "label": "Legal Research Complexity Tier",
+   "options": "Standard\nComplex\nUrgent",
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "legal_research_target_business_days",
+   "fieldtype": "Int",
+   "label": "SOP Target (Business Days)",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "legal_research_turnaround_note",
+   "fieldtype": "Small Text",
+   "label": "Turnaround Control",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "peer_reviewer",
+   "fieldtype": "Link",
+   "label": "Peer Reviewer",
+   "options": "User",
+   "permlevel": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "supervising_counsel",
+   "fieldtype": "Link",
+   "label": "Supervising Counsel",
+   "options": "User",
+   "permlevel": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_plan",
+   "fieldtype": "Text Editor",
+   "label": "Internal Research Plan",
+   "permlevel": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_log",
+   "fieldtype": "Table",
+   "label": "Research Log",
+   "options": "LPO Research Log Item",
+   "permlevel": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "default": "0",
+   "fieldname": "primary_sources_verified",
+   "fieldtype": "Check",
+   "label": "Primary Sources Verified",
+   "permlevel": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "default": "0",
+   "fieldname": "secondary_sources_reviewed",
+   "fieldtype": "Check",
+   "label": "Secondary Sources Used Only as Support",
+   "permlevel": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "default": "0",
+   "fieldname": "noting_up_completed",
+   "fieldtype": "Check",
+   "label": "Noting-Up and Currency Checks Completed",
+   "permlevel": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "default": "0",
+   "fieldname": "research_archive_complete",
+   "fieldtype": "Check",
+   "label": "Research Plan, Log and Source Records Archived",
+   "permlevel": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_archive_note",
+   "fieldtype": "Small Text",
+   "label": "Research Archive / Matter Folder Note",
+   "permlevel": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "legal_research_kpi_section",
+   "fieldtype": "Section Break",
+   "label": "SOP-001 KPI Snapshot",
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_kpi_turnaround_hours",
+   "fieldtype": "Float",
+   "label": "Actual Turnaround Hours",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_kpi_met_delivery_date",
+   "fieldtype": "Check",
+   "label": "Met Confirmed Delivery Date",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "research_kpi_escalation_count",
+   "fieldtype": "Int",
+   "label": "Escalations Raised",
+   "read_only": 1,
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
+  },
+  {
+   "fieldname": "legal_research_workflow_html",
+   "fieldtype": "HTML",
+   "label": "SOP-001 Detailed Workflow",
+   "depends_on": "eval:doc.job_type == 'Legal Research'"
   },
   {
    "fieldname": "schedule_section",

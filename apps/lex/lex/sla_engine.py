@@ -272,6 +272,31 @@ def pause_sla(job: str, reason: str, details: str | None = None, requested_from_
 	return {"job": job_doc.name, "job_status": job_doc.job_status}
 
 
+def pause_for_client_information(job: str, details: str):
+	"""Trusted SOP-001 bridge used by the Work Intake information-hold action."""
+	job_doc = frappe.get_doc("LPO Job", job)
+	if job_doc.job_status not in {"In Progress", "QA Review"} or job_doc.sla_paused:
+		return False
+	previous_status = job_doc.job_status
+	job_doc.append("sla_pause_log", {
+		"pause_start": now_datetime(),
+		"reason": "Additional Information Required",
+		"details": details,
+		"requested_from_client": 1,
+		"created_by": frappe.session.user,
+	})
+	job_doc.sla_paused = 1
+	job_doc.job_status_before_pause = previous_status
+	job_doc.job_status = "SLA Paused"
+	job_doc.save(ignore_permissions=True)
+	create_portal_audit_event(
+		client=job_doc.customer, user=frappe.session.user, matter=job_doc.engagement,
+		action="SLA Paused - Client Information Required", object_type="LPO Job", object_id=job_doc.name,
+		new_value={"details": details},
+	)
+	return True
+
+
 @frappe.whitelist()
 def resume_sla(job: str):
 	if not _has_management_access():
@@ -302,6 +327,29 @@ def resume_sla(job: str):
 		new_value={"duration_minutes": duration, "total_paused_minutes": job_doc.total_paused_minutes},
 	)
 	return {"job": job_doc.name, "job_status": job_doc.job_status, "paused_minutes": duration}
+
+
+def resume_client_information_pause(job: str):
+	"""Resume only the specific SOP-001 client-information pause, if one exists."""
+	job_doc = frappe.get_doc("LPO Job", job)
+	if not job_doc.sla_paused or job_doc.job_status != "SLA Paused":
+		return False
+	open_row = next((row for row in job_doc.sla_pause_log if not row.pause_end), None)
+	if not open_row or open_row.reason != "Additional Information Required":
+		return False
+	end = now_datetime()
+	open_row.pause_end = end
+	open_row.duration_minutes = max(0, int((get_datetime(end) - get_datetime(open_row.pause_start)).total_seconds() / 60))
+	job_doc.total_paused_minutes = cint(job_doc.total_paused_minutes) + open_row.duration_minutes
+	job_doc.sla_paused = 0
+	job_doc.job_status = job_doc.job_status_before_pause or "In Progress"
+	job_doc.save(ignore_permissions=True)
+	create_portal_audit_event(
+		client=job_doc.customer, user=frappe.session.user, matter=job_doc.engagement,
+		action="SLA Resumed - Client Information Received", object_type="LPO Job", object_id=job_doc.name,
+		new_value={"paused_minutes": open_row.duration_minutes},
+	)
+	return True
 
 
 # ---------------------------------------------------------------------------

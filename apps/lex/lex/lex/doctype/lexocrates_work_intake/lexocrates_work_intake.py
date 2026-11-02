@@ -12,6 +12,10 @@ MANAGEMENT_ROLES = {"System Manager", "LPO_Admin", "LPO_Manager", "Lexocrates Fi
 LOCKED_AFTER_FUNDING = {
 	"client", "portal_user", "submitted_by", "service_type", "jurisdiction", "priority",
 	"preliminary_details", "detailed_instructions", "expected_outcome", "requested_delivery_date",
+	"legal_questions", "factual_background", "deliverable_format", "citation_style",
+	"instructing_contact_name", "instructing_contact_role", "instructing_contact_email",
+	"data_handling_restrictions", "no_ai_tools",
+	"service_sop_details",
 	"sla_terms_snapshot", "sla_snapshot_hash",
 	"quoted_amount", "currency", "required_legal_capacity", "scope_summary", "delivery_timeline_hours",
 	"selected_pricing_service", "exact_pdf_page_count", "calculated_hours", "fixed_service_rate_cad",
@@ -26,6 +30,9 @@ class LexocratesWorkIntake(Document):
 			frappe.throw(_("Work Intakes must be created through the secure client intake service."), frappe.PermissionError)
 
 	def validate(self):
+		from lex.legal_research_sop import validate_intake
+
+		validate_intake(self)
 		if self.sla_accepted and not all((self.sla_accepted_by, self.sla_accepted_on, self.sla_snapshot_hash)):
 			frappe.throw(_("The accepted SLA must retain its user, timestamp and snapshot hash."), frappe.ValidationError)
 		if self.document_count and not self.sla_accepted:

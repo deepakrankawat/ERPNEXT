@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "creation": "2026-10-06 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["control_type", "control_detail", "source_reference", "event_date", "warning_intervals", "independently_verified", "verified_by", "verification_date", "status", "escalation", "record_note"],
+ "fields": [
+  {"fieldname": "control_type", "fieldtype": "Data", "in_list_view": 1, "label": "Control Type", "reqd": 1},
+  {"fieldname": "control_detail", "fieldtype": "Small Text", "in_list_view": 1, "label": "Detail", "reqd": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "label": "Source / Clause / Order Reference"},
+  {"fieldname": "event_date", "fieldtype": "Date", "in_list_view": 1, "label": "Relevant Date"},
+  {"fieldname": "warning_intervals", "fieldtype": "Data", "label": "Warning Intervals", "read_only": 1},
+  {"default": "0", "fieldname": "independently_verified", "fieldtype": "Check", "in_list_view": 1, "label": "Independently Verified"},
+  {"fieldname": "verified_by", "fieldtype": "Link", "label": "Verified By", "options": "User"},
+  {"fieldname": "verification_date", "fieldtype": "Datetime", "label": "Verified On"},
+  {"default": "Pending", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Pending\nVerified\nAt Risk\nResolved", "reqd": 1},
+  {"fieldname": "escalation", "fieldtype": "Link", "label": "Escalation", "options": "LPO Service Escalation", "read_only": 1},
+  {"fieldname": "record_note", "fieldtype": "Small Text", "label": "Verification / Resolution Note"}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "module": "Lex",
+ "name": "LPO SOP Control Entry",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

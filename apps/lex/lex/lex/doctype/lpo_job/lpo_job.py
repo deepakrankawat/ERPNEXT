@@ -97,11 +97,16 @@ class LPOJob(Document):
 		self._validate_execution_snapshots()
 		self._validate_job_documents()
 		self._capture_document_lineage()
+		self._apply_legal_research_turnaround()
+		self._protect_legal_research_intake_snapshot()
 		self._validate_schedule()
 		self._validate_assignment()
 		self._validate_execution_controls()
+		self._validate_legal_research_sop()
+		self._validate_service_sop()
 		self._protect_governance_fields()
 		self._set_completed_on()
+		self._update_service_sop_kpis()
 		self._set_client_approval_state()
 		self._set_delivery_receipt_state()
 		self._validate_quality_and_client_gates()
@@ -399,6 +404,30 @@ class LPOJob(Document):
 			if get_datetime(self.due_date) < get_datetime(self.received_at):
 				frappe.throw(_("Due Date cannot be before Received At."), frappe.ValidationError)
 
+	def _apply_legal_research_turnaround(self):
+		"""Set and preserve the SOP-001 complexity-based turnaround target."""
+		if self.job_type != "Legal Research":
+			return
+		from lex.legal_research_sop import legal_research_turnaround
+
+		previous = self.get_doc_before_save()
+		should_refresh = self.is_new() or (
+			previous and previous.legal_research_complexity_tier != self.legal_research_complexity_tier
+			and previous.job_status in {"Draft", "Activated", "Submitted", "Conflict Check", "Under Review", "Lextimator Assessment", "Awaiting Internal Scope Review", "Awaiting Client Approval", "Confirmed"}
+		)
+		if not should_refresh:
+			return
+		target, note = legal_research_turnaround(self.legal_research_complexity_tier, start=self.received_at or now_datetime())
+		self.legal_research_target_business_days = {"Standard": 5, "Complex": 10, "Urgent": 0}.get(self.legal_research_complexity_tier, 0)
+		self.legal_research_turnaround_note = note
+		if target:
+			self.due_date = target
+
+	def _protect_legal_research_intake_snapshot(self):
+		from lex.legal_research_sop import validate_intake_snapshot_lock
+
+		validate_intake_snapshot_lock(self)
+
 	def _protect_client_submission(self):
 		if (
 			not is_client_user()
@@ -469,6 +498,26 @@ class LPOJob(Document):
 		elif self.job_status in {"Ready for Delivery", "Delivered", "Completed"}:
 			validate_job_sop_gate(self, "delivery")
 
+	def _validate_legal_research_sop(self):
+		"""Keep SOP-001 evidence inside the operational Job, never in client intake."""
+		from lex.legal_research_sop import validate_execution
+
+		validate_execution(self)
+
+	def _validate_service_sop(self):
+		from lex.service_sop import normalize_controls, set_turnaround, validate_delivery_reviews, validate_execution
+
+		set_turnaround(self)
+		normalize_controls(self)
+		validate_execution(self)
+		if self.job_status in {"Ready for Delivery", "Delivered", "Completed"}:
+			validate_delivery_reviews(self)
+
+	def _update_service_sop_kpis(self):
+		from lex.service_sop import update_kpis
+
+		update_kpis(self)
+
 	def _protect_governance_fields(self):
 		if self.is_new() or _has_management_access(frappe.session.user):
 			return
@@ -485,6 +534,16 @@ class LPOJob(Document):
 	def _set_completed_on(self):
 		if self.job_status in {"Delivered", "Completed"} and not self.completed_on:
 			self.completed_on = now_datetime()
+		if self.job_type == "Legal Research" and self.completed_on:
+			if self.sla_start_on:
+				self.research_kpi_turnaround_hours = round(
+					max(0, (get_datetime(self.completed_on) - get_datetime(self.sla_start_on)).total_seconds() / 3600), 2
+				)
+			if self.confirmed_delivery_date:
+				self.research_kpi_met_delivery_date = int(
+					get_datetime(self.completed_on) <= get_datetime(self.confirmed_delivery_date)
+				)
+			self.research_kpi_escalation_count = frappe.db.count("LPO Service Escalation", {"job": self.name})
 
 	def _set_client_approval_state(self):
 		"""Open a client decision whenever operations marks work ready for delivery."""
@@ -503,15 +562,28 @@ class LPOJob(Document):
 			self.delivery_receipt_status = "Awaiting Acknowledgement"
 
 	def _validate_quality_and_client_gates(self):
-		if self.job_status in {"Ready for Delivery", "Delivered", "Completed"} and self.qa_required:
-			approved_review = frappe.db.exists("LPO QA Review", {
+		if self.job_type == "Legal Research" and self.job_status in {"Ready for Delivery", "Delivered", "Completed"}:
+			for stage in ("Self Review", "Peer Review", "Supervising Counsel Review"):
+				if not frappe.db.exists("LPO QA Review", {
+					"job": self.name,
+					"review_stage": stage,
+					"review_status": "Approved",
+				}):
+					frappe.throw(
+						_("SOP-001 requires an approved {0} before delivery.").format(stage),
+						frappe.ValidationError,
+					)
+			final_review_filters = {
 				"job": self.name,
+				"review_stage": ["in", ["Final QA", "Final QC"]],
 				"review_status": "Approved",
-				"reviewer_independent": 1,
 				"reviewed_document": self.delivery_document,
 				"reviewed_document_checksum": self.delivery_document_checksum,
 				"reviewed_document_version": self.delivery_document_version,
-			})
+			}
+			if self.job_type != "Legal Research":
+				final_review_filters["reviewer_independent"] = 1
+			approved_review = frappe.db.exists("LPO QA Review", final_review_filters)
 			if not approved_review:
 				previous = self.get_doc_before_save()
 				legacy_terminal = bool(

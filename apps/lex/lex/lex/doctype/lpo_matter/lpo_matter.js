@@ -9,6 +9,10 @@ frappe.ui.form.on("LPO Matter", {
 			});
 		}, __("Create"));
 
+		frm.add_custom_button(__("Master Calendar"), () => {
+			frappe.set_route("master-calendar");
+		}, __("View"));
+
 		if (frm.doc.status === "Draft") {
 			frm.add_custom_button(__("Activate Matter"), () => {
 				frm.set_value("status", "Active");
