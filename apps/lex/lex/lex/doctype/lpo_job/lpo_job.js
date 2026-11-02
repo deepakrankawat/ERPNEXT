@@ -6,14 +6,24 @@ frappe.ui.form.on("LPO Job", {
 		frm.set_query("assigned_analyst", () => ({
 			filters: { enabled: 1, user_type: "System User" },
 		}));
+		frm.set_query("peer_reviewer", () => ({
+			filters: { enabled: 1, user_type: "System User" },
+		}));
+		frm.set_query("supervising_counsel", () => ({
+			filters: { enabled: 1, user_type: "System User" },
+		}));
 	},
 
 	refresh(frm) {
 		if (frm.is_new()) return;
+		renderLegalResearchWorkflow(frm);
 
 		if (frm.doc.engagement) {
 			frm.add_custom_button(__("Parent Matter"), () => {
 				frappe.set_route("Form", "LPO Matter", frm.doc.engagement);
+			}, __("View"));
+			frm.add_custom_button(__("Master Calendar"), () => {
+				frappe.set_route("master-calendar");
 			}, __("View"));
 		}
 		if (
@@ -43,6 +53,46 @@ frappe.ui.form.on("LPO Job", {
 		}, __("AI Document"));
 	},
 });
+
+function renderLegalResearchWorkflow(frm) {
+	const field = frm.get_field("legal_research_workflow_html");
+	if (!field) return;
+	if (frm.doc.job_type !== "Legal Research") {
+		field.$wrapper.empty();
+		return;
+	}
+	const render = (reviews = []) => {
+		const approved = new Set(reviews.filter((row) => row.review_status === "Approved").map((row) => row.review_stage));
+		const steps = [
+			["Client Intake", Boolean(frm.doc.work_intake)],
+			["Conflict & Funding", ["Work Commenced", "Assigned", "In Progress", "QA Review", "Ready for Delivery", "Delivered", "Completed"].includes(frm.doc.job_status)],
+			["Research Plan", Boolean(frm.doc.research_plan)],
+			["Primary / Secondary Research", Boolean(frm.doc.research_log && frm.doc.primary_sources_verified && frm.doc.secondary_sources_reviewed)],
+			["Noting-Up", Boolean(frm.doc.noting_up_completed)],
+			["Self Review", approved.has("Self Review")],
+			["Peer Review", approved.has("Peer Review")],
+			["Supervising Counsel", approved.has("Supervising Counsel Review")],
+			["Final QC", approved.has("Final QA") || approved.has("Final QC")],
+			["Delivery & Closure", ["Delivered", "Completed"].includes(frm.doc.job_status)],
+		];
+		const current = Math.max(0, steps.findIndex(([, complete]) => !complete));
+		field.$wrapper.html(`
+			<div class="form-dashboard-section" style="margin:12px 0 4px; padding:16px; border:1px solid var(--border-color); border-radius:8px;">
+				<div style="font-weight:600; margin-bottom:12px;">SOP-001 Detailed Workflow</div>
+				<div style="display:flex; flex-wrap:wrap; gap:8px;">${steps.map(([label, complete], index) => {
+					const state = complete ? "Complete" : index === current ? "Current" : "Pending";
+					const color = complete ? "var(--green-500)" : index === current ? "var(--orange-500)" : "var(--text-muted)";
+					return `<span title="${frappe.utils.escape_html(state)}" style="border:1px solid ${color}; color:${color}; border-radius:16px; padding:5px 9px; font-size:12px;">${index + 1}. ${frappe.utils.escape_html(label)}</span>`;
+				}).join("")}</div>
+				<div class="text-muted small" style="margin-top:10px;">Current Job status: ${frappe.utils.escape_html(frm.doc.job_status || "Draft")}. Each step is backed by server-side SOP-001 gates.</div>
+			</div>`);
+	};
+	frappe.db.get_list("LPO QA Review", {
+		filters: { job: frm.doc.name },
+		fields: ["review_stage", "review_status"],
+		limit: 20,
+	}).then(render).catch(() => render([]));
+}
 
 async function open_system_job_estimator(frm) {
 	const response = await frappe.call({

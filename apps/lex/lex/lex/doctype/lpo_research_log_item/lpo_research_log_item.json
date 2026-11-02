@@ -1,0 +1,35 @@
+{
+ "actions": [],
+ "creation": "2026-10-06 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "checked_on",
+  "authority_type",
+  "source_checked",
+  "search_terms_used",
+  "result_or_reason",
+  "currency_checked",
+  "currency_result",
+  "ai_assisted",
+  "primary_source_verified"
+ ],
+ "fields": [
+  {"fieldname": "checked_on", "fieldtype": "Datetime", "in_list_view": 1, "label": "Date / Time Checked", "reqd": 1},
+  {"fieldname": "authority_type", "fieldtype": "Select", "in_list_view": 1, "label": "Authority Type", "options": "Primary Authority\nSecondary Authority\nCase Currency Check\nStatute Currency Check\nAI Research Lead", "reqd": 1},
+  {"fieldname": "source_checked", "fieldtype": "Data", "in_list_view": 1, "label": "Source Checked", "reqd": 1},
+  {"fieldname": "search_terms_used", "fieldtype": "Small Text", "label": "Search Terms Used"},
+  {"fieldname": "result_or_reason", "fieldtype": "Small Text", "label": "Result / Why Used or Rejected", "reqd": 1},
+  {"default": "0", "fieldname": "currency_checked", "fieldtype": "Check", "label": "Currency Check Performed"},
+  {"fieldname": "currency_result", "fieldtype": "Small Text", "label": "Currency Check Result"},
+  {"default": "0", "fieldname": "ai_assisted", "fieldtype": "Check", "label": "AI-Assisted Research"},
+  {"default": "0", "fieldname": "primary_source_verified", "fieldtype": "Check", "label": "Independently Verified Against Primary Source"}
+ ],
+ "istable": 1,
+ "module": "Lex",
+ "name": "LPO Research Log Item",
+ "owner": "Administrator",
+ "sort_field": "idx",
+ "sort_order": "ASC"
+}

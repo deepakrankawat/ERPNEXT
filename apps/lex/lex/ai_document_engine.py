@@ -17,7 +17,13 @@ from frappe.utils import add_to_date, cint, flt, get_datetime, now_datetime
 from frappe.utils.file_manager import save_file
 
 from lex.ai_gateway import invoke_ai_gateway
-from lex.document_export import build_export_files, export_metadata, normalize_export_options, safe_export_filename
+from lex.document_export import (
+	build_export_files,
+	export_metadata,
+	legal_research_export_filename,
+	normalize_export_options,
+	safe_export_filename,
+)
 from lex.file_quarantine import release_internally_generated_file
 from lex.pdf_watermark import secure_pdf_download_url
 from lex.portal_audit import create_portal_audit_event
@@ -734,6 +740,10 @@ def complete_job_document(
 	if not content.strip():
 		frappe.throw(_("Final document content is empty. Please run AI services or provide final text before completing."), frappe.ValidationError)
 
+	if job.job_type == "Legal Research":
+		from lex.legal_research_sop import validate_generated_memo
+
+		validate_generated_memo(final_text)
 	options = normalize_export_options(
 		output_format=output_format,
 		document_title=document_title or job.job_title or "Legal Operations Deliverable",
@@ -768,7 +778,11 @@ def complete_job_document(
 	artifacts = {}
 	for format_name, file_bytes in generated_bytes.items():
 		extension = format_name.lower()
-		file_name = safe_export_filename(job.name, options.document_title, export_version, extension)
+		file_name = (
+			legal_research_export_filename(job, matter, export_version, extension)
+			if job.job_type == "Legal Research"
+			else safe_export_filename(job.name, options.document_title, export_version, extension)
+		)
 		checksum = hashlib.sha256(file_bytes).hexdigest()
 		saved_file = save_file(
 			fname=file_name,

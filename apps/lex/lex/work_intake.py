@@ -98,10 +98,34 @@ def create_work_intake(
 	counterparty_name: str | None = None,
 	counterparty_role: str | None = None,
 	opposing_counsel: str | None = None,
+	legal_questions: str | None = None,
+	factual_background: str | None = None,
+	deliverable_format: str | None = None,
+	citation_style: str | None = None,
+	instructing_contact_name: str | None = None,
+	instructing_contact_role: str | None = None,
+	instructing_contact_email: str | None = None,
+	data_handling_restrictions: str | None = None,
+	no_ai_tools: int | str | None = None,
+	service_sop_details: str | None = None,
 ):
 	actor = _require_portal_user()
 	from lex.instant_estimator import _estimate_currency_for_client
+	from lex.legal_research_sop import copy_intake_snapshot_to_job, legal_research_turnaround, validate_intake_payload
 	service_type = normalize_intake_service_type(service_type)
+	from lex.service_sop import copy_intake_snapshot_to_job as copy_service_sop_snapshot, validate_intake_payload as validate_service_sop_payload
+	service_sop_details = validate_service_sop_payload(service_type, service_sop_details)
+	validate_intake_payload({
+		"service_type": service_type,
+		"legal_questions": legal_questions,
+		"factual_background": factual_background,
+		"deliverable_format": deliverable_format,
+		"citation_style": citation_style,
+		"instructing_contact_name": instructing_contact_name,
+		"instructing_contact_role": instructing_contact_role,
+		"instructing_contact_email": instructing_contact_email,
+		"data_handling_restrictions": data_handling_restrictions,
+	})
 
 	if not has_portal_capability("can_create_matters"):
 		frappe.throw(_("You are not authorized to submit new work."), frappe.PermissionError)
@@ -132,6 +156,19 @@ def create_work_intake(
 		"preliminary_details": (preliminary_details or "").strip(),
 		"detailed_instructions": (preliminary_details or "").strip(),
 		"confidentiality_level": confidentiality_level,
+		# SOP-001 instructions are explicit client inputs. Never derive them from
+		# generic fields or the logged-in user: that would make the audit record
+		# misleading and permit incomplete instructions to start research.
+		"legal_questions": (legal_questions or "").strip(),
+		"factual_background": (factual_background or "").strip(),
+		"deliverable_format": (deliverable_format or "").strip(),
+		"citation_style": (citation_style or "").strip(),
+		"instructing_contact_name": (instructing_contact_name or "").strip(),
+		"instructing_contact_role": (instructing_contact_role or "").strip(),
+		"instructing_contact_email": (instructing_contact_email or "").strip(),
+		"data_handling_restrictions": (data_handling_restrictions or "").strip(),
+		"no_ai_tools": cint(no_ai_tools),
+		"service_sop_details": frappe.as_json(service_sop_details) if service_sop_details else None,
 		"master_sla": master_sla,
 		"sla_version": sla_version,
 		"sla_document_snapshot": sla_document,
@@ -167,6 +204,7 @@ def create_work_intake(
 	with _service_writes(), _portal_service_writes():
 		doc = frappe.get_doc(values).insert(ignore_permissions=True)
 		draft_due = _delivery_deadline(doc)
+		research_due, _ = legal_research_turnaround("Standard", start=now_datetime()) if service_type == "Legal Research" else (None, None)
 		job = frappe.get_doc({
 			"doctype": "LPO Job",
 			"job_title": (intake_title or "").strip(),
@@ -177,15 +215,25 @@ def create_work_intake(
 			"priority": priority,
 			"task_description": (
 				f"Expected outcome:\n{(expected_outcome or '').strip()}\n\n"
-				f"Preliminary details:\n{(preliminary_details or '').strip()}"
+				f"Preliminary details:\n{(preliminary_details or '').strip()}\n\n"
+				f"Legal question(s):\n{values['legal_questions']}\n\n"
+				f"Relevant factual background:\n{values['factual_background']}"
 			),
 			"received_at": now_datetime(),
-			"due_date": draft_due,
+			"due_date": research_due or draft_due,
 			"job_billing_method": None,
 			"estimate_status": "Not Requested",
 			"funding_status": "Not Started",
 			"qa_required": 1,
-		}).insert(ignore_permissions=True)
+			"ai_processing_allowed": 0 if cint(no_ai_tools) else 1,
+		})
+		copy_intake_snapshot_to_job(job, doc)
+		copy_service_sop_snapshot(job, doc)
+		if service_type == "Legal Research":
+			job.legal_research_complexity_tier = "Standard"
+			job.legal_research_target_business_days = 5
+			job.legal_research_turnaround_note = _("Standard SOP-001 target: 3-5 business days; planned to the fifth business day.")
+		job.insert(ignore_permissions=True)
 		doc.job = job.name
 		doc.save(ignore_permissions=True)
 	_audit(
@@ -2350,3 +2398,126 @@ def _funding_result(doc, duplicate=False):
 		"delivery_due_on": doc.delivery_due_on,
 		"duplicate": duplicate,
 	}
+
+
+@frappe.whitelist()
+def request_service_sop_information(intake: str, missing_information: str, critical: int = 0):
+	"""Pause any SOP-governed intake while client information is outstanding.
+
+	A critical date, preservation/hold or recurrence gap receives the SOP's
+	one-business-day follow-up; ordinary missing information follows at two days.
+	"""
+	_require_internal()
+	doc = frappe.get_doc("Lexocrates Work Intake", intake)
+	from lex.service_sop import is_profiled_service
+	if doc.service_type != "Legal Research" and not is_profiled_service(doc.service_type):
+		frappe.throw(_("This information-hold workflow applies only to a governed SOP service."), frappe.ValidationError)
+	if not (missing_information or "").strip():
+		frappe.throw(_("State the missing information requested from the client."), frappe.MandatoryError)
+	if doc.status == "Pending Client Information":
+		frappe.throw(_("This intake is already awaiting client information."), frappe.ValidationError)
+
+	with _service_writes(), _portal_service_writes():
+		doc.status = "Pending Client Information"
+		doc.missing_information = missing_information.strip()
+		doc.information_is_critical = int(bool(int(critical or 0)))
+		doc.information_requested_on = now_datetime()
+		doc.information_reminder_sent_on = None
+		doc.information_escalated_on = None
+		doc.save(ignore_permissions=True)
+		if doc.job and frappe.db.exists("LPO Job", doc.job):
+			from lex.sla_engine import pause_for_client_information
+			pause_for_client_information(doc.job, doc.missing_information)
+	_audit(doc, "SOP Information Requested", {"missing_information": doc.missing_information, "critical": doc.information_is_critical})
+	_notify_pending_information(doc, reminder=False)
+	return {"intake": doc.name, "status": doc.status, "job": doc.job}
+
+
+@frappe.whitelist()
+def request_legal_research_information(intake: str, missing_information: str):
+	"""Backward-compatible SOP-001 endpoint."""
+	return request_service_sop_information(intake, missing_information, critical=0)
+
+
+@frappe.whitelist()
+def resolve_service_sop_information(intake: str, response_note: str):
+	"""Resume an information hold only after Legal Operations records the response."""
+	_require_internal()
+	doc = frappe.get_doc("Lexocrates Work Intake", intake)
+	if doc.status != "Pending Client Information":
+		frappe.throw(_("This intake is not awaiting client information."), frappe.ValidationError)
+	if not (response_note or "").strip():
+		frappe.throw(_("Record how the client supplied or resolved the requested information."), frappe.MandatoryError)
+	with _service_writes(), _portal_service_writes():
+		doc.status = "Documents Pending" if not doc.document_count else "Security Review"
+		doc.information_received_on = now_datetime()
+		doc.information_resolution_note = response_note.strip()
+		doc.save(ignore_permissions=True)
+		if doc.job and frappe.db.exists("LPO Job", doc.job):
+			from lex.sla_engine import resume_client_information_pause
+			resume_client_information_pause(doc.job)
+	_audit(doc, "SOP Information Resolved", {"response_note": response_note.strip()})
+	return {"intake": doc.name, "status": doc.status, "job": doc.job}
+
+
+@frappe.whitelist()
+def resolve_legal_research_information(intake: str, response_note: str):
+	"""Backward-compatible SOP-001 endpoint."""
+	return resolve_service_sop_information(intake, response_note)
+
+
+def monitor_pending_service_sop_information():
+	"""Daily SOP-001–006 monitor for paused client-information requests."""
+	from lex.sla_engine import add_business_days
+	from lex.lex.doctype.lpo_service_escalation.lpo_service_escalation import raise_escalation
+	from lex.service_sop import is_profiled_service
+
+	rows = frappe.get_all(
+		"Lexocrates Work Intake",
+		filters={"status": "Pending Client Information"},
+		fields=["name", "job", "service_type", "information_is_critical", "information_requested_on", "information_reminder_sent_on", "information_escalated_on"],
+	)
+	for row in rows:
+		if row.service_type != "Legal Research" and not is_profiled_service(row.service_type):
+			continue
+		if not row.information_requested_on:
+			continue
+		requested = get_datetime(row.information_requested_on)
+		follow_up_days = 1 if row.information_is_critical else 2
+		escalation_days = 2 if row.information_is_critical else 5
+		if not row.information_reminder_sent_on and now_datetime() >= add_business_days(requested, follow_up_days):
+			doc = frappe.get_doc("Lexocrates Work Intake", row.name)
+			with _service_writes():
+				doc.information_reminder_sent_on = now_datetime()
+				doc.save(ignore_permissions=True)
+			_notify_pending_information(doc, reminder=True)
+			_audit(doc, "SOP Information Follow-up Sent", {"business_days_waiting": follow_up_days})
+		if not row.information_escalated_on and now_datetime() >= add_business_days(requested, escalation_days):
+			doc = frappe.get_doc("Lexocrates Work Intake", row.name)
+			with _service_writes():
+				doc.information_escalated_on = now_datetime()
+				doc.save(ignore_permissions=True)
+			if doc.job and not frappe.db.exists("LPO Service Escalation", {"job": doc.job, "status": "Open", "escalation_reason": ["like", "%Client information remains outstanding%"]}):
+				raise_escalation(
+					job=doc.job,
+					escalation_level="1",
+				escalation_reason=_("Client information remains outstanding {0} business days after the {1} request.").format(escalation_days, row.service_type),
+				)
+			_audit(doc, "SOP Information Escalated", {"business_days_waiting": escalation_days})
+
+
+def monitor_pending_legal_research_information():
+	"""Backward-compatible scheduler hook name."""
+	return monitor_pending_service_sop_information()
+
+
+def _notify_pending_information(doc, *, reminder: bool):
+	recipient = doc.submitted_by
+	if not recipient or "@" not in recipient:
+		return
+	subject = _("Reminder: information required for your legal service request") if reminder else _("Information required for your legal service request")
+	message = _(
+		"We need the following information before {1} can proceed:<br><br>{0}<br><br>"
+		"The delivery timeline is paused until the requested information is received."
+	).format(frappe.utils.escape_html(doc.missing_information or ""), frappe.utils.escape_html(doc.service_type or "this service"))
+	frappe.sendmail(recipients=[recipient], subject=subject, message=message, delayed=True)

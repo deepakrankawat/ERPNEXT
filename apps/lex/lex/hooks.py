@@ -322,6 +322,8 @@ scheduler_events = {
 	},
 	"daily": [
 		"lex.lexpack.recalculate_all_lexpack_tiers",
+		"lex.work_intake.monitor_pending_service_sop_information",
+		"lex.service_sop.monitor_service_sop_controls",
 	],
 }
 

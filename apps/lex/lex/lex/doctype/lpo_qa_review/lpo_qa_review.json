@@ -13,6 +13,7 @@
   "customer",
   "context_column_break",
   "reviewer",
+  "review_stage",
   "review_status",
   "review_date",
   "completed_on",
@@ -73,6 +74,15 @@
    "options": "User",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "default": "Final QC",
+   "fieldname": "review_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Review Stage",
+   "options": "Self Review\nPeer Review\nQC Sampling\nSupervising Counsel Review\nFinal QC\nFinal QA",
+   "reqd": 1
   },
   {
    "default": "Pending",

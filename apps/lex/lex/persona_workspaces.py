@@ -77,6 +77,7 @@ class PersonaWorkspace:
 CEO_MONITORING_BLOCK = "Lexocrates CEO Executive Monitoring Cockpit"
 
 CHAT = Shortcut("Communication", "Page", "lexocrates-chat", color="#2490ef")
+MASTER_CALENDAR = Shortcut("Master Calendar", "Page", "master-calendar", color="#0284c7")
 
 
 WORKSPACES = (
@@ -124,6 +125,7 @@ WORKSPACES = (
 		"Production command center for queues, matters, clients, delivery, SLA, QA, and compliance.",
 		("Open LPO Jobs", "Overdue LPO Jobs", "Open Matters", "Open Compliance Actions"),
 		(
+			MASTER_CALENDAR,
 			Shortcut("Work Intakes", "DocType", "Lexocrates Work Intake", "List"),
 			Shortcut("Jobs", "DocType", "LPO Job", "List"),
 			Shortcut("Matters", "DocType", "LPO Matter", "List"),
