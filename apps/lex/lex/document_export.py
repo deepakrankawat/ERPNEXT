@@ -616,6 +616,16 @@ def safe_export_filename(job_id: str, title: str, version: int, extension: str) 
 	return f"Delivery_{job_id}_{stem}_v{version}.{extension.lower()}"
 
 
+def legal_research_export_filename(job, matter, version: int, extension: str) -> str:
+	"""SOP-001 naming convention for the controlled Research Memo archive."""
+	from frappe.utils import nowdate
+
+	client_code = re.sub(r"[^A-Za-z0-9]+", "", str(job.customer or "Client"))[:24] or "Client"
+	matter_ref = re.sub(r"[^A-Za-z0-9-]+", "", str(matter.name or job.engagement or "Matter"))[:40] or "Matter"
+	date_stamp = nowdate().replace("-", "")
+	return f"{client_code}-{matter_ref}-ResearchMemo-{date_stamp}-v{int(version)}.{extension.lower()}"
+
+
 def export_metadata(job, matter, *, title: str, version: int, generated_by: str) -> dict:
 	client_name = frappe.db.get_value("Customer", job.customer, "customer_name") or job.customer
 	return {

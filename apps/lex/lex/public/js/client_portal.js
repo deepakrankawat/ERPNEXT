@@ -429,6 +429,13 @@
 			{ value: "Drafting", label: "Paralegal & Virtual Legal Assistance" },
 			{ value: "Other", label: "Legal Operations Support" }
 		];
+		const serviceSopFields = {
+			"Litigation Support": [["court_tribunal", "Court or tribunal"], ["court_file_number", "Court file number (or state action is uncommenced)"], ["party_details", "All parties, roles and represented side"], ["procedural_stage", "Current procedural stage"], ["known_deadlines", "Known deadlines / limitation dates"], ["supporting_documents", "Supporting court documents and orders"], ["deliverable_type", "Requested deliverable type and format"], ["data_handling_restrictions", "Data residency / handling restrictions (enter 'No additional restrictions' if none)"]],
+			"Contract Review": [["contract_type", "Contract type"], ["counterparty_names", "Counterparty name(s)"], ["governing_law", "Governing law and jurisdiction"], ["business_terms", "Key business terms / instructions"], ["key_dates", "Renewal date, notice period and key obligations"], ["supporting_documents", "Contract version, template and supporting documents"], ["deliverable_type", "Requested deliverable type and format"], ["data_handling_restrictions", "Data residency / handling restrictions (enter 'No additional restrictions' if none)"]],
+			"Document Review": [["matter_context", "Matter / litigation or regulatory context"], ["custodians_data_sources", "Custodians and data sources"], ["known_parties", "Known parties relevant to conflict screening"], ["review_protocol", "Review protocol and coding scheme"], ["volume_format", "Document / ESI volume and format"], ["preservation_confirmation", "Litigation Hold / preservation confirmation"], ["production_specs", "Production deadline, Bates and format requirements"], ["supporting_documents", "Protective order, prior privilege log or search terms"], ["data_handling_restrictions", "Data residency / handling restrictions (enter 'No additional restrictions' if none)"]],
+			"Compliance Review": [["industry_regime", "Industry and applicable regulatory regime"], ["operating_jurisdictions", "Jurisdictions of operation"], ["current_policies", "Current policies / compliance documentation"], ["regulatory_dates", "Known filing, renewal and reporting dates"], ["supporting_documents", "Regulator correspondence and supporting documents"], ["deliverable_type", "Requested deliverable type"], ["data_handling_restrictions", "Data residency / handling restrictions (enter 'No additional restrictions' if none)"]],
+			"Drafting": [["task_category", "Task type / category"], ["task_instructions", "Task description and specific instructions"], ["recurrence_schedule", "One-time or recurring schedule and standing instructions"], ["task_deadlines", "Deadline or scheduling constraint"], ["required_access", "Required documents or system access"], ["supporting_documents", "Source documents and templates"], ["deliverable_type", "Requested deliverable format"], ["data_handling_restrictions", "Data residency / handling restrictions (enter 'No additional restrictions' if none)"], ["review_tier", "Review tier: Routine, Client-Facing, or Filing/Court-Facing"]]
+		};
 		const matterOptions = (data.matters || []).map((matter) => (
 			`<option value="${escapeHTML(matter.name)}">${escapeHTML(matter.matter_title || "Matter")}</option>`
 		)).join("");
@@ -453,7 +460,20 @@
 			<section class="wide lex-wizard-page" data-intake-page="2" hidden>
 				<div class="wide lex-wizard-page-head"><h4>What would you like us to do?</h4><p>These details create your Draft Job. Uploading its PDF is the next step.</p></div>
 				<label>Job title<input name="intake_title" required maxlength="140" placeholder="e.g. Review vendor agreement"></label>
-				<label>Service<select name="service_type" required>${standardServices.map((item) => `<option value="${escapeHTML(item.value)}">${escapeHTML(item.label)}</option>`).join("")}</select></label>
+				<label>Service<select name="service_type" data-service-type required>${standardServices.map((item) => `<option value="${escapeHTML(item.value)}">${escapeHTML(item.label)}</option>`).join("")}</select></label>
+				<section class="wide lex-intake-details lex-wizard-page" data-legal-research-fields hidden>
+					<div class="wide lex-wizard-page-head"><h4>Legal research instructions</h4><p>These fields are required so the legal team can define the question, research the correct law and protect your confidentiality.</p></div>
+					<label class="wide">Legal question(s)<textarea name="legal_questions" data-legal-research-required placeholder="State each legal question in writing."></textarea></label>
+					<label class="wide">Relevant factual background<textarea name="factual_background" data-legal-research-required placeholder="Provide the facts, assumptions and any unknown facts relevant to the question."></textarea></label>
+					<label>Deliverable format<select name="deliverable_format" data-legal-research-required><option value="Formal Legal Memorandum">Formal legal memorandum</option><option value="Opinion Letter">Opinion letter</option><option value="Short Research Note">Short research note</option><option value="Substantive Email Response">Substantive email response</option></select></label>
+					<label>Citation style<input name="citation_style" data-legal-research-required value="McGill Guide" maxlength="140"></label>
+					<label>Instructing individual<input name="instructing_contact_name" data-legal-research-required maxlength="140" placeholder="Full name"></label>
+					<label>Role / designation<input name="instructing_contact_role" data-legal-research-required maxlength="140" placeholder="e.g. General Counsel"></label>
+					<label>Email<input name="instructing_contact_email" data-legal-research-required type="email" maxlength="140" placeholder="name@example.com"></label>
+					<label>Data handling / residency restrictions<input name="data_handling_restrictions" maxlength="250" required data-legal-research-required placeholder="e.g. Canada only - enter 'No additional restrictions' if none"></label>
+					<label class="wide lex-check"><input name="no_ai_tools" type="checkbox" value="1"> This assignment must not use AI-assisted research tools.</label>
+				</section>
+				<section class="wide lex-intake-details lex-wizard-page" data-service-sop-fields hidden><div class="wide lex-wizard-page-head"><h4 data-service-sop-title>Service instructions</h4><p>These required details let the legal team apply the correct service SOP.</p></div><div class="wide" data-service-sop-field-container></div></section>
 				<label class="wide">Instructions<textarea name="preliminary_details" required minlength="20" placeholder="Tell us what you need, relevant background and any key deadline."></textarea></label>
 				<section class="wide lex-intake-details lex-wizard-page"><div class="wide lex-wizard-page-head"><h4>Delivery preferences</h4></div><label>Priority<select name="priority" required><option value="Medium">Standard</option><option value="High">High</option><option value="Urgent">Urgent</option><option value="Low">Low</option></select></label><label>Jurisdiction<input name="jurisdiction" required maxlength="100" value="Canada"></label><label>Delivery deadline<input name="requested_delivery_date" type="datetime-local" required></label><label>Confidentiality<select name="confidentiality_level"><option value="Confidential">Confidential</option><option value="Highly Confidential">Highly Confidential</option><option value="Standard">Standard</option></select></label><label class="wide">Expected outcome<textarea name="expected_outcome" placeholder="Describe the result or deliverable you need."></textarea></label></section>
 				<div class="wide lex-next-step"><strong>Next:</strong> review the service terms, upload the Job PDF, then receive the fixed price.</div>
@@ -747,12 +767,31 @@
 			const existingMatterSelect = intakeForm.querySelector("[data-existing-matter-select]");
 			const newMatterFields = intakeForm.querySelector("[data-new-matter-fields]");
 			const matterTitle = intakeForm.elements.matter_title;
+			const serviceType = intakeForm.querySelector("[data-service-type]");
+			const legalResearchFields = intakeForm.querySelector("[data-legal-research-fields]");
+			const serviceSopFieldsPanel = intakeForm.querySelector("[data-service-sop-fields]");
+			const serviceSopFieldContainer = intakeForm.querySelector("[data-service-sop-field-container]");
 			const setMatterMode = () => {
 				const isExisting = matterMode?.value === "existing";
 				existingMatter.hidden = !isExisting;
 				newMatterFields.hidden = isExisting;
 				if (matterTitle) matterTitle.required = !isExisting;
 				if (existingMatterSelect) existingMatterSelect.required = isExisting;
+			};
+			const setServiceFields = () => {
+				const isLegalResearch = serviceType?.value === "Legal Research";
+				if (legalResearchFields) legalResearchFields.hidden = !isLegalResearch;
+				intakeForm.querySelectorAll("[data-legal-research-required]").forEach((field) => {
+					field.required = isLegalResearch;
+				});
+				const sopFields = serviceSopFields[serviceType?.value] || [];
+				if (serviceSopFieldsPanel) serviceSopFieldsPanel.hidden = !sopFields.length;
+				if (serviceSopFieldContainer) serviceSopFieldContainer.innerHTML = sopFields.map(([name, label]) => {
+					const control = name === "review_tier"
+						? `<select data-service-sop-field="${name}" required><option value="">Select review tier</option><option>Routine</option><option>Client-Facing</option><option>Filing/Court-Facing</option></select>`
+						: `<textarea data-service-sop-field="${name}" required placeholder="${escapeHTML(label)}"></textarea>`;
+					return `<label class="wide">${escapeHTML(label)}${control}</label>`;
+				}).join("") + (sopFields.length ? '<label class="wide lex-check"><input name="no_ai_tools" type="checkbox" value="1"> This assignment must not use AI-assisted or TAR tools.</label>' : '');
 			};
 			const showStep = (step) => {
 				pages.forEach((page) => {
@@ -779,7 +818,9 @@
 				return false;
 			};
 			matterMode?.addEventListener("change", setMatterMode);
+			serviceType?.addEventListener("change", setServiceFields);
 			setMatterMode();
+			setServiceFields();
 			intakeForm.querySelector("[data-next-intake-step]")?.addEventListener("click", () => {
 				if (validateMatterStep()) showStep(2);
 			});
@@ -795,6 +836,9 @@
 				button.disabled = true;
 				try {
 					const values = Object.fromEntries(new FormData(intakeForm));
+					const details = {};
+					intakeForm.querySelectorAll("[data-service-sop-field]").forEach((field) => { details[field.dataset.serviceSopField] = field.value.trim(); });
+					if (Object.keys(details).length) values.service_sop_details = JSON.stringify(details);
 					delete values.matter_mode;
 					await call("lex.work_intake.create_work_intake", values);
 			notify("Draft Job created. Next, accept the service terms and upload its PDF to receive the fixed price.", "green");
