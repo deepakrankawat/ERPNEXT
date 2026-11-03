@@ -58,6 +58,7 @@ def notify(
 	document_type: str | None = None,
 	document_name: str | None = None,
 	notification_type: str = "Alert",
+	link: str | None = None,
 ):
 	"""Create a Notification Log for `for_user`.
 
@@ -65,6 +66,11 @@ def notify(
 	rejections, compliance/escalation alerts, ...) should call to reach a
 	specific internal user: it lands in Frappe's own notification bell AND
 	gets DM'd to Mattermost by forward_to_mattermost above, for free.
+
+	`link` is an optional second URL (e.g. the specific Communication a
+	reply notification is about) shown in the Mattermost DM alongside the
+	document_type/document_name link -- the two aren't the same place a
+	recipient needs to go (the Lead record vs. the actual reply).
 	"""
 	if not for_user:
 		return
@@ -75,6 +81,7 @@ def notify(
 		"subject": subject,
 		"document_type": document_type,
 		"document_name": document_name,
+		"link": link,
 	}).insert(ignore_permissions=True)
 
 
@@ -146,13 +153,16 @@ def _post_message(base_url: str, token: str, channel_id: str, message: str):
 def _build_message(doc) -> str:
 	title = strip_html(doc.title or doc.subject or "You have a new notification")
 	lines = [f"**{title}**"]
-	# Producers (e.g. assign_to.notify_assignment) almost never set `link` themselves;
-	# the document's form URL is derived from document_type/document_name instead.
-	link = get_url(doc.link) if doc.link else None
-	if not link and doc.document_type and doc.document_name:
-		link = get_url_to_form(doc.document_type, doc.document_name)
-	if link:
-		lines.append(f"[Open {doc.document_type}: {doc.document_name}]({link})" if doc.document_type else f"[Open]({link})")
+	# Most producers (e.g. assign_to.notify_assignment) only set document_type/
+	# document_name, so that's the primary line. `link` is an *additional*
+	# pointer some producers (e.g. lead_reply_notifications) set when the
+	# document form itself isn't where the actual content lives -- e.g. the
+	# specific Communication a reply notification is about, as opposed to
+	# the Lead it's linked to.
+	if doc.document_type and doc.document_name:
+		lines.append(f"[Open {doc.document_type}: {doc.document_name}]({get_url_to_form(doc.document_type, doc.document_name)})")
+	if doc.link:
+		lines.append(f"[View reply]({get_url(doc.link)})")
 	return "\n".join(lines)
 
 

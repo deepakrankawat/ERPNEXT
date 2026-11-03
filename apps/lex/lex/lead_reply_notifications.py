@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
+from frappe.utils import get_url_to_form
 
 from lex.mattermost_notifications import notify
 
@@ -31,12 +32,14 @@ def notify_sales_of_lead_reply(doc, method=None):
 
 	lead_label = frappe.db.get_value("Lead", row.reference_name, "lead_name") or row.reference_name
 	subject = _("{0} replied to your email").format(lead_label)
+	reply_link = get_url_to_form("Communication", doc.name)
 	for user in _sales_recipients():
 		notify(
 			for_user=user,
 			subject=subject,
 			document_type="Lead",
 			document_name=row.reference_name,
+			link=reply_link,
 		)
 
 
