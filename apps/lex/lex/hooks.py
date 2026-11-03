@@ -135,6 +135,7 @@ after_migrate = [
 	"lex.client_workspace.migrate_client_users_to_portal",
 	"lex.ai_document_engine.ensure_default_ai_document_services",
 	"lex.execution_policies.ensure_default_execution_policies",
+	"lex.execution_policies.ensure_service_sop_versions",
 	"lex.lex.doctype.lpo_ai_settings.lpo_ai_settings.ensure_ai_provider_registry",
 	"lex.pdf_watermark.ensure_all_pdfs_private",
 	"lex.audit_worm_chain.backfill_audit_hash_chain",
@@ -255,7 +256,10 @@ doc_events = {
 		"on_trash": "lex.email_campaign_scheduler.delete_dispatch_records_for_campaign",
 	},
 	"Communication": {
-		"after_insert": "lex.email_reply_handler.link_incoming_reply",
+		"after_insert": [
+			"lex.email_reply_handler.link_incoming_reply",
+			"lex.lead_reply_notifications.notify_sales_of_lead_reply",
+		],
 	},
 	"LPO Job": {
 		"after_insert": "lex.chat_automation.notify_lpo_job_created",

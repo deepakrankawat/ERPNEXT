@@ -365,7 +365,18 @@ class LPOJob(Document):
 			return
 		matter = self._lex_matter_context
 		self.workflow_version_snapshot = self.workflow_version_snapshot or matter.workflow_version_snapshot
-		self.sop_version_snapshot = self.sop_version_snapshot or matter.sop_version_snapshot
+		if not self.sop_version_snapshot:
+			from lex.execution_policies import get_default_sop_version, get_sop_version_for_job_type
+
+			job_type_sop = get_sop_version_for_job_type(self.job_type)
+			# A Matter pinned to anything other than the generic default was a deliberate
+			# choice (e.g. test or manual override) and takes priority over the Job Type's
+			# own SOP-001..006. Otherwise the job-type-specific SOP replaces the generic
+			# placeholder every Job Type used to inherit.
+			if job_type_sop and str(matter.sop_version_snapshot or "") in {"", str(get_default_sop_version() or "")}:
+				self.sop_version_snapshot = job_type_sop
+			else:
+				self.sop_version_snapshot = matter.sop_version_snapshot
 		if not self.workflow_version_snapshot or not self.sop_version_snapshot:
 			frappe.throw(
 				_("Published Workflow and effective SOP version snapshots are required before assignment."),
