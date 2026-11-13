@@ -526,7 +526,7 @@ def ensure_lexocrates_branding():
 				"favicon": BRAND_MARK_DARK,
 				"footer_logo": BRAND_WORDMARK_DARK,
 				"splash_image": BRAND_WORDMARK_DARK,
-				"footer_powered": 'Powered by <a href="https://www.linkedin.com/in/deepak-rankawat-658b0a259/" target="_blank" rel="noopener noreferrer" style="color: #0284c7; font-weight: 600; text-decoration: underline;">Deepak Rankawat</a>',
+				"footer_powered": 'Developed by <a href="https://www.linkedin.com/in/deepak-rankawat-658b0a259/" target="_blank" rel="noopener noreferrer" style="color: #0284c7; font-weight: 600; text-decoration: underline;">Deepak Rankawat</a>',
 			},
 		),
 		("Navbar Settings", {"app_logo": BRAND_WORDMARK_DARK}),

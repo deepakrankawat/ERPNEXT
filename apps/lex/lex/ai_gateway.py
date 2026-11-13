@@ -21,7 +21,7 @@ from lex.portal_audit import create_portal_audit_event
 
 
 POLICY_DOCTYPE = "LPO AI Governance Policy"
-INTERNAL_AI_ROLES = {"LPO_Admin", "LPO_Manager", "LPO_Analyst", "System Manager"}
+INTERNAL_AI_ROLES = {"LPO_Admin", "LPO_Manager", "LPO_Analyst", "System Manager", "Sales User", "Sales Manager"}
 SCOPE_LABELS = {"global": "Global", "provider": "Provider", "model": "Model", "use_case": "Use Case"}
 JOB_AI_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".csv", ".json"}
 MAX_JOB_AI_DOCUMENTS = 8

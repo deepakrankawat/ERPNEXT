@@ -60,6 +60,8 @@ doctype_js = {
 	"LPO Job": "public/js/lpo_job_chat.js",
 	"Account": "public/js/account_form_recovery.js",
 	"Email Group": "public/js/email_group.js",
+	"Lead": "public/js/lead_ai_email.js",
+	"Email Template": "public/js/email_template.js",
 }
 doctype_list_js = {
 	"Lead": "public/js/lead_list.js",

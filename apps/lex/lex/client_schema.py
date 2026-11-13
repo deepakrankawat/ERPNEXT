@@ -87,6 +87,30 @@ CLIENT_CUSTOM_FIELDS = {
 			"insert_after": "custom_lex_scanner_engine",
 		},
 	],
+	"Email Template": [
+		{
+			"fieldname": "custom_ai_section",
+			"label": "AI Dynamic Personalization",
+			"fieldtype": "Section Break",
+			"insert_after": "response_html",
+		},
+		{
+			"fieldname": "custom_use_ai_template",
+			"label": "Enable AI Personalization for Campaigns",
+			"fieldtype": "Check",
+			"default": "0",
+			"insert_after": "custom_ai_section",
+		},
+		{
+			"fieldname": "custom_ai_email_template",
+			"label": "Linked AI Email Template",
+			"fieldtype": "Link",
+			"options": "AI Email Template",
+			"insert_after": "custom_use_ai_template",
+			"depends_on": "eval:doc.custom_use_ai_template",
+			"description": "Select the AI prompt template that will personalize emails for each Lead in campaigns.",
+		},
+	],
 }
 
 

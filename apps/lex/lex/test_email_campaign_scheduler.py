@@ -40,3 +40,25 @@ class TestTimedEmailCampaignScheduler(unittest.TestCase):
 	def test_dispatch_key_is_stable_per_campaign_schedule(self):
 		self.assertEqual(_dispatch_key("MAIL-CAMP-1", "row-1"), _dispatch_key("MAIL-CAMP-1", "row-1"))
 		self.assertNotEqual(_dispatch_key("MAIL-CAMP-1", "row-1"), _dispatch_key("MAIL-CAMP-1", "row-2"))
+
+	@unittest.mock.patch("lex.lex.doctype.ai_email_template.ai_email_template.generate_email_for_lead")
+	def test_ai_campaign_content_generation(self, mock_gen):
+		from lex.email_campaign_scheduler import _generate_ai_campaign_content, _resolve_ai_email_template
+
+		mock_gen.return_value = {
+			"subject": "AI Customized Subject for Reliance",
+			"body": "<p>AI Customized Body</p>",
+		}
+		template = frappe._dict({
+			"name": "Standard Pitch",
+			"subject": "Default Subject {{ name }}",
+			"response_": "Default Body",
+			"custom_use_ai_template": 1,
+			"custom_ai_email_template": "AI Pitch",
+		})
+		with unittest.mock.patch("frappe.db.exists", return_value=True):
+			ai_tmpl = _resolve_ai_email_template(template)
+			self.assertEqual(ai_tmpl, "AI Pitch")
+			subj, body = _generate_ai_campaign_content("LEAD-001", ai_tmpl, template, {"name": "LEAD-001"})
+			self.assertEqual(subj, "AI Customized Subject for Reliance")
+			self.assertEqual(body, "<p>AI Customized Body</p>")

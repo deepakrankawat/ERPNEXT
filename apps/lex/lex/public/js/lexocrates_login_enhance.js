@@ -67,7 +67,7 @@
 			footer.innerHTML = `
 				Protected by Lexocrates Enterprise Zero-Trust Authorization &amp; Cryptographic Audit.
 				<div style="margin-top: 8px; font-weight: 600; color: #475569; font-size: 12px;">
-					Powered by <a href="https://www.linkedin.com/in/deepak-rankawat-658b0a259/" target="_blank" rel="noopener noreferrer" style="color: #0284c7; text-decoration: underline;">Deepak Rankawat</a>
+					Developed by <a href="https://www.linkedin.com/in/deepak-rankawat-658b0a259/" target="_blank" rel="noopener noreferrer" style="color: #0284c7; text-decoration: underline;">Deepak Rankawat</a>
 				</div>
 			`;
 		}
@@ -79,13 +79,13 @@
 				el.href = 'https://www.linkedin.com/in/deepak-rankawat-658b0a259/';
 				el.target = '_blank';
 				el.rel = 'noopener noreferrer';
-				el.innerHTML = 'Powered by Deepak Rankawat';
+				el.innerHTML = 'Developed by Deepak Rankawat';
 				el.style.color = '#0284c7';
 				el.style.fontWeight = '600';
 				el.style.textDecoration = 'underline';
 			} else if (!el.dataset.lexPoweredUpdated && el.textContent.includes('ERPNext')) {
 				el.dataset.lexPoweredUpdated = 'true';
-				el.innerHTML = `Powered by <a href="https://www.linkedin.com/in/deepak-rankawat-658b0a259/" target="_blank" rel="noopener noreferrer" style="color: #0284c7; text-decoration: underline; font-weight: 600;">Deepak Rankawat</a>`;
+				el.innerHTML = `Developed by <a href="https://www.linkedin.com/in/deepak-rankawat-658b0a259/" target="_blank" rel="noopener noreferrer" style="color: #0284c7; text-decoration: underline; font-weight: 600;">Deepak Rankawat</a>`;
 			}
 		});
 
