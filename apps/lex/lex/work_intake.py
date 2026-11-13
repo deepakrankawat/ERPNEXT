@@ -204,7 +204,7 @@ def create_work_intake(
 	with _service_writes(), _portal_service_writes():
 		doc = frappe.get_doc(values).insert(ignore_permissions=True)
 		draft_due = _delivery_deadline(doc)
-		research_due, _ = legal_research_turnaround("Standard", start=now_datetime()) if service_type == "Legal Research" else (None, None)
+		research_due, _research_days = legal_research_turnaround("Standard", start=now_datetime()) if service_type == "Legal Research" else (None, None)
 		job = frappe.get_doc({
 			"doctype": "LPO Job",
 			"job_title": (intake_title or "").strip(),
@@ -1308,6 +1308,7 @@ def portal_intakes(actor=None):
 		fields=[
 			"name", "intake_title", "status", "created_on", "service_type", "jurisdiction", "priority",
 			"requested_delivery_date", "expected_outcome", "preliminary_details", "detailed_instructions", "confidentiality_level",
+			"missing_information", "information_is_critical", "information_requested_on", "information_received_on", "information_resolution_note",
 			"sla_version", "sla_document_snapshot", "sla_terms_snapshot", "sla_snapshot_hash", "sla_accepted", "sla_accepted_by", "sla_accepted_on",
 			"document_count", "clean_document_count", "security_status", "extraction_status", "analysis_status",
 			"analysis_confidence", "low_confidence",
@@ -2464,6 +2465,35 @@ def resolve_service_sop_information(intake: str, response_note: str):
 def resolve_legal_research_information(intake: str, response_note: str):
 	"""Backward-compatible SOP-001 endpoint."""
 	return resolve_service_sop_information(intake, response_note)
+
+
+@frappe.whitelist()
+def submit_sop_information_response(intake: str, response_note: str):
+	"""Allow an authorized portal user to submit clarification for an SOP information hold.
+
+	Records the client response and timestamp while preserving Legal Operations'
+	verification gate before resuming the intake and SLA clock.
+	"""
+	doc, actor = _require_intake_access(intake)
+	if not _is_internal() and (not actor or not (actor.can_create_matters or actor.can_provide_instructions)):
+		frappe.throw(_("Your client role cannot submit information responses."), frappe.PermissionError)
+	if doc.status != "Pending Client Information":
+		frappe.throw(_("This intake is not currently awaiting client information."), frappe.ValidationError)
+	note = (response_note or "").strip()
+	if not note:
+		frappe.throw(_("Provide the requested information or clarification before submitting."), frappe.MandatoryError)
+
+	with _service_writes(), _portal_service_writes():
+		doc.information_received_on = now_datetime()
+		doc.information_resolution_note = note
+		doc.save(ignore_permissions=True)
+	_audit(doc, "SOP Information Response Submitted", {"response_note": note})
+	return {
+		"intake": doc.name,
+		"status": doc.status,
+		"information_received_on": str(doc.information_received_on),
+		"information_resolution_note": doc.information_resolution_note,
+	}
 
 
 def monitor_pending_service_sop_information():

@@ -62,6 +62,8 @@ doctype_js = {
 	"Email Group": "public/js/email_group.js",
 	"Email Campaign": "public/js/email_campaign.js",
 	"Search Console Settings": "public/js/search_console_settings.js",
+	"Lead": "public/js/lead_ai_email.js",
+	"Email Template": "public/js/email_template.js",
 }
 doctype_list_js = {
 	"Lead": "public/js/lead_list.js",

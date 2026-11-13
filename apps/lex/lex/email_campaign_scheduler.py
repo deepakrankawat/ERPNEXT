@@ -163,8 +163,12 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 	else:
 		recipients, context = _recipients_and_context(campaign)
 	template = frappe.get_cached_doc("Email Template", entry.email_template)
-	subject = frappe.render_template(template.subject, context)
-	content = frappe.render_template(template.response_, context)
+	ai_template_name = _resolve_ai_email_template(template)
+	if lead and ai_template_name:
+		subject, content = _generate_ai_campaign_content(lead, ai_template_name, template, context)
+	else:
+		subject = frappe.render_template(template.subject, context)
+		content = frappe.render_template(template.response_, context)
 	sender, outgoing_account = _sender_details(campaign)
 	template_files = _template_attachments(template.name)
 
@@ -236,6 +240,35 @@ def _template_attachments(email_template: str) -> list[str]:
 		filters={"attached_to_doctype": "Email Template", "attached_to_name": email_template, "is_folder": 0},
 		pluck="name",
 	)
+
+
+def _resolve_ai_email_template(template) -> str | None:
+	"""Check if an Email Template is linked to or backed by an AI Email Template."""
+	if not frappe.db.exists("DocType", "AI Email Template"):
+		return None
+	if getattr(template, "custom_use_ai_template", False) and getattr(template, "custom_ai_email_template", None):
+		return template.custom_ai_email_template
+	if frappe.db.exists("AI Email Template", template.name):
+		return template.name
+	return None
+
+
+def _generate_ai_campaign_content(lead: str, ai_template_name: str, template, context: dict) -> tuple[str, str]:
+	"""Dynamically generate bespoke email subject and body for a Lead using the AI Gateway."""
+	try:
+		from lex.lex.doctype.ai_email_template.ai_email_template import generate_email_for_lead
+
+		ai_res = generate_email_for_lead(lead=lead, template=ai_template_name)
+		subject = ai_res.get("subject") or frappe.render_template(template.subject, context)
+		content = ai_res.get("body") or frappe.render_template(template.response_, context)
+		return subject, content
+	except Exception as exc:
+		frappe.log_error(
+			title=f"AI Campaign Content Fallback: {template.name} ({lead})",
+			message=frappe.get_traceback(),
+		)
+		return frappe.render_template(template.subject, context), frappe.render_template(template.response_, context)
+
 
 
 def _resolve_outgoing_email_account(sender_email: str | None) -> str | None:

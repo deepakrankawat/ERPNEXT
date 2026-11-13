@@ -85,7 +85,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn("100dvh", styles)
 		self.assertIn(".lex-wizard-step.is-active", styles)
 		self.assertIn("background: var(--lex-primary-soft)", styles)
-		self.assertIn("client_portal.css?v=20260930-1", template)
+		self.assertIn("client_portal.css?v=20261111-1", template)
 
 	def test_client_portal_has_standard_intake_without_quick_estimate_button(self):
 		app_path = Path(frappe.get_app_path("lex"))
@@ -117,7 +117,7 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertIn('>Job</span>', script)
 		self.assertIn('>Payment</span>', script)
 		template = (app_path / "www" / "client-portal.html").read_text(encoding="utf-8")
-		self.assertIn('client_portal.js?v=20260930-1', template)
+		self.assertIn('client_portal.js?v=20261111-1', template)
 		self.assertNotIn("An internal compliance record is retained.", script)
 
 	def test_requested_delivery_date_is_the_operational_deadline(self):
@@ -1000,6 +1000,129 @@ class TestClientPortalArchitecture(FrappeTestCase):
 		self.assertEqual(result["job_status"], "Completed")
 		row = next(item for item in client_portal.get_portal_dashboard()["jobs"] if item.name == job.name)
 		self.assertTrue(row.delivery_download_url)
+
+	def test_client_portal_interactive_legal_ui_contracts(self):
+		app_path = Path(frappe.get_app_path("lex"))
+		script = (app_path / "public" / "js" / "client_portal.js").read_text(encoding="utf-8")
+		styles = (app_path / "public" / "css" / "client_portal.css").read_text(encoding="utf-8")
+
+		for marker in (
+			"actionCenterCard",
+			"openMatterDrawer",
+			"openJobDrawer",
+			"openDocumentPreviewModal",
+			"lex-approval-studio",
+			"data-pdf-dropzone",
+			"data-sop-info-form",
+			"lex.work_intake.submit_sop_information_response",
+			"lpo_assignment_confirmation.approve",
+			"lpo_assignment_scope_change.request_scope_change",
+			"lpo_correction_request.create_correction_request",
+			"download_wallet_statement_csv",
+			"lex-command-popover",
+			"organizationSection(data)",
+			"mountChat()",
+		):
+			self.assertIn(marker, script)
+
+		for css_marker in (
+			".lex-action-center",
+			".lex-drawer",
+			".lex-modal",
+			".lex-approval-studio",
+			".lex-dropzone",
+			".lex-info-hold-box",
+			".lex-capacity-bar",
+			".lex-chat-thread-pane",
+		):
+			self.assertIn(css_marker, styles)
+
+	def test_client_submits_sop_information_response_without_bypassing_ops_gate(self):
+		from lex.lex.doctype.master_service_level_agreement.master_service_level_agreement import (
+			ACK_FIELDS,
+			accept,
+			get_or_create_pending_master_sla,
+		)
+
+		client = _make_client()
+		user = _make_user()
+		_make_portal_user(user.name, client, "Legal User")
+		sla = get_or_create_pending_master_sla(client)
+		accept(
+			name=sla.name,
+			accepted_by_name="Portal Signatory",
+			accepted_by_designation="General Counsel",
+			**{field: 1 for field in ACK_FIELDS},
+		)
+		frappe.set_user(user.name)
+		created = work_intake.create_work_intake(
+			intake_title="SOP Info Hold Portal Response",
+			service_type="Contract Review",
+			jurisdiction="Canada",
+			priority="Medium",
+			expected_outcome="Review SaaS MSA.",
+			preliminary_details="Review counterparty SaaS agreement with redlines.",
+			service_sop_details='{"contract_type":"SaaS MSA","counterparty_names":"Acme","governing_law":"Ontario","business_terms":"Standard","key_dates":"2027-01-01","supporting_documents":"Draft v1","deliverable_type":"Redline","data_handling_restrictions":"No additional restrictions"}',
+		)
+		frappe.set_user("Administrator")
+		with patch("lex.work_intake.frappe.sendmail"):
+			work_intake.request_service_sop_information(
+				created["name"], "Provide the signed order form schedule.", critical=1
+			)
+		frappe.set_user(user.name)
+		intakes = work_intake.portal_intakes()
+		hold_row = next(row for row in intakes if row.name == created["name"])
+		self.assertEqual(hold_row.status, "Pending Client Information")
+		self.assertEqual(hold_row.missing_information, "Provide the signed order form schedule.")
+		self.assertEqual(hold_row.information_is_critical, 1)
+
+		res = work_intake.submit_sop_information_response(
+			created["name"], "Attached order form Schedule A in draft upload."
+		)
+		self.assertEqual(res["status"], "Pending Client Information")
+		self.assertTrue(res["information_received_on"])
+		self.assertIn("Schedule A", res["information_resolution_note"])
+		self.assertTrue(
+			frappe.db.exists(
+				"Lexocrates Portal Audit Event",
+				{"action": "SOP Information Response Submitted", "object_id": created["name"]},
+			)
+		)
+
+	def test_dashboard_exposes_confirmations_scope_changes_deadlines_and_org_nav(self):
+		client = _make_client()
+		admin_user = _make_user()
+		portal_user = _make_portal_user(admin_user.name, client, "Client Administrator")
+		matter = _make_matter(client)
+		matter.append("authorized_portal_users", _authorization(portal_user))
+		matter.save(ignore_permissions=True)
+		job = frappe.get_doc({
+			"doctype": "LPO Job",
+			"job_title": "Confirmation & Scope Visibility Test",
+			"engagement": matter.name,
+			"job_type": "Contract Review",
+			"job_status": "Awaiting Internal Scope Review",
+			"priority": "High",
+			"task_description": "Test dashboard visibility for legal governance objects.",
+			"received_at": now_datetime(),
+			"due_date": add_days(now_datetime(), 4),
+		}).insert(ignore_permissions=True)
+		from lex.lex.doctype.lpo_assignment_confirmation.lpo_assignment_confirmation import issue as issue_conf
+
+		conf = issue_conf(
+			job=job.name,
+			scope_summary="Full SaaS agreement redline.",
+			confirmed_delivery_date=add_days(now_datetime(), 3),
+			service_level="Standard",
+		)
+		frappe.set_user(admin_user.name)
+		dashboard = client_portal.get_portal_dashboard()
+		nav_labels = {item["label"] for item in dashboard["navigation"]}
+		self.assertIn("Organization", nav_labels)
+		self.assertEqual(dashboard["metrics"]["pending_confirmations"], 1)
+		conf_row = next(row for row in dashboard["assignment_confirmations"] if row.name == conf["name"])
+		self.assertEqual(conf_row.job_title, job.job_title)
+		self.assertTrue(any(item.get("job") == job.name for item in dashboard["deadlines"]))
 
 
 def _make_client() -> str:

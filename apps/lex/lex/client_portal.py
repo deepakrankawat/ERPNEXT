@@ -53,6 +53,9 @@ def get_portal_dashboard():
 			"job_type", "delivery_document", "client_approval_status", "client_approved_on",
 			"work_intake", "estimate_status", "quote_version", "required_legal_capacity", "quoted_amount",
 			"currency", "funding_route", "funding_status", "sla_started_on", "delivery_due_on",
+			"confirmed_delivery_date", "sla_paused", "total_paused_minutes", "completed_on",
+			"indicative_turnaround_snapshot", "service_level", "assignment_confirmation",
+			"delivery_notes", "task_description",
 		],
 		order_by="due_date asc",
 		limit_page_length=100,
@@ -123,6 +126,26 @@ def get_portal_dashboard():
 		and row.client_approval_status not in {"Approved"}
 		and has_matter_access(row.engagement, "approve")
 	] if can_approve_deliverables() else []
+	assignment_confirmations = _safe_dashboard_section(
+		"assignment confirmations",
+		lambda: _assignment_confirmations(jobs, matter_titles, job_titles),
+		[],
+	)
+	scope_changes = _safe_dashboard_section(
+		"scope changes",
+		lambda: _scope_changes(jobs, matter_titles, job_titles),
+		[],
+	)
+	correction_requests = _safe_dashboard_section(
+		"correction requests",
+		lambda: _correction_requests(jobs, matter_titles, job_titles),
+		[],
+	)
+	deadlines = _safe_dashboard_section(
+		"deadlines",
+		lambda: _upcoming_deadlines(matters, jobs, intakes),
+		[],
+	)
 	# Deliberately not routed through _safe_dashboard_section: that helper's
 	# fallback values are meant to degrade a display widget gracefully, but this
 	# is a compliance gate — falling back to "Accepted" on error would silently
@@ -133,6 +156,16 @@ def get_portal_dashboard():
 	except Exception:
 		frappe.log_error(title="Client Portal Dashboard: master SLA", message=frappe.get_traceback())
 		master_sla = {"status": "Error"}
+
+	pending_confirmations = sum(
+		1 for row in assignment_confirmations if row.get("client_decision") == "Pending"
+	)
+	pending_scope_changes = sum(
+		1 for row in scope_changes if row.get("status") == "Pending Client Approval"
+	)
+	info_holds = sum(
+		1 for row in intakes if row.get("status") == "Pending Client Information"
+	)
 
 	return {
 		"profile": {
@@ -150,6 +183,7 @@ def get_portal_dashboard():
 		"navigation": _navigation(portal_user),
 		"permissions": {fieldname: portal_user.get(fieldname) for fieldname in (
 			"matter_access_scope", "can_create_matters", "can_upload_documents", "can_comment",
+			"can_provide_instructions", "can_provide_binding_instructions",
 			"billing_access", "lexpack_view_access", "lexpack_purchase_access", "approval_authority",
 			"user_management_authority", "report_access",
 		)},
@@ -158,6 +192,9 @@ def get_portal_dashboard():
 			"authorized_matters": len(matters),
 			"open_jobs": open_jobs,
 			"approvals": len(approvals),
+			"pending_confirmations": pending_confirmations,
+			"pending_scope_changes": pending_scope_changes,
+			"info_holds": info_holds,
 			"documents": len(documents),
 			"legal_capacity": wallet.current_balance if wallet else None,
 		},
@@ -167,6 +204,10 @@ def get_portal_dashboard():
 		"jobs": jobs,
 		"documents": documents,
 		"approvals": approvals,
+		"assignment_confirmations": assignment_confirmations,
+		"scope_changes": scope_changes,
+		"correction_requests": correction_requests,
+		"deadlines": deadlines,
 		"invoices": invoices,
 		"reports": _report_catalog(portal_user),
 		"wallet": wallet,
@@ -187,7 +228,15 @@ def _master_sla_status(portal_user):
 
 	accepted = get_latest_accepted(portal_user.client)
 	if accepted:
-		return {"status": "Accepted", "name": accepted.name}
+		return {
+			"status": "Accepted",
+			"name": accepted.name,
+			"version": accepted.version,
+			"effective_date": str(accepted.effective_date) if accepted.effective_date else None,
+			"accepted_by_name": accepted.accepted_by_name,
+			"accepted_by_designation": accepted.accepted_by_designation,
+			"acceptance_datetime": str(accepted.acceptance_datetime) if accepted.acceptance_datetime else None,
+		}
 	if not portal_user.can_create_matters:
 		# Only a user who could actually hit the create_work_intake() gate needs
 		# (and should trigger provisioning of) a pending Master SLA record.
@@ -288,7 +337,7 @@ def _documents(matters, jobs, intakes=None, portal_user=None):
 	)
 	file_fields = [
 		"name", "file_name", "file_url", "file_size", "is_private", "owner",
-		"attached_to_doctype", "attached_to_name", "modified",
+		"attached_to_doctype", "attached_to_name", "modified", "custom_lex_scan_status",
 	]
 	for doctype, names in (
 		("LPO Job", [row.name for row in jobs]),
@@ -419,8 +468,126 @@ def _navigation(portal_user):
 		items.append({"label": "LexPack", "section": "wallet", "icon": "wallet"})
 	if portal_user.user_management_authority:
 		items.append({"label": "Team & Access", "section": "users", "icon": "users"})
+		items.append({"label": "Organization", "section": "organization", "icon": "settings"})
 	items.append({"label": "Support", "href": "mailto:support@lexocrates.com", "icon": "help"})
 	return items
+
+
+def _assignment_confirmations(jobs, matter_titles, job_titles):
+	job_names = [row.name for row in jobs if row.get("name")]
+	if not job_names or not frappe.db.exists("DocType", "LPO Assignment Confirmation"):
+		return []
+	rows = frappe.get_all(
+		"LPO Assignment Confirmation",
+		filters={"job": ["in", job_names]},
+		fields=[
+			"name", "job", "matter", "service", "jurisdiction", "confirmation_version",
+			"scope_summary", "document_volume", "deliverables_summary", "assumptions",
+			"exclusions", "client_requested_date", "confirmed_delivery_date", "service_level",
+			"indicative_turnaround_snapshot", "fixed_quote", "currency", "lexpack_capacity_deduction",
+			"issued_date", "superseded_by", "client_decision", "approved_on", "change_request_notes",
+		],
+		order_by="issued_date desc",
+		limit_page_length=100,
+	)
+	visible = []
+	can_approve = can_approve_deliverables()
+	for row in rows:
+		if row.get("superseded_by"):
+			continue
+		row.matter_title = matter_titles.get(row.matter) or _("Matter")
+		row.job_title = job_titles.get(row.job) or _("Assignment")
+		row.can_decide = bool(can_approve and has_matter_access(row.matter, "approve"))
+		visible.append(row)
+	return visible
+
+
+def _scope_changes(jobs, matter_titles, job_titles):
+	job_names = [row.name for row in jobs if row.get("name")]
+	if not job_names or not frappe.db.exists("DocType", "LPO Assignment Scope Change"):
+		return []
+	rows = frappe.get_all(
+		"LPO Assignment Scope Change",
+		filters={"job": ["in", job_names]},
+		fields=[
+			"name", "job", "matter", "status", "requested_on", "original_scope",
+			"requested_change", "reason", "additional_price", "additional_lexpack_deduction",
+			"currency", "existing_delivery_date", "revised_delivery_date",
+			"client_approval", "client_approved_on", "rejection_reason",
+		],
+		order_by="requested_on desc",
+		limit_page_length=100,
+	)
+	for row in rows:
+		row.matter_title = matter_titles.get(row.matter) or _("Matter")
+		row.job_title = job_titles.get(row.job) or _("Assignment")
+		row.can_approve = bool(has_matter_access(row.matter, "scope_change"))
+	return rows
+
+
+def _correction_requests(jobs, matter_titles, job_titles):
+	job_names = [row.name for row in jobs if row.get("name")]
+	if not job_names or not frappe.db.exists("DocType", "LPO Correction Request"):
+		return []
+	rows = frappe.get_all(
+		"LPO Correction Request",
+		filters={"job": ["in", job_names]},
+		fields=[
+			"name", "job", "matter", "correction_request_date", "status",
+			"issue_description", "within_original_scope", "verified_lexocrates_error",
+			"correction_cost", "currency", "routed_to_scope_change", "resolution_notes",
+		],
+		order_by="correction_request_date desc",
+		limit_page_length=100,
+	)
+	for row in rows:
+		row.matter_title = matter_titles.get(row.matter) or _("Matter")
+		row.job_title = job_titles.get(row.job) or _("Assignment")
+	return rows
+
+
+def _upcoming_deadlines(matters, jobs, intakes):
+	items = []
+	for job in jobs:
+		if job.job_status in {"Completed", "Cancelled"}:
+			continue
+		target = job.get("confirmed_delivery_date") or job.get("delivery_due_on") or job.get("due_date")
+		if target:
+			items.append({
+				"kind": "Confirmed Delivery" if job.get("confirmed_delivery_date") else "Target Delivery",
+				"title": job.job_title,
+				"subtitle": job.matter_title,
+				"date": str(target),
+				"status": "SLA Paused" if job.get("sla_paused") else job.job_status,
+				"priority": job.priority,
+				"job": job.name,
+				"matter": job.engagement,
+			})
+	for matter in matters:
+		if matter.status in {"Completed", "Closed"} or not matter.get("end_date"):
+			continue
+		items.append({
+			"kind": "Matter Milestone",
+			"title": matter.matter_title,
+			"subtitle": matter.practice_area or _("Legal Matter"),
+			"date": str(matter.end_date),
+			"status": matter.status,
+			"priority": "Medium",
+			"matter": matter.name,
+		})
+	for intake in intakes:
+		if intake.get("status") in {"Quote Ready", "Funding Pending"} and intake.get("quote_valid_until"):
+			items.append({
+				"kind": "Quote Expiry",
+				"title": intake.get("intake_title"),
+				"subtitle": intake.get("matter_title") or _("Pending Quote"),
+				"date": str(intake.get("quote_valid_until")),
+				"status": intake.get("status"),
+				"priority": intake.get("priority") or "Medium",
+				"intake": intake.get("name"),
+			})
+	items.sort(key=lambda row: str(row.get("date") or ""))
+	return items[:25]
 
 
 @frappe.whitelist()
