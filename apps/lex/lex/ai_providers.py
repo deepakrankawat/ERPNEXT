@@ -290,6 +290,23 @@ def verify_provider_model(
 			"retryable": exc.retryable,
 			"message": exc.safe_message,
 		}
+	except (requests.Timeout, requests.ConnectionError) as exc:
+		latency = round((time.monotonic() - started) * 1000, 1)
+		message = f"{provider} [NETWORK]: {str(exc)[:300]}"
+		if update_registry:
+			mark_model_verification(
+				provider, model, False, latency_ms=latency, error_code="NETWORK", error_message=message
+			)
+		return {
+			"status": "error",
+			"provider": provider,
+			"model": model,
+			"latency_ms": latency,
+			"error_type": "NETWORK",
+			"http_status": None,
+			"retryable": True,
+			"message": message,
+		}
 
 
 def sync_model_registry(provider: str, models: list[dict]) -> None:
