@@ -876,7 +876,7 @@ def _validate_key_input(api_key):
 
 def _is_dummy_password(value):
 	text = str(value or "")
-	return not text or text.startswith(("*", "AQ.")) or (text and set(text) == {"*"})
+	return not text or text.startswith("*") or (text and set(text) == {"*"})
 
 
 def _route_fields(use_case):

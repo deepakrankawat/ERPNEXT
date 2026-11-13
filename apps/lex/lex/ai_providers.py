@@ -635,7 +635,7 @@ def _custom_gateway(provider):
 
 def _validate_api_key(api_key, provider):
 	value = str(api_key or "").strip()
-	if len(value) < 6 or "\n" in value or value.startswith(("*", "AQ.")):
+	if len(value) < 6 or "\n" in value or value.startswith("*"):
 		raise AIProviderError(provider, _("API key is missing or has an invalid format."), "MISSING_KEY")
 	return value
 
