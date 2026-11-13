@@ -1,0 +1,124 @@
+{
+ "charts": [
+  {
+   "chart_name": "Organic Clicks Trend",
+   "label": "Organic Clicks Trend"
+  },
+  {
+   "chart_name": "Organic Impressions Trend",
+   "label": "Organic Impressions Trend"
+  }
+ ],
+ "content": "[{\"id\":\"seo_ws_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>SEO Workspace</b></span><p class=\\\"text-muted\\\">Organic search performance from Google Search Console.</p>\",\"col\":12}},{\"id\":\"seo_ws_metric_0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Clicks (30 days)\",\"col\":3}},{\"id\":\"seo_ws_metric_1\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Impressions (30 days)\",\"col\":3}},{\"id\":\"seo_ws_metric_2\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Avg CTR (30 days)\",\"col\":3}},{\"id\":\"seo_ws_metric_3\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Avg Position (30 days)\",\"col\":3}},{\"id\":\"seo_ws_chart_0\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Organic Clicks Trend\",\"col\":6}},{\"id\":\"seo_ws_chart_1\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Organic Impressions Trend\",\"col\":6}},{\"id\":\"seo_ws_tools_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"seo_ws_shortcut_0\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Search Console Performance\",\"col\":3}},{\"id\":\"seo_ws_shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"GSC Search Analytics\",\"col\":3}},{\"id\":\"seo_ws_shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Search Console Settings\",\"col\":3}},{\"id\":\"seo_ws_links_card\",\"type\":\"card\",\"data\":{\"card_name\":\"SEO Tools\",\"col\":12}}]",
+ "creation": "2026-11-04 00:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "chart",
+ "idx": 0,
+ "indicator_color": "blue",
+ "is_hidden": 0,
+ "label": "SEO Workspace",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SEO Tools",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "GSC Search Analytics",
+   "link_count": 0,
+   "link_to": "GSC Search Analytics",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Search Console Settings",
+   "link_count": 0,
+   "link_to": "Search Console Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Search Console Performance",
+   "link_count": 0,
+   "link_to": "Search Console Performance",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "SEO Workspace",
+ "number_cards": [
+  {
+   "label": "Clicks (30 days)",
+   "number_card_name": "Clicks (30 days)"
+  },
+  {
+   "label": "Impressions (30 days)",
+   "number_card_name": "Impressions (30 days)"
+  },
+  {
+   "label": "Avg CTR (30 days)",
+   "number_card_name": "Avg CTR (30 days)"
+  },
+  {
+   "label": "Avg Position (30 days)",
+   "number_card_name": "Avg Position (30 days)"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "CEO"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 12.0,
+ "shortcuts": [
+  {
+   "color": "#2490ef",
+   "doc_view": "",
+   "label": "Search Console Performance",
+   "link_to": "Search Console Performance",
+   "type": "Report"
+  },
+  {
+   "doc_view": "List",
+   "label": "GSC Search Analytics",
+   "link_to": "GSC Search Analytics",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "Search Console Settings",
+   "link_to": "Search Console Settings",
+   "type": "DocType"
+  }
+ ],
+ "title": "SEO Workspace"
+}

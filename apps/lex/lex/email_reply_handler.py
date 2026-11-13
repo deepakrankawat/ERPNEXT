@@ -18,8 +18,8 @@ def link_incoming_reply(doc, method=None):
 def backfill_missed_replies():
 	"""Catch-up pass for inbound mail that arrived before this hook existed, or
 	whose thread headers this hook's normal `in_reply_to` match couldn't
-	resolve. Safe to re-run: matching only ever targets dispatches that aren't
-	already marked `replied`, so an already-linked reply is never revisited."""
+	resolve. Safe to re-run: the `reply_communication` guard in `_process_reply`
+	means an already-linked reply is never revisited."""
 	names = frappe.get_all(
 		"Communication",
 		filters={"sent_or_received": "Received"},
@@ -50,10 +50,16 @@ def _process_reply(doc) -> bool:
 
 	lead = dispatch.lead or _find_lead_by_email(_clean_email(doc.sender))
 
-	updates = {"replied": 1, "reply_communication": doc.name, "replied_on": now_datetime()}
-	if lead and not dispatch.lead:
-		updates["lead"] = lead
-	frappe.db.set_value(DISPATCH_DOCTYPE, dispatch.name, updates)
+	# A lead can reply to the same thread more than once. Only the first reply
+	# should flip the dispatch's own replied/reply_communication bookkeeping --
+	# but every reply still needs to get threaded to the Lead below, or later
+	# replies silently fall back to Frappe's default link and never trigger
+	# notify_sales_of_lead_reply.
+	if not dispatch.replied:
+		updates = {"replied": 1, "reply_communication": doc.name, "replied_on": now_datetime()}
+		if lead and not dispatch.lead:
+			updates["lead"] = lead
+		frappe.db.set_value(DISPATCH_DOCTYPE, dispatch.name, updates)
 
 	if lead:
 		frappe.db.set_value(
@@ -74,30 +80,33 @@ def _process_reply(doc) -> bool:
 def _match_by_in_reply_to(doc):
 	"""Frappe's IMAP pull (frappe/email/receive.py) resolves `in_reply_to` to the
 	*name* of the parent Communication before insert, when it can -- match that
-	directly against the dispatch it was sent from."""
+	directly against the dispatch it was sent from. Not filtered on `replied`:
+	a lead replying twice to the same thread must still match its dispatch the
+	second time, or the reply never gets threaded to the Lead at all."""
 	if not doc.in_reply_to:
 		return None
 	return frappe.db.get_value(
 		DISPATCH_DOCTYPE,
-		{"communication": doc.in_reply_to, "replied": 0},
-		["name", "lead"],
+		{"communication": doc.in_reply_to},
+		["name", "lead", "replied"],
 		as_dict=True,
 	)
 
 
 def _match_by_sender(doc):
 	"""Fallback for when Gmail doesn't preserve In-Reply-To/References across
-	the sender's mail client: the most recent un-replied dispatch we sent to
-	this reply's sender address is almost certainly what it's answering."""
+	the sender's mail client: the most recent dispatch we sent to this reply's
+	sender address is almost certainly what it's answering, whether or not
+	that dispatch already saw an earlier reply."""
 	sender_email = _clean_email(doc.sender)
 	if not sender_email:
 		return None
 	rows = frappe.db.sql(
 		"""
-		select d.name, d.lead
+		select d.name, d.lead, d.replied
 		from `tabLexocrates Email Campaign Dispatch` d
 		inner join `tabCommunication` c on c.name = d.communication
-		where d.replied = 0 and c.recipients like %(pattern)s
+		where c.recipients like %(pattern)s
 		order by d.scheduled_for_utc desc
 		limit 1
 		""",

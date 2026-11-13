@@ -60,6 +60,8 @@ doctype_js = {
 	"LPO Job": "public/js/lpo_job_chat.js",
 	"Account": "public/js/account_form_recovery.js",
 	"Email Group": "public/js/email_group.js",
+	"Email Campaign": "public/js/email_campaign.js",
+	"Search Console Settings": "public/js/search_console_settings.js",
 }
 doctype_list_js = {
 	"Lead": "public/js/lead_list.js",
@@ -250,6 +252,7 @@ doc_events = {
 		"on_update": "lex.portal_audit.sync_portal_user_security",
 	},
 	"Email Campaign": {
+		"validate": "lex.email_campaign_scheduler.validate_send_from_permission",
 		"on_trash": "lex.email_campaign_scheduler.delete_dispatch_records",
 	},
 	"Campaign": {
@@ -322,6 +325,10 @@ scheduler_events = {
 		# 03:30 UTC = 09:00 IST (container clock runs UTC; site timezone is Asia/Kolkata).
 		"30 3 * * *": [
 			"lex.mattermost_notifications.post_daily_digest",
+		],
+		# 05:00 UTC = 10:30 IST.
+		"0 5 * * *": [
+			"lex.google_search_console.sync_search_analytics",
 		],
 	},
 	"daily": [

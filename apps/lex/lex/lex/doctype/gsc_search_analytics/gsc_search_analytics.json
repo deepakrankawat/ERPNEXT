@@ -1,0 +1,41 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-11-04 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "date",
+  "query",
+  "clicks",
+  "impressions",
+  "ctr",
+  "position"
+ ],
+ "fields": [
+  {"fieldname": "date", "fieldtype": "Date", "label": "Date", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1, "search_index": 1},
+  {"fieldname": "query", "fieldtype": "Data", "label": "Query", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "clicks", "fieldtype": "Int", "label": "Clicks", "default": "0", "in_list_view": 1},
+  {"fieldname": "impressions", "fieldtype": "Int", "label": "Impressions", "default": "0", "in_list_view": 1},
+  {"fieldname": "ctr", "fieldtype": "Percent", "label": "CTR"},
+  {"fieldname": "position", "fieldtype": "Float", "label": "Avg Position", "precision": "2"}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "GSC Search Analytics",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "read": 1, "role": "System Manager", "write": 1},
+  {"read": 1, "role": "Sales Manager"},
+  {"read": 1, "role": "Lexocrates Director"},
+  {"read": 1, "role": "CEO"}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "query",
+ "track_changes": 0
+}

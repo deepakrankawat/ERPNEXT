@@ -1,0 +1,23 @@
+{
+ "color": "#f5a623",
+ "creation": "2026-11-04 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "document_type": "GSC Search Analytics",
+ "function": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Avg CTR (30 days)",
+ "method": "lex.google_search_console.avg_ctr_last_30_days",
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Avg CTR (30 days)",
+ "owner": "Administrator",
+ "report_function": "Average",
+ "show_full_number": 1,
+ "show_percentage_stats": 0,
+ "stats_time_interval": "Daily",
+ "type": "Custom"
+}

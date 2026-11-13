@@ -165,7 +165,7 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 	template = frappe.get_cached_doc("Email Template", entry.email_template)
 	subject = frappe.render_template(template.subject, context)
 	content = frappe.render_template(template.response_, context)
-	sender = _formatted_sender(campaign.sender)
+	sender, outgoing_account = _sender_details(campaign)
 	template_files = _template_attachments(template.name)
 
 	communication_name = dispatch_doc.communication
@@ -199,8 +199,6 @@ def _queue_single_dispatch(campaign, entry, scheduled_utc: datetime, lead: str |
 		# this Communication would stay permanently invisible under any
 		# specific-mailbox or "All Accounts" Inbox filter (both key off that
 		# field) despite having genuinely been sent through it.
-		sender_email = parse_addr(sender)[1] if sender else None
-		outgoing_account = _resolve_outgoing_email_account(sender_email)
 		if outgoing_account:
 			frappe.db.set_value("Communication", communication_name, "email_account", outgoing_account)
 		dispatch_doc.communication = communication_name
@@ -247,23 +245,69 @@ def _resolve_outgoing_email_account(sender_email: str | None) -> str | None:
 	return frappe.db.get_value("Email Account", {"email_id": sender_email, "enable_outgoing": 1}, "name")
 
 
-def _formatted_sender(sender_user: str | None) -> str | None:
-	"""Resolve a campaign's sender User to `"Lexocrates" <email>`, matching the
-	display name every other outgoing system email uses (see
-	auth_overrides.SUPPORT_SENDER, compliance_pages.SALES_SENDER) -- not the
-	Email Account's own "sales"/"support" label, which recipients were
-	seeing instead of the company name.
+def user_permitted_send_from_accounts(user: str | None = None) -> set[str]:
+	"""Email Account docnames `user` may send as -- the same "User Email" grants
+	that drive frappe.boot.email_accounts and the standard email composer's
+	"Sender" dropdown, so this field can't be used to send as a department
+	mailbox (sales/info/hr/support) the user wasn't explicitly given."""
+	user = user or frappe.session.user
+	return set(
+		frappe.get_all(
+			"User Email",
+			filters={"parent": user, "enable_outgoing": 1},
+			pluck="email_account",
+		)
+	)
 
-	Falls back to the bare email if no matching outgoing Email Account is found,
-	so the mail is never blocked for missing display-name config.
+
+def validate_send_from_permission(doc, method=None):
+	"""Block saving an Email Campaign with a `send_from` the current user has
+	no "User Email" grant for -- the client-side query in
+	public/js/email_campaign.js already restricts the dropdown to these, this
+	is the server-side enforcement of the same rule for direct API calls."""
+	if not doc.get("send_from"):
+		return
+	if frappe.session.user == "Administrator":
+		return
+	if doc.send_from not in user_permitted_send_from_accounts():
+		frappe.throw(_("You do not have permission to send from {0}.").format(doc.send_from))
+
+
+def _sender_details(campaign) -> tuple[str | None, str | None]:
+	"""The outgoing address and Email Account for this campaign's dispatches.
+
+	Prefers the explicit `send_from` Email Account -- restricted to accounts
+	the campaign's creator has permission to send from (see
+	validate_send_from_permission) -- over the legacy `sender` User field,
+	which predates send_from and can't represent a shared mailbox (info@,
+	support@) that has no matching User record at all.
+	"""
+	if campaign.get("send_from"):
+		email_id = frappe.db.get_value("Email Account", campaign.send_from, "email_id")
+		if email_id:
+			return formataddr((_("Lexocrates"), email_id)), campaign.send_from
+	return _formatted_sender(campaign.sender)
+
+
+def _formatted_sender(sender_user: str | None) -> tuple[str | None, str | None]:
+	"""Resolve a campaign's legacy sender User to (`"Lexocrates" <email>`, Email
+	Account), matching the display name every other outgoing system email
+	uses (see auth_overrides.SUPPORT_SENDER, compliance_pages.SALES_SENDER) --
+	not the Email Account's own "sales"/"support" label, which recipients
+	were seeing instead of the company name.
+
+	Falls back to the bare email with no Email Account if no matching
+	outgoing Email Account is found, so the mail is never blocked for
+	missing display-name config.
 	"""
 	if not sender_user:
-		return None
+		return None, None
 	sender_email = frappe.db.get_value("User", sender_user, "email")
 	if not sender_email:
-		return None
-	has_outgoing_account = bool(_resolve_outgoing_email_account(sender_email))
-	return formataddr((_("Lexocrates"), sender_email)) if has_outgoing_account else sender_email
+		return None, None
+	outgoing_account = _resolve_outgoing_email_account(sender_email)
+	sender = formataddr((_("Lexocrates"), sender_email)) if outgoing_account else sender_email
+	return sender, outgoing_account
 
 
 def _recipients_and_context(campaign):
@@ -389,10 +433,16 @@ def _aware_utc(value: datetime | None) -> datetime:
 
 
 @frappe.whitelist()
-def create_bulk_email_campaigns(leads, campaign_name, sender, start_date, start_time, time_zone):
+def create_bulk_email_campaigns(leads, campaign_name, send_from, start_date, start_time, time_zone):
 	"""One Email Campaign per selected Lead, since the doctype's `recipient`
 	is a single Dynamic Link -- this is how a multi-lead send is composed
-	while keeping per-lead personalization ({{ first_name }} etc.) intact."""
+	while keeping per-lead personalization ({{ first_name }} etc.) intact.
+
+	`send_from` is an Email Account docname (sales/info/hr/support), not a
+	User -- see public/js/lead_list.js, which restricts the picker to
+	accounts the current user has permission to send from. The per-doc
+	`validate_send_from_permission` hook re-checks that server-side.
+	"""
 	if isinstance(leads, str):
 		leads = frappe.parse_json(leads)
 	if not leads:
@@ -414,7 +464,7 @@ def create_bulk_email_campaigns(leads, campaign_name, sender, start_date, start_
 			"campaign_name": campaign_name,
 			"email_campaign_for": "Lead",
 			"recipient": lead,
-			"sender": sender,
+			"send_from": send_from,
 			"start_date": start_date,
 			"start_time": start_time,
 			"time_zone": time_zone,

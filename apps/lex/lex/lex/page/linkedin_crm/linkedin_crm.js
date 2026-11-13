@@ -102,11 +102,11 @@ class LinkedInCRMPage {
 					<div class="linkedin-brand-badge">
 						<div class="linkedin-logo-icon">in</div>
 						<div>
-							<h4 style="margin: 0; font-size: 18px; font-weight: 700; color: #111827;">
+							<h4 class="linkedin-brand-title">
 								Company Page Social CRM
 							</h4>
-							<p style="margin: 4px 0 0 0; font-size: 13px; color: #6b7280;">
-								Real-time LinkedIn Direct Messages, live prospect chats & CRM lead conversion.
+							<p class="linkedin-brand-sub">
+								Real-time LinkedIn Direct Messages, live prospect chats &amp; CRM lead conversion.
 							</p>
 						</div>
 					</div>
@@ -189,7 +189,7 @@ class LinkedInCRMPage {
 								<img class="conv-avatar" src="${this.esc(activeConv.avatar)}" alt="${this.esc(activeConv.prospect_name)}" onerror="this.src='/assets/frappe/images/default-avatar/avatar_1.png'" />
 								<div>
 									<h5 class="chat-prospect-name">${this.esc(activeConv.prospect_name)}</h5>
-									<p class="chat-prospect-sub">${this.esc(activeConv.headline)} · <span style="color:#10b981;">${this.esc(activeConv.online_status)}</span></p>
+									<p class="chat-prospect-sub">${this.esc(activeConv.headline)} · <span class="text-positive">${this.esc(activeConv.online_status)}</span></p>
 								</div>
 							</div>
 							<div style="display: flex; gap: 8px;">
@@ -211,7 +211,7 @@ class LinkedInCRMPage {
 								<div class="chat-bubble-row ${m.is_self ? 'outbound' : 'inbound'}">
 									<div class="chat-bubble">${this.esc(m.text)}</div>
 									<div class="chat-bubble-meta">
-										${this.esc(m.sender)} · ${this.esc(m.timestamp)} ${m.status ? `· <span style="color:#059669;">✔ ${this.esc(m.status)}</span>` : ''}
+										${this.esc(m.sender)} · ${this.esc(m.timestamp)} ${m.status ? `· <span class="text-positive">✔ ${this.esc(m.status)}</span>` : ''}
 									</div>
 								</div>
 							`).join("")}
@@ -303,7 +303,7 @@ class LinkedInCRMPage {
 					</div>
 					<div class="kpi-value">${this.esc(followers.total_followers || 0)}</div>
 					<div class="kpi-subtitle">
-						<span style="color: #059669; font-weight: 700;">${this.esc(followers.growth_rate || "+0%")}</span> (+${this.esc(followers.gained_this_month || 0)} this month)
+						<span class="text-positive">${this.esc(followers.growth_rate || "+0%")}</span> (+${this.esc(followers.gained_this_month || 0)} this month)
 					</div>
 				</div>
 			</div>
@@ -478,7 +478,7 @@ class LinkedInCRMPage {
 			<div class="chat-bubble-row outbound" id="${tempId}">
 				<div class="chat-bubble">${this.esc(text)}</div>
 				<div class="chat-bubble-meta">
-					Lexocrates Legal Ops (You) · Just now · <span style="color:#059669;">✔ Sending...</span>
+					Lexocrates Legal Ops (You) · Just now · <span class="text-positive">✔ Sending...</span>
 				</div>
 			</div>
 		`);
@@ -492,7 +492,7 @@ class LinkedInCRMPage {
 			},
 			callback: (r) => {
 				if (r.message && r.message.status === "success") {
-					$(`#${tempId} .chat-bubble-meta`).html("Lexocrates Legal Ops (You) · Just now · <span style='color:#059669;'>✔ Delivered</span>");
+					$(`#${tempId} .chat-bubble-meta`).html("Lexocrates Legal Ops (You) · Just now · <span class='text-positive'>✔ Delivered</span>");
 				}
 			}
 		});

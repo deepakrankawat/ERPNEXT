@@ -1,0 +1,29 @@
+{
+ "add_total_row": 1,
+ "creation": "2026-11-04 00:00:00.000000",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "idx": 0,
+ "is_standard": "Yes",
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Search Console Performance",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "query": "SELECT\n    date as \"Date:Date:100\",\n    query as \"Query::300\",\n    clicks as \"Clicks:Int:90\",\n    impressions as \"Impressions:Int:110\",\n    ctr as \"CTR %:Percent:90\",\n    position as \"Avg Position:Float:110\"\nFROM `tabGSC Search Analytics`\nWHERE date BETWEEN %(from_date)s AND %(to_date)s\nORDER BY date DESC, clicks DESC",
+ "ref_doctype": "GSC Search Analytics",
+ "report_name": "Search Console Performance",
+ "report_type": "Query Report",
+ "filters": [
+  {"fieldname": "from_date", "fieldtype": "Date", "label": "From Date", "default": "Eval:frappe.datetime.add_days(frappe.datetime.nowdate(), -30)"},
+  {"fieldname": "to_date", "fieldtype": "Date", "label": "To Date", "default": "Eval:frappe.datetime.nowdate()"}
+ ],
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Sales Manager"},
+  {"role": "Lexocrates Director"},
+  {"role": "CEO"}
+ ]
+}

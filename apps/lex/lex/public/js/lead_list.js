@@ -17,11 +17,26 @@
 					frappe.msgprint(__("Select at least one Lead first."));
 					return;
 				}
+				// Same permission-scoped account list the standard email composer's
+				// "Sender" dropdown uses (via the current user's "User Email"
+				// grants) -- see public/js/email_campaign.js for the matching
+				// filter on the Email Campaign form itself.
+				const send_from_accounts = (frappe.boot.email_accounts || [])
+					.filter((a) => a.enable_outgoing)
+					.map((a) => a.email_account);
 				const dialog = new frappe.ui.Dialog({
 					title: __("Send Email Campaign to {0} Lead(s)", [leads.length]),
 					fields: [
 						{ fieldname: "campaign_name", fieldtype: "Link", options: "Campaign", label: __("Campaign"), reqd: 1 },
-						{ fieldname: "sender", fieldtype: "Link", options: "User", label: __("Sender"), reqd: 1, default: frappe.session.user },
+						{
+							fieldname: "send_from",
+							fieldtype: "Link",
+							options: "Email Account",
+							label: __("Send From"),
+							reqd: 1,
+							default: send_from_accounts.length === 1 ? send_from_accounts[0] : undefined,
+							get_query: () => ({ filters: { name: ["in", send_from_accounts] } }),
+						},
 						{ fieldname: "col1", fieldtype: "Column Break" },
 						{ fieldname: "start_date", fieldtype: "Date", label: __("Start Date"), reqd: 1, default: frappe.datetime.get_today() },
 						{ fieldname: "start_time", fieldtype: "Time", label: __("Start Time"), reqd: 1, default: frappe.datetime.now_time() },

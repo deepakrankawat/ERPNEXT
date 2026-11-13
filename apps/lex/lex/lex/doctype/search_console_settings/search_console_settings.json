@@ -1,0 +1,43 @@
+{
+ "actions": [],
+ "creation": "2026-11-04 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "issingle": 1,
+ "field_order": [
+  "enabled",
+  "site_url",
+  "setup_help",
+  "oauth_section",
+  "refresh_token",
+  "access_token",
+  "token_expiry",
+  "sync_section",
+  "last_synced"
+ ],
+ "fields": [
+  {"default": "1", "fieldname": "enabled", "fieldtype": "Check", "label": "Enabled"},
+  {"fieldname": "site_url", "fieldtype": "Data", "label": "Search Console Property", "reqd": 1, "description": "Exact GSC-verified property, e.g. https://example.com/ or sc-domain:example.com"},
+  {"fieldname": "setup_help", "fieldtype": "HTML", "options": "<p class='text-muted'>Reuses the OAuth Client configured in <a href='/app/google-settings'>Google Settings</a>. On that same GCP OAuth Client: enable the <b>Google Search Console API</b>, add redirect URI <code>/api/method/lex.google_search_console.oauth_callback</code> (appended to your site URL), and add scope <code>https://www.googleapis.com/auth/webmasters.readonly</code> to the OAuth consent screen. The Google account you authorize with must have access to the property above in Search Console itself. Then click \"Connect to Google Search Console\" above and save.</p>"},
+  {"fieldname": "oauth_section", "fieldtype": "Section Break", "label": "Authorization"},
+  {"fieldname": "refresh_token", "fieldtype": "Password", "label": "Refresh Token", "read_only": 1},
+  {"fieldname": "access_token", "fieldtype": "Password", "label": "Access Token", "read_only": 1},
+  {"fieldname": "token_expiry", "fieldtype": "Datetime", "label": "Access Token Expiry", "read_only": 1},
+  {"fieldname": "sync_section", "fieldtype": "Section Break", "label": "Sync Status"},
+  {"fieldname": "last_synced", "fieldtype": "Datetime", "label": "Last Synced", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Lex",
+ "name": "Search Console Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "read": 1, "role": "System Manager", "write": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
