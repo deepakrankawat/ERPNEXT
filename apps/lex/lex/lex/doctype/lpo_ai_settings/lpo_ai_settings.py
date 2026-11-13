@@ -237,7 +237,19 @@ def save_provider_api_key(provider: str, api_key: str) -> dict:
 		model = choose_preferred_model(provider, model_ids, current)
 		if not model:
 			raise AIProviderError(provider, _("No compatible text-generation model was returned for this key."), "NO_COMPATIBLE_MODEL")
-		test_result = verify_provider_model(provider, model, clean_key, settings)
+		# A transient overload (HTTP 503/429/5xx) on one specific model doesn't mean the
+		# key is bad -- discover_provider_models above already proved the key authenticates.
+		# Fall through a few more candidates before giving up, instead of failing the whole
+		# key save over one model's momentary unavailability.
+		candidates = list(dict.fromkeys([model, *model_ids]))[:3]
+		test_result = None
+		for candidate in candidates:
+			test_result = verify_provider_model(provider, candidate, clean_key, settings)
+			if test_result.get("status") == "success":
+				model = candidate
+				break
+			if not test_result.get("retryable"):
+				break
 		if test_result.get("status") != "success":
 			return {
 				"status": "error",
